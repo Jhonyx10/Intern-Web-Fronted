@@ -13,6 +13,11 @@ export type User = {
   role_id: number | string
   course: Course | null
   course_id: string
+  section?: {
+    id: number
+    name: string
+    code: string | null
+  } | null
 }
 
 export type GeofencePolygon = {
@@ -33,6 +38,11 @@ export type Company = {
   contact_person: string | null
   contact_email: string | null
   contact_phone: string | null
+  is_active?: boolean
+  is_approved?: boolean
+  created_at?: string
+  students?: Student[]
+  supervisors?: Supervisor[]
 }
 
 export type CompanyRequest = {
@@ -41,9 +51,10 @@ export type CompanyRequest = {
   address: string | null
   latitude: number
   longitude: number
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'accepted' | 'approved' | 'rejected'
   created_at: string
   company_id: number | null
+  company_is_approved?: boolean | null
   geofence_polygon: GeofencePolygon | null
   user: {
     id: number
@@ -81,7 +92,7 @@ export type Major = {
   course: Course | null
 }
 
-export type Student= {
+export type Student = {
   id: number
   student_number: string
   first_name: string
@@ -89,6 +100,20 @@ export type Student= {
   last_name: string
   section_id: number
   is_active: boolean
+  companies?: Company[]
+}
+
+export type Supervisor = {
+  id: number
+  user_id: number
+  company_id: number
+  position_title: string | null
+  is_active: boolean
+  user: {
+    id: number
+    name: string
+    email: string
+  } | null
 }
 
 export type Section = {

@@ -61,7 +61,7 @@ const CoordinatorsPage = () => {
     const queryClient = useQueryClient()
 
     const addMutation = useMutation({
-        mutationFn: (data: { name: string; email: string; password: string }) =>
+        mutationFn: (data: { name: string; email: string; password: string; course_id?: number }) =>
             apiRequest('/coordinators', { method: 'POST', body: data, token }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.coordinators.all })

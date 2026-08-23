@@ -21,6 +21,11 @@ export async function fetchCompanies(token: string): Promise<Company[]> {
   return response.data
 }
 
+export async function fetchPendingCompanies(token: string): Promise<Company[]> {
+  const response = await apiRequest<{ data: Company[] }>('/companies/pending', { token })
+  return response.data
+}
+
 export async function createCompany(token: string, body: CreateCompanyInput): Promise<Company> {
   const response = await apiRequest<{ data: Company }>('/companies', {
     method: 'POST',
@@ -36,6 +41,16 @@ export function useCompanies() {
   return useQuery({
     queryKey: queryKeys.companies.list(),
     queryFn: () => fetchCompanies(token!),
+    enabled: Boolean(token),
+  })
+}
+
+export function usePendingCompanies() {
+  const { token } = useAuth()
+
+  return useQuery({
+    queryKey: queryKeys.companies.pending(),
+    queryFn: () => fetchPendingCompanies(token!),
     enabled: Boolean(token),
   })
 }
@@ -71,6 +86,89 @@ export function useCreateCompany() {
         return [...withoutDuplicate, company].sort((a, b) => a.name.localeCompare(b.name))
       })
       void queryClient.invalidateQueries({ queryKey: queryKeys.companies.all })
+    },
+  })
+}
+
+export function useApproveCompany() {
+  const { token } = useAuth()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: number) => {
+      if (!token) throw new Error('Not authenticated.')
+      return apiRequest<{ data: Company }>(`/companies/${id}/approve`, {
+        method: 'POST',
+        token,
+      }).then((res) => res.data)
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.companies.all })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.companyRequests.all })
+    },
+  })
+}
+
+export function useRejectCompany() {
+  const { token } = useAuth()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: number) => {
+      if (!token) throw new Error('Not authenticated.')
+      return apiRequest<{ data: Company }>(`/companies/${id}/reject`, {
+        method: 'POST',
+        token,
+      }).then((res) => res.data)
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.companies.all })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.companyRequests.all })
+    },
+  })
+}
+
+export function useAssignStudentToCompany() {
+  const { token } = useAuth()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ companyId, studentId }: { companyId: number | string; studentId: number }) => {
+      if (!token) throw new Error('Not authenticated.')
+      return apiRequest(`/companies/${companyId}/assign-student`, {
+        method: 'POST',
+        token,
+        body: { student_id: studentId },
+      })
+    },
+    onSuccess: (_, { companyId }) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.companies.detail(Number(companyId)) })
+    },
+  })
+}
+
+export type CreateSupervisorInput = {
+  first_name: string
+  last_name: string
+  email: string
+  position_title: string
+}
+
+export function useCreateSupervisor() {
+  const { token } = useAuth()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ companyId, input }: { companyId: number | string; input: CreateSupervisorInput }) => {
+      if (!token) throw new Error('Not authenticated.')
+      return apiRequest(`/companies/${companyId}/supervisors`, {
+        method: 'POST',
+        token,
+        body: input,
+      })
+    },
+    onSuccess: (_, { companyId }) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.companies.detail(Number(companyId)) })
     },
   })
 }

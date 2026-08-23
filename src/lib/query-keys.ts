@@ -12,7 +12,7 @@ export const queryKeys = {
     all: ['students'] as const,
     list: (page?: number) => ['students', 'list', page ?? 1] as const,
     detail: (id: number | string) => ['students', 'detail', id] as const,
-  },  
+  },
   courses: {
     all: ['courses'] as const,
     list: () => ['courses', 'list'] as const,
@@ -21,6 +21,7 @@ export const queryKeys = {
   companies: {
     all: ['companies'] as const,
     list: () => ['companies', 'list'] as const,
+    pending: () => ['companies', 'pending'] as const,
     detail: (id: number) => ['companies', 'detail', id] as const,
   },
   companyRequests: {

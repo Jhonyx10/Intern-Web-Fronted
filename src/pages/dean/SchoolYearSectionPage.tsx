@@ -43,7 +43,10 @@ const itemVariants: Variants = {
 // ── Main Page ─────────────────────────────────────────────────────
 
 const SchoolYearSectionPage = () => {
-    const { token } = useAuth()
+    const { token, user } = useAuth()
+    const deanCourse = user?.course
+        ? [{ id: Number(user.course.id), code: user.course.code, name: user.course.name }]
+        : null
     const queryClient = useQueryClient()
     const navigate = useNavigate()
 
@@ -59,12 +62,13 @@ const SchoolYearSectionPage = () => {
     })
 
     // ── Fetch courses for the Add Section form ────────────────────────
-    const { data: courses = [], isLoading: coursesLoading } = useQuery({
+    const { data: fetchedCourses = [], isLoading: coursesLoading } = useQuery({
         queryKey: queryKeys.courses.list(),
         queryFn: () => apiRequest<{ id: number; code: string; name: string }[]>('/courses', { token }),
-        enabled: Boolean(token) && addSectionTarget !== null,
+        enabled: Boolean(token) && addSectionTarget !== null && deanCourse === null,
         staleTime: 5 * 60 * 1000,
     })
+    const courses = deanCourse ?? fetchedCourses
 
     // ── Fetch coordinators for the Add Section form ──────────────────
     const { data: coordinators = [], isLoading: coordinatorsLoading } = useQuery({

@@ -12,7 +12,7 @@ import {
 import { ApiError } from '@/lib/api'
 import { formatDistance, formatDuration, haversineMeters, OCC_CENTER, OCC_NAME } from '@/lib/geo'
 import {
-  useApproveCompanyRequest,
+  useAcceptCompanyRequest,
   useCompanyRequests,
 } from '@/lib/queries/company-requests'
 import type { CompanyRequest, GeofencePolygon } from '@/types'
@@ -20,6 +20,9 @@ import type { CompanyRequest, GeofencePolygon } from '@/types'
 function statusLabel(status: CompanyRequest['status']): string {
   if (status === 'approved') {
     return 'Approved'
+  }
+  if (status === 'accepted') {
+    return 'Pending Superadmin Approval'
   }
   if (status === 'rejected') {
     return 'Rejected'
@@ -39,7 +42,7 @@ export function AddCompanyPage() {
 
   const queryStatus = statusFilter === 'all' ? undefined : statusFilter
   const { data: requests = [], isPending, error } = useCompanyRequests(queryStatus)
-  const approveRequest = useApproveCompanyRequest()
+  const approveRequest = useAcceptCompanyRequest()
 
   const selected = requests.find((request) => request.id === selectedId) ?? null
 
@@ -160,11 +163,10 @@ export function AddCompanyPage() {
               setStatusFilter(filter)
               clearSelection()
             }}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium capitalize transition ${
-              statusFilter === filter
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium capitalize transition ${statusFilter === filter
                 ? 'bg-[var(--color-accent)] text-white'
                 : 'border border-[var(--color-line)] bg-white/80 text-[var(--color-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]'
-            }`}
+              }`}
           >
             {filter}
           </button>
@@ -203,13 +205,12 @@ export function AddCompanyPage() {
 
                 <div>
                   <span
-                    className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-semibold ${
-                      selected.status === 'approved'
+                    className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-semibold ${selected.status === 'approved'
                         ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
                         : selected.status === 'rejected'
                           ? 'bg-red-50 text-red-700'
                           : 'bg-amber-50 text-amber-800'
-                    }`}
+                      }`}
                   >
                     {statusLabel(selected.status)}
                   </span>
@@ -329,13 +330,12 @@ export function AddCompanyPage() {
                       <span className="flex items-start justify-between gap-2">
                         <p className="font-semibold">{request.name}</p>
                         <span
-                          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
-                            request.status === 'approved'
+                          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${request.status === 'approved'
                               ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
                               : request.status === 'rejected'
                                 ? 'bg-red-50 text-red-700'
                                 : 'bg-amber-50 text-amber-800'
-                          }`}
+                            }`}
                         >
                           {statusLabel(request.status)}
                         </span>

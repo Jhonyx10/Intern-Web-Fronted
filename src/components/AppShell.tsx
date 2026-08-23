@@ -21,9 +21,13 @@ const navItems: NavItem[] = [
   { to: '/administrator', label: 'Administrators', end: false, icon: AdministratorIcon, roles: ['super_admin'] },
   { to: '/courses', label: 'Departments', end: false, icon: CoursesIcon, roles: ['super_admin'] },
   { to: '/companies/map', label: 'Companies', end: false, icon: MapIcon, roles: ['coordinator'] },
+  { to: '/coordinator/my-section', label: 'My Section', end: true, icon: UserIcon, roles: ['coordinator'] },
   { to: '/dean/coordinators', label: 'Coordinators', end: false, icon: AdministratorIcon, roles: ['dean'] },
   { to: '/dean/school-year-section', label: 'Year & Section', end: false, icon: Calendar1Icon, roles: ['dean'] },
   { to: '/dean/students', label: 'Students', end: false, icon: UserIcon, roles: ['dean'] },
+  { to: '/companies', label: 'Companies', end: false, icon: MapIcon, roles: ['super_admin'] },
+  { to: '/supervisor/interns', label: 'Interns', end: true, icon: UserIcon, roles: ['supervisor'] },
+  { to: '/supervisor/attendance', label: 'Attendance', end: true, icon: Calendar1Icon, roles: ['supervisor'] },
 ]
 
 const pageTitles: Array<{ path: string, title: string, end?: boolean }> = [
@@ -32,9 +36,12 @@ const pageTitles: Array<{ path: string, title: string, end?: boolean }> = [
   { path: '/companies/map', title: 'Locations' },
   { path: '/courses', title: 'Departments' },
   { path: '/administrator', title: 'Administrator' },
+  { path: '/coordinator/my-section', title: 'My Section', end: true },
   { path: '/dean/school-year-section', title: 'Year & Section' },
   { path: '/dean/coordinators', title: 'Coordinators' },
   { path: '/dean/students', title: 'Students' },
+  { path: '/supervisor/interns', title: 'Interns', end: true },
+  { path: '/supervisor/attendance', title: 'Attendance', end: true },
 ]
 
 function resolvePageTitle(pathname: string): string {

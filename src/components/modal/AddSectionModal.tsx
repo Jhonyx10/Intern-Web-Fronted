@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -51,12 +51,23 @@ export default function AddSectionModal({
     coursesLoading?: boolean
     coordinatorsLoading?: boolean
 }) {
-    const { token } = useAuth()
+    const { token, user } = useAuth()
+    const deanCourseId = user?.course?.id != null ? String(user.course.id) : ''
     const [name, setName] = useState('')
     const [code, setCode] = useState('')
-    const [courseId, setCourseId] = useState('')
+    const [courseId, setCourseId] = useState(deanCourseId)
     const [courseMajorId, setCourseMajorId] = useState('')
     const [coordinatorId, setCoordinatorId] = useState('')
+
+    useEffect(() => {
+        if (!open) {
+            return
+        }
+
+        if (deanCourseId) {
+            setCourseId(deanCourseId)
+        }
+    }, [open, deanCourseId])
 
     const { data: majors = [], isLoading: majorsLoading } = useQuery({
         queryKey: queryKeys.majors.list(courseId || undefined),
@@ -67,7 +78,7 @@ export default function AddSectionModal({
     function reset() {
         setName('')
         setCode('')
-        setCourseId('')
+        setCourseId(deanCourseId)
         setCourseMajorId('')
         setCoordinatorId('')
     }
@@ -149,7 +160,7 @@ export default function AddSectionModal({
                                             setCourseMajorId('')
                                         }}
                                         required
-                                        disabled={coursesLoading}
+                                        disabled={coursesLoading || Boolean(deanCourseId)}
                                         className="rounded-xl border border-[var(--color-line)] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)] disabled:opacity-50"
                                     >
                                         <option value="" disabled>

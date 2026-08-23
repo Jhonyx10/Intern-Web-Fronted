@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import {
     MapboxMap,
     MapTokenWarning,
@@ -10,13 +10,23 @@ import {
 import { useCompany } from '@/lib/queries/companies'
 import { formatDistance, formatDuration, haversineMeters, OCC_CENTER, OCC_NAME } from '@/lib/geo'
 import { type MapRouteInfo } from '@/components/MapboxMap'
-import { Building2, MapPin, Phone, Mail, User2, Shield, ShieldOff, Navigation } from 'lucide-react'
+import { Building2, MapPin, Phone, Mail, User2, Users2, Shield, ShieldOff, Navigation, ArrowLeft } from 'lucide-react'
+import AssignStudentModal from '@/components/modal/AssignStudentModal'
+import AddSupervisorModal from '@/components/modal/AddSupervisorModal'
+import { useAssignStudentToCompany, useCreateSupervisor } from '@/lib/queries/companies'
+import { useAuth } from '@/lib/auth'
 
 export function CompanyDetailsPage() {
     const { id } = useParams()
+    const navigate = useNavigate()
     const mapRef = useRef<MapboxMapHandle>(null)
     const { data: company, isLoading, error } = useCompany(id)
     const [routeInfo, setRouteInfo] = useState<MapRouteInfo | null>(null)
+    const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
+    const [isSupervisorModalOpen, setIsSupervisorModalOpen] = useState(false)
+    const { mutate: assignStudent, isPending: isAssigning } = useAssignStudentToCompany()
+    const { mutate: createSupervisor, isPending: isCreatingSupervisor } = useCreateSupervisor()
+    const { user } = useAuth()
 
     const markers: MapMarker[] = company?.latitude && company?.longitude
         ? [{ id: company.id, latitude: company.latitude, longitude: company.longitude, title: company.name, color: 'accent', popupHtml: `<strong>${company.name}</strong><br/>${company.address ?? ''}` }]
@@ -49,29 +59,61 @@ export function CompanyDetailsPage() {
     return (
         <section className="space-y-6">
             {/* Header */}
-            <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                    <p className="text-[11px] font-semibold tracking-[0.2em] text-[var(--color-accent)] uppercase">
-                        Companies
-                    </p>
-                    <h2 className="mt-2 text-3xl font-semibold tracking-tight">{company.name}</h2>
-                    {company.address && (
-                        <p className="mt-1 flex items-center gap-1.5 text-sm text-[var(--color-muted)]">
-                            <MapPin size={13} /> {company.address}
+            <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="rounded-full p-2 text-[var(--color-muted)] hover:bg-slate-100 hover:text-[var(--color-ink)] transition"
+                        title="Back to map"
+                    >
+                        <ArrowLeft size={20} />
+                    </button>
+                    <div>
+                        <p className="text-[11px] font-semibold tracking-[0.2em] text-[var(--color-accent)] uppercase">
+                            Companies
                         </p>
-                    )}
+                        <h2 className="text-3xl font-semibold tracking-tight">{company.name}</h2>
+                        {company.address && (
+                            <p className="mt-1 flex items-center gap-1.5 text-sm text-[var(--color-muted)]">
+                                <MapPin size={13} /> {company.address}
+                            </p>
+                        )}
+                    </div>
                 </div>
-                <Link
-                    to="/companies/map"
-                    className="rounded-xl border border-[var(--color-line)] bg-white/80 px-4 py-2 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-                >
-                    ← Back to map
-                </Link>
+                {user?.role?.name === 'coordinator' && (
+                    <div className="flex gap-2">
+                        <button
+                            className="rounded-xl border border-[var(--color-line)] bg-white/80 px-4 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:border-[var(--color-ink)]"
+                            onClick={() => setIsSupervisorModalOpen(true)}
+                        >
+                            Add Supervisor
+                        </button>
+                        <button
+                            className="rounded-xl border border-[var(--color-line)] bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--color-accent-hover)]"
+                            onClick={() => setIsAssignModalOpen(true)}
+                        >
+                            Assign Student
+                        </button>
+                    </div>
+                )}
             </div>
 
             <MapTokenWarning />
 
             <div className="space-y-6">
+                {/* Map — full width */}
+                <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white/80 shadow-[var(--shadow-soft)] backdrop-blur">
+                    <MapboxMap
+                        ref={mapRef}
+                        heightClassName="h-[420px]"
+                        markers={markers}
+                        polygons={polygons}
+                        fitMarkers={false}
+                        routeTo={routeTo}
+                        onRouteInfo={setRouteInfo}
+                    />
+                </div>
+
                 {/* Info panels — horizontal row */}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {/* Contact info */}
@@ -172,19 +214,137 @@ export function CompanyDetailsPage() {
                         )}
                     </div>
                 </div>
-                  {/* Map — full width */}
-                <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white/80 shadow-[var(--shadow-soft)] backdrop-blur">
-                    <MapboxMap
-                        ref={mapRef}
-                        heightClassName="h-[420px]"
-                        markers={markers}
-                        polygons={polygons}
-                        fitMarkers={false}
-                        routeTo={routeTo}
-                        onRouteInfo={setRouteInfo}
-                    />
-                </div>
             </div>
+
+            {company.students && (
+                <div className="rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
+                    <div className="border-b border-[var(--color-line)] px-6 py-4">
+                        <h2 className="text-lg font-semibold flex items-center gap-2">
+                            <Users2 size={18} className="text-[var(--color-muted)]" />
+                            Assigned Students <span className="text-sm font-normal text-[var(--color-muted)]">({company.students.length})</span>
+                        </h2>
+                    </div>
+                    {company.students.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-[var(--color-muted)]">
+                                <thead className="bg-slate-50/50 text-xs uppercase text-[var(--color-muted)]">
+                                    <tr>
+                                        <th className="px-6 py-3 font-medium">Student No.</th>
+                                        <th className="px-6 py-3 font-medium">Name</th>
+                                        <th className="px-6 py-3 font-medium">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
+                                    {company.students.map((student) => (
+                                        <tr key={student.id} className="transition-colors hover:bg-slate-50/50">
+                                            <td className="whitespace-nowrap px-6 py-4 font-medium">
+                                                {student.student_number}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {student.last_name}, {student.first_name} {student.middle_name || ''}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {student.is_active ? (
+                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+                                                        Active
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
+                                                        Inactive
+                                                    </span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="p-8 text-center text-sm text-[var(--color-muted)]">
+                            No students are currently assigned to this company.
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {company.supervisors && (
+                <div className="rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
+                    <div className="border-b border-[var(--color-line)] px-6 py-4">
+                        <h2 className="text-lg font-semibold flex items-center gap-2">
+                            <User2 size={18} className="text-[var(--color-muted)]" />
+                            Supervisors <span className="text-sm font-normal text-[var(--color-muted)]">({company.supervisors.length})</span>
+                        </h2>
+                    </div>
+                    {company.supervisors.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-[var(--color-muted)]">
+                                <thead className="bg-slate-50/50 text-xs uppercase text-[var(--color-muted)]">
+                                    <tr>
+                                        <th className="px-6 py-3 font-medium">Name</th>
+                                        <th className="px-6 py-3 font-medium">Email</th>
+                                        <th className="px-6 py-3 font-medium">Position</th>
+                                        <th className="px-6 py-3 font-medium">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
+                                    {company.supervisors.map((supervisor) => (
+                                        <tr key={supervisor.id} className="transition-colors hover:bg-slate-50/50">
+                                            <td className="px-6 py-4 font-medium">
+                                                {supervisor.user?.name ?? '—'}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {supervisor.user?.email
+                                                    ? <a href={`mailto:${supervisor.user.email}`} className="hover:text-[var(--color-accent)] transition">{supervisor.user.email}</a>
+                                                    : '—'}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {supervisor.position_title ?? <span className="italic text-[var(--color-muted)]">Not set</span>}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {supervisor.is_active ? (
+                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">Active</span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">Inactive</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="p-8 text-center text-sm text-[var(--color-muted)]">
+                            No supervisors have been added to this company yet.
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {company && (
+                <>
+                    <AssignStudentModal
+                        open={isAssignModalOpen}
+                        onClose={() => setIsAssignModalOpen(false)}
+                        isLoading={isAssigning}
+                        assignedStudentIds={company.students?.map(s => s.id) ?? []}
+                        onAssign={(studentId) => {
+                            assignStudent({ companyId: company.id, studentId }, {
+                                onSuccess: () => setIsAssignModalOpen(false),
+                            })
+                        }}
+                    />
+                    <AddSupervisorModal
+                        open={isSupervisorModalOpen}
+                        onClose={() => setIsSupervisorModalOpen(false)}
+                        isLoading={isCreatingSupervisor}
+                        onAdd={(formData) => {
+                            createSupervisor({ companyId: company.id, input: formData }, {
+                                onSuccess: () => setIsSupervisorModalOpen(false),
+                            })
+                        }}
+                    />
+                </>
+            )}
         </section>
     )
 }

@@ -58,7 +58,7 @@ export function LoginPage() {
         </div>
 
         <p className="text-sm text-[var(--color-muted)] leading-relaxed">
-          Passport token auth against the Laravel API. No Inertia, no Breeze.
+          Sanctum token auth against the Laravel API. No Inertia, no Breeze.
         </p>
 
         <label className="mt-7 block text-sm font-medium">

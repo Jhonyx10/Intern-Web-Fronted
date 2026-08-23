@@ -50,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: { email, password },
       })
 
+      queryClient.clear()
       localStorage.setItem(TOKEN_KEY, data.access_token)
       queryClient.setQueryData(queryKeys.auth.me(data.access_token), { user: data.user })
       setToken(data.access_token)
@@ -68,8 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     localStorage.removeItem(TOKEN_KEY)
     setToken(null)
-    queryClient.removeQueries({ queryKey: queryKeys.auth.all })
-    queryClient.removeQueries({ queryKey: queryKeys.companies.all })
+    queryClient.clear()
   }, [queryClient, token])
 
   const value = useMemo(

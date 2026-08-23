@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth'
 import { queryKeys } from '@/lib/query-keys'
 import type { Company, CompanyRequest, GeofencePolygon } from '@/types'
 
-export type ApproveCompanyRequestInput = {
+export type AcceptCompanyRequestInput = {
   id: number
   geofence_polygon: GeofencePolygon
   geofence_enabled?: boolean
@@ -22,14 +22,14 @@ export async function fetchCompanyRequests(
   return response.data
 }
 
-export async function approveCompanyRequest(
+export async function acceptCompanyRequest(
   token: string,
-  input: ApproveCompanyRequestInput,
+  input: AcceptCompanyRequestInput,
 ): Promise<{ company: Company; company_request: CompanyRequest }> {
   const { id, ...body } = input
   const response = await apiRequest<{
     data: { company: Company; company_request: CompanyRequest }
-  }>(`/company-requests/${id}/approve`, {
+  }>(`/company-requests/${id}/accept`, {
     method: 'POST',
     token,
     body,
@@ -47,25 +47,19 @@ export function useCompanyRequests(status?: string) {
   })
 }
 
-export function useApproveCompanyRequest() {
+export function useAcceptCompanyRequest() {
   const { token } = useAuth()
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (input: ApproveCompanyRequestInput) => {
+    mutationFn: (input: AcceptCompanyRequestInput) => {
       if (!token) {
         throw new Error('Not authenticated.')
       }
-      return approveCompanyRequest(token, input)
+      return acceptCompanyRequest(token, input)
     },
-    onSuccess: ({ company }) => {
-      queryClient.setQueryData<Company[]>(queryKeys.companies.list(), (current) => {
-        if (!current) {
-          return [company]
-        }
-        const withoutDuplicate = current.filter((item) => item.id !== company.id)
-        return [...withoutDuplicate, company].sort((a, b) => a.name.localeCompare(b.name))
-      })
+    onSuccess: () => {
+      // Company is now pending superadmin approval; invalidate request list
       void queryClient.invalidateQueries({ queryKey: queryKeys.companyRequests.all })
       void queryClient.invalidateQueries({ queryKey: queryKeys.companies.all })
     },
