@@ -21,17 +21,27 @@ export class ApiError extends Error {
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    'Content-Type': 'application/json',
+  }
+
+  if (options.body !== undefined && !(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json'
   }
 
   if (options.token) {
     headers.Authorization = `Bearer ${options.token}`
   }
 
+  const isFormData = options.body instanceof FormData
+
   const response = await fetch(`${API_URL}${path}`, {
     method: options.method ?? 'GET',
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    body:
+      options.body !== undefined
+        ? isFormData
+          ? (options.body as FormData)
+          : JSON.stringify(options.body)
+        : undefined,
   })
 
   const payload = await response.json().catch(() => ({}))

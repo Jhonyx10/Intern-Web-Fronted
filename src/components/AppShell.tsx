@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
+import { useTheme } from '@/context/ThemeContext'
 import OCCLOGO from '@/assets/OCC logo.webp'
-import { Calendar1Icon, UserIcon } from 'lucide-react'
+import { Calendar1Icon, UserIcon, Settings } from 'lucide-react'
 
 type Role = 'super_admin' | 'supervisor' | 'dean' | 'program_head' | 'coordinator' | 'student'
 
@@ -22,9 +23,9 @@ const navItems: NavItem[] = [
   { to: '/courses', label: 'Departments', end: false, icon: CoursesIcon, roles: ['super_admin'] },
   { to: '/companies/map', label: 'Companies', end: false, icon: MapIcon, roles: ['coordinator'] },
   { to: '/coordinator/my-section', label: 'My Section', end: true, icon: UserIcon, roles: ['coordinator'] },
-  { to: '/dean/coordinators', label: 'Coordinators', end: false, icon: AdministratorIcon, roles: ['dean'] },
-  { to: '/dean/school-year-section', label: 'Year & Section', end: false, icon: Calendar1Icon, roles: ['dean'] },
-  { to: '/dean/students', label: 'Students', end: false, icon: UserIcon, roles: ['dean'] },
+  { to: '/coordinators', label: 'Coordinators', end: false, icon: AdministratorIcon, roles: ['dean', 'program_head'] },
+  { to: '/school-year-section', label: 'Year & Section', end: false, icon: Calendar1Icon, roles: ['dean', 'program_head'] },
+  { to: '/students', label: 'Students', end: false, icon: UserIcon, roles: ['dean', 'program_head'] },
   { to: '/companies', label: 'Companies', end: false, icon: MapIcon, roles: ['super_admin'] },
   { to: '/supervisor/interns', label: 'Interns', end: true, icon: UserIcon, roles: ['supervisor'] },
   { to: '/supervisor/attendance', label: 'Attendance', end: true, icon: Calendar1Icon, roles: ['supervisor'] },
@@ -37,11 +38,12 @@ const pageTitles: Array<{ path: string, title: string, end?: boolean }> = [
   { path: '/courses', title: 'Departments' },
   { path: '/administrator', title: 'Administrator' },
   { path: '/coordinator/my-section', title: 'My Section', end: true },
-  { path: '/dean/school-year-section', title: 'Year & Section' },
-  { path: '/dean/coordinators', title: 'Coordinators' },
-  { path: '/dean/students', title: 'Students' },
+  { path: '/school-year-section', title: 'Year & Section' },
+  { path: '/coordinators', title: 'Coordinators' },
+  { path: '/students', title: 'Students' },
   { path: '/supervisor/interns', title: 'Interns', end: true },
   { path: '/supervisor/attendance', title: 'Attendance', end: true },
+  { path: '/settings', title: 'Account & Department Settings', end: true },
 ]
 
 function resolvePageTitle(pathname: string): string {
@@ -67,6 +69,7 @@ const SIDEBAR_COLLAPSED = 76
 
 export function AppShell() {
   const { user, logout } = useAuth()
+  const { logoUrl } = useTheme()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
@@ -142,10 +145,17 @@ export function AppShell() {
         <div className={`flex items-center pt-6 pb-5 ${sidebarOpen ? 'px-4' : 'justify-center px-2'}`}>
           <div className={`flex min-w-0 items-center ${sidebarOpen ? 'gap-3' : 'justify-center'}`}>
             <div
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-sm font-bold tracking-wide text-white shadow-[0_10px_24px_-12px_rgba(11,110,79,0.9)]"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl overflow-hidden text-sm font-bold tracking-wide text-white shadow-[0_10px_24px_-12px_rgba(11,110,79,0.9)] bg-white p-1"
               title="OCC Intern"
             >
-              <img src={OCCLOGO} />
+              <img
+                src={logoUrl || OCCLOGO}
+                alt="Logo"
+                className="h-full w-full object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = OCCLOGO
+                }}
+              />
             </div>
             <AnimatePresence initial={false}>
               {sidebarOpen ? (
@@ -313,6 +323,14 @@ export function AppShell() {
                       <p className="truncate text-sm font-semibold">{user?.name}</p>
                       <p className="truncate text-xs text-[var(--color-muted)]">{user?.role?.label}</p>
                     </div>
+                    <NavLink
+                      to="/settings"
+                      onClick={() => setProfileOpen(false)}
+                      className="flex w-full items-center gap-2 border-b border-[var(--color-line)] px-3 py-2.5 text-left text-sm font-medium text-[var(--color-ink)] transition-colors hover:bg-slate-50"
+                    >
+                      <Settings size={16} />
+                      Settings
+                    </NavLink>
                     <button
                       type="button"
                       role="menuitem"
@@ -320,7 +338,7 @@ export function AppShell() {
                         setProfileOpen(false)
                         void logout()
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-[var(--color-ink)] transition-colors hover:bg-slate-50"
+                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
                     >
                       <LogoutIcon />
                       Log out

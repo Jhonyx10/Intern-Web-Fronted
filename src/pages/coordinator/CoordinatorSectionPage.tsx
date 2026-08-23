@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { sectionQueries } from '@/lib/queries/section'
 import { useAuth } from '@/lib/auth'
-import { Users2, AlertCircle } from 'lucide-react'
+import { Users2, AlertCircle, Eye } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 export function CoordinatorSectionPage() {
     const { user, token } = useAuth()
     const sectionId = user?.section?.id
+    const navigate = useNavigate()
 
     const {
         data: section,
@@ -98,6 +100,7 @@ export function CoordinatorSectionPage() {
                                     <th className="px-6 py-3 font-medium">Name</th>
                                     <th className="px-6 py-3 font-medium">Assigned Company</th>
                                     <th className="px-6 py-3 font-medium">Status</th>
+                                    <th className="px-6 py-3 font-medium text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
@@ -132,6 +135,18 @@ export function CoordinatorSectionPage() {
                                                     Inactive
                                                 </span>
                                             )}
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate(`/students/${student.id}`);
+                                                }}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--color-accent)] shadow-2xs hover:bg-[var(--color-accent-soft)] transition"
+                                            >
+                                                <Eye size={13} /> View Details
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}

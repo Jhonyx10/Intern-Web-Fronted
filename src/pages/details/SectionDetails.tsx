@@ -3,8 +3,8 @@ import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
-import { useParams } from "react-router-dom";
-import { Loader2, GraduationCap, User, CalendarDays, BadgeCheck, Plus } from "lucide-react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Loader2, GraduationCap, User, CalendarDays, BadgeCheck, Plus, Eye } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { AddStudentModal } from "@/components/modal/AddStudentModal";
 import { useCreateStudent } from "@/lib/queries/students";
@@ -21,7 +21,9 @@ function formatDate(dateStr: string | null) {
 
 export default function SectionDetailsPage() {
     const { id } = useParams();
-    const { token } = useAuth();
+    const navigate = useNavigate();
+    const { token, user } = useAuth();
+    const isProgramHead = user?.role?.name === 'program_head';
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const { data: section, isLoading, isError } = useQuery({
@@ -86,13 +88,15 @@ export default function SectionDetailsPage() {
                     </p>
                 </div>
 
-                <button
-                    type="button"
-                    onClick={() => setIsModalOpen(true)}
-                    className="inline-flex w-fit items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
-                >
-                    <Plus size={15} className="text-white" /> Add Student
-                </button>
+                {!isProgramHead && (
+                    <button
+                        type="button"
+                        onClick={() => setIsModalOpen(true)}
+                        className="inline-flex w-fit items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
+                    >
+                        <Plus size={15} className="text-white" /> Add Student
+                    </button>
+                )}
             </motion.div>
 
             {/* Info cards */}
@@ -193,11 +197,16 @@ export default function SectionDetailsPage() {
                                     <th className="px-4 py-3">Student No.</th>
                                     <th className="px-4 py-3">Name</th>
                                     <th className="px-4 py-3">Status</th>
+                                    <th className="px-4 py-3 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-[var(--color-line)] text-sm">
                                 {section.students.map((student) => (
-                                    <tr key={student.id} className="hover:bg-slate-50/60">
+                                    <tr
+                                        key={student.id}
+                                        onClick={() => navigate(`/students/${student.id}`)}
+                                        className="hover:bg-slate-50/60 cursor-pointer transition"
+                                    >
                                         <td className="px-4 py-3 font-mono text-xs text-[var(--color-muted)]">
                                             {student.student_number}
                                         </td>
@@ -216,6 +225,18 @@ export default function SectionDetailsPage() {
                                             >
                                                 {student.is_active ? "Active" : "Inactive"}
                                             </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate(`/students/${student.id}`);
+                                                }}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--color-accent)] shadow-2xs hover:bg-[var(--color-accent-soft)] transition"
+                                            >
+                                                <Eye size={13} /> View Details
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}

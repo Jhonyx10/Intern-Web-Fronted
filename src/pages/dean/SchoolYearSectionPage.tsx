@@ -152,6 +152,8 @@ const SchoolYearSectionPage = () => {
         },
     })
 
+    const isProgramHead = user?.role?.name === 'program_head'
+
     function toggle(id: number) {
         setExpanded((current) => (current === id ? null : id))
     }
@@ -176,13 +178,15 @@ const SchoolYearSectionPage = () => {
                     </p>
                 </div>
 
-                <button
-                    type="button"
-                    onClick={() => setAddSyOpen(true)}
-                    className="inline-flex w-fit items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
-                >
-                    <Plus size={15} className="text-white" /> Add School Year
-                </button>
+                {!isProgramHead && (
+                    <button
+                        type="button"
+                        onClick={() => setAddSyOpen(true)}
+                        className="inline-flex w-fit items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
+                    >
+                        <Plus size={15} className="text-white" /> Add School Year
+                    </button>
+                )}
             </motion.div>
 
             {isLoading ? (
@@ -234,7 +238,7 @@ const SchoolYearSectionPage = () => {
                                             {year.is_active ? 'Active' : 'Archived'}
                                         </span>
 
-                                        {!year.is_active && year.sections.length === 0 && (
+                                        {!isProgramHead && !year.is_active && year.sections.length === 0 && (
                                             <button
                                                 type="button"
                                                 onClick={(e) => {
@@ -274,16 +278,16 @@ const SchoolYearSectionPage = () => {
                                                 {year.sections.map((section) => (
                                                     <div
                                                         key={section.id}
-                                                        onClick={() => navigate(`/dean/school-year-section/${section.id}`)}
+                                                        onClick={() => navigate(`/school-year-section/${section.id}`)}
                                                         role="link"
                                                         tabIndex={0}
                                                         onKeyDown={(e) => {
-                                                            if (e.key === 'Enter') navigate(`/dean/school-year-section/${section.id}`)
+                                                            if (e.key === 'Enter') navigate(`/school-year-section/${section.id}`)
                                                         }}
                                                         className="group inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-accent-soft)] hover:text-[var(--color-accent)]"
                                                     >
                                                         {section.name}
-                                                        {year.is_active && (
+                                                        {!isProgramHead && year.is_active && (
                                                             <button
                                                                 type="button"
                                                                 onClick={(e) => {
@@ -301,7 +305,7 @@ const SchoolYearSectionPage = () => {
                                                     </div>
                                                 ))}
 
-                                                {year.is_active && (
+                                                {!isProgramHead && year.is_active && (
                                                     <button
                                                         type="button"
                                                         onClick={() => setAddSectionTarget(year)}

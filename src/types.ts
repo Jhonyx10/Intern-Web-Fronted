@@ -78,6 +78,8 @@ export type Course = {
   is_active: boolean
   dean_user_id: string | number
   dean: User | null
+  program_head_id: string | number | null
+  program_head: User | null
   majors?: Major[]
 }
 
@@ -92,6 +94,75 @@ export type Major = {
   course: Course | null
 }
 
+export type CompanySchedule = {
+  id: number
+  company_id: number
+  supervisor_id: number | null
+  start_date: string | null
+  time_in: string | null
+  lunch_break: string | null
+  time_out: string | null
+  creator?: {
+    id: number
+    position_title: string | null
+    user: {
+      id: number
+      name: string
+      email: string
+    } | null
+  } | null
+}
+
+export type TimeLog = {
+  id: number
+  student_id: number
+  session_period: string
+  task_note: string | null
+  time_in: string
+  time_out: string | null
+  duration_minutes: number | null
+  verification_method: string | null
+  face_match_score: number | null
+  device_info: string | null
+  task_photos?: Array<{
+    id: number
+    photo_path: string
+  }>
+}
+
+export type StudentDocument = {
+  id: number
+  student_id: number
+  document_type_id: number
+  file_path: string
+  original_filename: string
+  file_size: number | null
+  mime_type: string | null
+  uploaded_at: string
+  notes: string | null
+  review_status: string
+  reviewed_at: string | null
+  rejection_reason: string | null
+  document_type?: {
+    id: number
+    name: string
+    code: string
+  } | null
+  document_requirement?: {
+    id: number
+    title: string
+    description: string | null
+  } | null
+}
+
+export type OjtSchedule = {
+  id: number
+  student_id: number
+  hours_per_day: number
+  days_per_week: number
+  start_date: string | null
+}
+
 export type Student = {
   id: number
   student_number: string
@@ -100,7 +171,11 @@ export type Student = {
   last_name: string
   section_id: number
   is_active: boolean
-  companies?: Company[]
+  section?: Section | null
+  companies?: (Company & { schedules?: CompanySchedule[] })[]
+  ojt_schedule?: OjtSchedule | null
+  time_logs?: TimeLog[]
+  documents?: StudentDocument[]
 }
 
 export type Supervisor = {
@@ -141,3 +216,16 @@ export type SchoolYear = {
   end_date: string | null
   is_active: boolean
 }
+
+export type Setting = {
+  id?: number | null
+  course_id?: number | null
+  department_name?: string | null
+  logo_path?: string | null
+  logo_url?: string | null
+  theme_color?: string
+  theme_color_hover?: string | null
+  theme_color_soft?: string | null
+  updated_at?: string | null
+}
+

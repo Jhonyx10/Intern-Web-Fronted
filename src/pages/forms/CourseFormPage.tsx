@@ -14,6 +14,7 @@ export function CourseFormPage() {
     const { data: users, isLoading: isLoadingUsers } = useUsers()
 
     const deans = users?.filter(user => user?.role?.name === 'dean') || []
+    const programHeads = users?.filter(user => user?.role?.name === 'program_head') || []
 
     const createMutation = useCreateCourse()
     const updateMutation = useUpdateCourse()
@@ -23,6 +24,7 @@ export function CourseFormPage() {
         name: '',
         required_hours: '',
         dean_user_id: '',
+        program_head_id: '',
         is_active: true,
     })
 
@@ -33,6 +35,7 @@ export function CourseFormPage() {
                 name: course.name || '',
                 required_hours: course.required_hours ? course.required_hours.toString() : '',
                 dean_user_id: course.dean_user_id ? course.dean_user_id.toString() : '',
+                program_head_id: course.program_head_id ? course.program_head_id.toString() : '',
                 is_active: course.is_active ?? true,
             })
         }
@@ -40,6 +43,7 @@ export function CourseFormPage() {
 
     const set = (patch: any) => setForm((f) => ({ ...f, ...patch }))
     const dean = deans.find((d) => d.id.toString() === form.dean_user_id.toString())
+    const programHead = programHeads.find((p) => p.id.toString() === form.program_head_id.toString())
     const canSubmit = form.code.trim() && form.name.trim() && form.required_hours && form.dean_user_id
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -49,6 +53,7 @@ export function CourseFormPage() {
         const payload = {
             ...form,
             required_hours: Number(form.required_hours),
+            program_head_id: form.program_head_id ? Number(form.program_head_id) : null,
         }
 
         if (isEditMode) {
@@ -162,6 +167,24 @@ export function CourseFormPage() {
                         </div>
 
                         <div className="flex flex-col gap-1">
+                            <label className="text-sm font-medium text-[var(--color-ink)]">
+                                Program Head
+                                <span className="ml-1 text-[11px] font-normal text-[var(--color-muted)]">(optional)</span>
+                            </label>
+                            <p className="text-xs text-[var(--color-muted)]">manages the academic program</p>
+                            <select
+                                className="w-full rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)]"
+                                value={form.program_head_id}
+                                onChange={(e) => set({ program_head_id: e.target.value })}
+                            >
+                                <option value="">None</option>
+                                {programHeads.map((p) => (
+                                    <option key={p.id} value={p.id.toString()}>{p.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="flex flex-col gap-1">
                             <label className="text-sm font-medium text-[var(--color-ink)]">Status <span className="text-red-500">*</span></label>
                             <p className="text-xs text-[var(--color-muted)]">active or inactive</p>
                             <div className="mt-2 flex items-center gap-3">
@@ -236,6 +259,10 @@ export function CourseFormPage() {
                         <div className="flex items-center gap-2 text-sm text-[var(--color-ink)]">
                             <UserRound size={14} className="text-[var(--color-muted)]" />
                             {dean ? dean.name : 'No dean assigned'}
+                        </div>
+                        <div className="flex items-center gap-2 text-sm text-[var(--color-ink)]">
+                            <UserRound size={14} className="text-[var(--color-muted)]" />
+                            {programHead ? programHead.name : 'No program head assigned'}
                         </div>
                         <div className="flex items-center gap-2 text-sm text-[var(--color-ink)]">
                             <Hash size={14} className="text-[var(--color-muted)]" />

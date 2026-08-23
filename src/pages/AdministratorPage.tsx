@@ -69,7 +69,7 @@ function UserFormModal({
     const updateMutation = useUpdateUser()
     const { data: roles, isLoading: rolesLoading } = useRoles()
     const isBusy = createMutation.isPending || updateMutation.isPending
-    const administrators = roles?.filter((role) => role.id === 2 || role.id === 4)
+    const administrators = roles?.filter((role) => role.id === 2 || role.id === 3)
     const [form, setForm] = useState<FormState>({
         name: user?.name ?? '',
         email: user?.email ?? '',

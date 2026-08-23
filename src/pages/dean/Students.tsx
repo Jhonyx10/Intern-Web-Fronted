@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
-import { Search, Building2, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Building2, Loader2, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 import { useStudents } from '@/lib/queries/students'
 import type { Student } from '@/types'
 
@@ -62,6 +63,7 @@ function initialsOf(student: StudentListItem) {
 }
 
 const StudentsPage = () => {
+    const navigate = useNavigate()
     const [page, setPage] = useState(1)
     const [query, setQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState<InternshipStatus | 'all'>('all')
@@ -159,12 +161,13 @@ const StudentsPage = () => {
             </motion.div>
 
             <div className="mt-5 overflow-hidden rounded-xl border border-[var(--color-line)] bg-white/80 shadow-sm">
-                <div className="hidden grid-cols-[1.8fr_1fr_1.3fr_1.3fr_0.9fr] gap-3 border-b border-[var(--color-line)] px-4 py-2.5 text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase sm:grid">
+                <div className="hidden grid-cols-[1.6fr_1fr_1.2fr_1.1fr_0.8fr_0.7fr] gap-3 border-b border-[var(--color-line)] px-4 py-2.5 text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase sm:grid">
                     <span>Student</span>
                     <span>Section</span>
                     <span>Company</span>
                     <span>Progress</span>
                     <span>Status</span>
+                    <span className="text-right">Action</span>
                 </div>
 
                 {isLoading ? (
@@ -190,7 +193,8 @@ const StudentsPage = () => {
                                         initial="hidden"
                                         animate="show"
                                         exit="exit"
-                                        className="grid grid-cols-1 gap-3 border-b border-[var(--color-line)] px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-slate-50 sm:grid-cols-[1.8fr_1fr_1.3fr_1.3fr_0.9fr] sm:items-center"
+                                        onClick={() => navigate(`/students/${student.id}`)}
+                                        className="grid grid-cols-1 gap-3 border-b border-[var(--color-line)] px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-slate-50 cursor-pointer sm:grid-cols-[1.6fr_1fr_1.2fr_1.1fr_0.8fr_0.7fr] sm:items-center"
                                     >
                                         <div className="flex min-w-0 items-center gap-3">
                                             <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--color-accent-soft)] text-[11px] font-semibold text-[var(--color-accent)]">
@@ -218,7 +222,7 @@ const StudentsPage = () => {
                                         </span>
 
                                         <div className="flex items-center gap-2">
-                                            <div className="h-1.5 w-full max-w-[120px] overflow-hidden rounded-full bg-slate-100">
+                                            <div className="h-1.5 w-full max-w-[100px] overflow-hidden rounded-full bg-slate-100">
                                                 <motion.div
                                                     initial={{ width: 0 }}
                                                     animate={{ width: `${progress}%` }}
@@ -237,6 +241,19 @@ const StudentsPage = () => {
                                         >
                                             {STATUS_LABEL[status]}
                                         </span>
+
+                                        <div className="flex items-center justify-end">
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    navigate(`/students/${student.id}`)
+                                                }}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--color-accent)] shadow-2xs hover:bg-[var(--color-accent-soft)] transition"
+                                            >
+                                                <Eye size={13} /> View
+                                            </button>
+                                        </div>
                                     </motion.div>
                                 )
                             })}

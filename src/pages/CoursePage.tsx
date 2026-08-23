@@ -468,6 +468,14 @@ function CourseRow({
                 </div>
             </td>
 
+            {/* Program Head */}
+            <td className="px-4 py-3.5">
+                <div className="flex items-center gap-1.5 text-sm text-[var(--color-ink)]">
+                    <UserRound size={13} className="shrink-0 text-[var(--color-muted)]" />
+                    <span className="truncate">{course.program_head?.name ?? <span className="text-[var(--color-muted)]">—</span>}</span>
+                </div>
+            </td>
+
             {/* Required Hours */}
             <td className="px-4 py-3.5">
                 <div className="flex items-center gap-1.5 text-sm text-[var(--color-ink)]">
@@ -756,6 +764,9 @@ export default function CoursePage() {
                                         </th>
                                         <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
                                             Dean
+                                        </th>
+                                        <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
+                                            Program Head
                                         </th>
                                         <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
                                             Req. Hours
