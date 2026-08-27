@@ -4,11 +4,22 @@ import { useAuth } from '@/lib/auth'
 import { queryKeys } from '@/lib/query-keys'
 import type { Company, CompanyRequest, GeofencePolygon } from '@/types'
 
+export type BuildingInput = {
+  name: string
+  code: string
+  latitude: number | null
+  longitude: number | null
+  geofence_radius_meters: number
+  geofence_enabled: boolean
+  geofence_polygon: GeofencePolygon | null
+}
+
 export type AcceptCompanyRequestInput = {
   id: number
   geofence_polygon: GeofencePolygon
   geofence_enabled?: boolean
   geofence_radius_meters?: number
+  buildings?: BuildingInput[]
 }
 
 export async function fetchCompanyRequests(

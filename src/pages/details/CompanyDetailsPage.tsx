@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
     MapboxMap,
@@ -28,13 +28,61 @@ export function CompanyDetailsPage() {
     const { mutate: createSupervisor, isPending: isCreatingSupervisor } = useCreateSupervisor()
     const { user } = useAuth()
 
-    const markers: MapMarker[] = company?.latitude && company?.longitude
-        ? [{ id: company.id, latitude: company.latitude, longitude: company.longitude, title: company.name, color: 'accent', popupHtml: `<strong>${company.name}</strong><br/>${company.address ?? ''}` }]
-        : []
+    const markers = useMemo<MapMarker[]>(() => {
+        const marks: MapMarker[] = []
+        const colors = ['#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#6366f1']
 
-    const polygons: MapPolygonFeature[] = company?.geofence_polygon
-        ? [{ id: company.id, name: company.name, polygon: company.geofence_polygon }]
-        : []
+        if (company?.latitude && company?.longitude) {
+            marks.push({
+                id: company.id,
+                latitude: company.latitude,
+                longitude: company.longitude,
+                title: company.name,
+                color: 'accent',
+                hexColor: '#0b6e4f',
+                popupHtml: `<strong>${company.name}</strong><br/>${company.address ?? 'Main HQ'}`
+            })
+        }
+
+        if (company?.buildings) {
+            company.buildings.forEach((b, index) => {
+                if (b.latitude && b.longitude) {
+                    marks.push({
+                        id: `building-marker-${b.id}`,
+                        latitude: b.latitude,
+                        longitude: b.longitude,
+                        title: b.name || 'Unnamed Building',
+                        color: 'accent',
+                        hexColor: colors[index % colors.length],
+                        popupHtml: `<strong>${b.name || 'Unnamed Building'}</strong>`
+                    })
+                }
+            })
+        }
+        return marks
+    }, [company])
+
+    const polygons = useMemo<MapPolygonFeature[]>(() => {
+        const features: MapPolygonFeature[] = []
+        const colors = ['#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#6366f1']
+
+        if (company?.geofence_polygon) {
+            features.push({ id: company.id, name: company.name, polygon: company.geofence_polygon, color: '#0b6e4f' })
+        }
+        if (company?.buildings) {
+            company.buildings.forEach((b, index) => {
+                if (b.geofence_polygon?.type === 'Polygon') {
+                    features.push({
+                        id: `building-${b.id}`,
+                        name: b.name || 'Unnamed Building',
+                        polygon: b.geofence_polygon,
+                        color: colors[index % colors.length]
+                    })
+                }
+            })
+        }
+        return features
+    }, [company?.geofence_polygon, company?.buildings])
 
     const routeTo = company?.latitude && company?.longitude
         ? { latitude: company.latitude, longitude: company.longitude }
@@ -106,16 +154,19 @@ export function CompanyDetailsPage() {
                     <MapboxMap
                         ref={mapRef}
                         heightClassName="h-[420px]"
+                        center={company?.longitude && company?.latitude ? [company.longitude, company.latitude] : undefined}
+                        zoom={17}
                         markers={markers}
                         polygons={polygons}
                         fitMarkers={false}
+                        fitRouteBounds={false}
                         routeTo={routeTo}
                         onRouteInfo={setRouteInfo}
                     />
                 </div>
 
                 {/* Info panels — horizontal row */}
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2">
                     {/* Contact info */}
                     <div className="rounded-2xl border border-[var(--color-line)] bg-white/80 p-5 shadow-[var(--shadow-soft)] backdrop-blur">
                         <p className="text-[11px] font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase mb-3">
@@ -192,80 +243,60 @@ export function CompanyDetailsPage() {
                             </div>
                         </div>
                     )}
-
-                    {/* Geofence status */}
-                    <div className="rounded-2xl border border-[var(--color-line)] bg-white/80 p-5 shadow-[var(--shadow-soft)] backdrop-blur">
-                        <p className="text-[11px] font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase mb-3">
-                            Geofence
-                        </p>
-                        <div className={`flex items-center gap-2 text-sm font-medium ${company.geofence_enabled ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]'}`}>
-                            {company.geofence_enabled
-                                ? <><Shield size={14} /> Enabled</>
-                                : <><ShieldOff size={14} /> Disabled</>
-                            }
-                        </div>
-                        {company.geofence_radius_meters && (
-                            <p className="mt-1 text-xs text-[var(--color-muted)]">
-                                Radius: {company.geofence_radius_meters} m
-                            </p>
-                        )}
-                        {!company.geofence_polygon && (
-                            <p className="mt-1 text-xs text-[var(--color-muted)]">No polygon defined.</p>
-                        )}
-                    </div>
                 </div>
             </div>
 
-            {company.students && (
-                <div className="rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
-                    <div className="border-b border-[var(--color-line)] px-6 py-4">
-                        <h2 className="text-lg font-semibold flex items-center gap-2">
-                            <Users2 size={18} className="text-[var(--color-muted)]" />
-                            Assigned Students <span className="text-sm font-normal text-[var(--color-muted)]">({company.students.length})</span>
-                        </h2>
-                    </div>
-                    {company.students.length > 0 ? (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm text-[var(--color-muted)]">
-                                <thead className="bg-slate-50/50 text-xs uppercase text-[var(--color-muted)]">
-                                    <tr>
-                                        <th className="px-6 py-3 font-medium">Student No.</th>
-                                        <th className="px-6 py-3 font-medium">Name</th>
-                                        <th className="px-6 py-3 font-medium">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
-                                    {company.students.map((student) => (
-                                        <tr key={student.id} className="transition-colors hover:bg-slate-50/50">
-                                            <td className="whitespace-nowrap px-6 py-4 font-medium">
-                                                {student.student_number}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {student.last_name}, {student.first_name} {student.middle_name || ''}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {student.is_active ? (
-                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
-                                                        Active
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
-                                                        Inactive
-                                                    </span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
-                        <div className="p-8 text-center text-sm text-[var(--color-muted)]">
-                            No students are currently assigned to this company.
-                        </div>
-                    )}
+            {/* Buildings & Geofences Section */}
+            <div className="rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
+                <div className="border-b border-[var(--color-line)] px-6 py-4 flex items-center justify-between">
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                        <MapPin size={18} className="text-[var(--color-muted)]" />
+                        Buildings & Geofences
+                    </h2>
                 </div>
-            )}
+                <div className="p-6">
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {/* Main Company Location */}
+                        <div className="rounded-xl border border-[var(--color-line)] bg-slate-50/50 p-4 border-l-4 border-l-[#0b6e4f]">
+                            <div className="mb-2 flex items-center justify-between">
+                                <h3 className="font-semibold text-sm text-[var(--color-ink)]">Main Config / General</h3>
+                                <div className={`flex items-center gap-1.5 text-xs font-medium ${company.geofence_enabled ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]'}`}>
+                                    {company.geofence_enabled ? <><Shield size={12} /> Enabled</> : <><ShieldOff size={12} /> Disabled</>}
+                                </div>
+                            </div>
+                            <div className="space-y-1 mt-3 text-xs text-[var(--color-muted)]">
+                                {company.geofence_radius_meters && <p>Radius: <strong>{company.geofence_radius_meters} m</strong></p>}
+                                <p>Polygon Map: {company.geofence_polygon ? <strong className="text-green-600">Defined</strong> : 'None'}</p>
+                            </div>
+                        </div>
+
+                        {/* Buildings */}
+                        {company.buildings?.map((b, index) => {
+                            const colors = ['#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#6366f1']
+                            const buildingColor = colors[index % colors.length]
+                            return (
+                                <div key={b.id} className="rounded-xl border border-[var(--color-line)] bg-slate-50/50 p-4 border-l-4" style={{ borderLeftColor: buildingColor }}>
+                                    <div className="mb-2 flex items-center justify-between">
+                                        <h3 className="font-semibold text-sm text-[var(--color-ink)] text-ellipsis whitespace-nowrap overflow-hidden pr-2">{b.name}</h3>
+                                        <div className={`flex items-center gap-1.5 text-xs font-medium ${b.geofence_enabled ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]'}`}>
+                                            {b.geofence_enabled ? <><Shield size={12} /> Enabled</> : <><ShieldOff size={12} /> Disabled</>}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1 mt-3 text-xs text-[var(--color-muted)]">
+                                        {b.latitude && b.longitude && (
+                                            <p className="flex items-center gap-1">
+                                                <Building2 size={10} /> {b.latitude.toFixed(5)}, {b.longitude.toFixed(5)}
+                                            </p>
+                                        )}
+                                        {b.geofence_radius_meters && <p>Radius: <strong>{b.geofence_radius_meters} m</strong></p>}
+                                        <p>Polygon Map: {b.geofence_polygon ? <strong className="text-green-600">Defined</strong> : 'None'}</p>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+            </div>
 
             {company.supervisors && (
                 <div className="rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
@@ -315,6 +346,57 @@ export function CompanyDetailsPage() {
                     ) : (
                         <div className="p-8 text-center text-sm text-[var(--color-muted)]">
                             No supervisors have been added to this company yet.
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {company.students && (
+                <div className="rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
+                    <div className="border-b border-[var(--color-line)] px-6 py-4">
+                        <h2 className="text-lg font-semibold flex items-center gap-2">
+                            <Users2 size={18} className="text-[var(--color-muted)]" />
+                            Assigned Students <span className="text-sm font-normal text-[var(--color-muted)]">({company.students.length})</span>
+                        </h2>
+                    </div>
+                    {company.students.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-[var(--color-muted)]">
+                                <thead className="bg-slate-50/50 text-xs uppercase text-[var(--color-muted)]">
+                                    <tr>
+                                        <th className="px-6 py-3 font-medium">Student No.</th>
+                                        <th className="px-6 py-3 font-medium">Name</th>
+                                        <th className="px-6 py-3 font-medium">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
+                                    {company.students.map((student) => (
+                                        <tr key={student.id} className="transition-colors hover:bg-slate-50/50">
+                                            <td className="whitespace-nowrap px-6 py-4 font-medium">
+                                                {student.student_number}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {student.last_name}, {student.first_name} {student.middle_name || ''}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {student.is_active ? (
+                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+                                                        Active
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
+                                                        Inactive
+                                                    </span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="p-8 text-center text-sm text-[var(--color-muted)]">
+                            No students are currently assigned to this company.
                         </div>
                     )}
                 </div>

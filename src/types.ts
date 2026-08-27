@@ -43,6 +43,7 @@ export type Company = {
   created_at?: string
   students?: Student[]
   supervisors?: Supervisor[]
+  buildings?: Building[]
 }
 
 export type CompanyRequest = {
@@ -61,6 +62,23 @@ export type CompanyRequest = {
     name: string
     email: string
   } | null
+  buildings?: Building[]
+}
+
+export type Building = {
+  id: number
+  company_id: number
+  name: string
+  code: string
+  description: string | null
+  latitude: number | null
+  longitude: number | null
+  geofence_radius_meters: number | null
+  geofence_enabled: boolean
+  geofence_polygon: GeofencePolygon | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }
 
 export type LoginResponse = {

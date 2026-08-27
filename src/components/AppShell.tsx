@@ -29,6 +29,7 @@ const navItems: NavItem[] = [
   { to: '/companies', label: 'Companies', end: false, icon: MapIcon, roles: ['super_admin'] },
   { to: '/supervisor/interns', label: 'Interns', end: true, icon: UserIcon, roles: ['supervisor'] },
   { to: '/supervisor/attendance', label: 'Attendance', end: true, icon: Calendar1Icon, roles: ['supervisor'] },
+  {to: '/student/live/location' , label: 'Live Locations', end: true, icon: MapIcon, roles: ['coordinator']}
 ]
 
 const pageTitles: Array<{ path: string, title: string, end?: boolean }> = [
@@ -44,6 +45,7 @@ const pageTitles: Array<{ path: string, title: string, end?: boolean }> = [
   { path: '/supervisor/interns', title: 'Interns', end: true },
   { path: '/supervisor/attendance', title: 'Attendance', end: true },
   { path: '/settings', title: 'Account & Department Settings', end: true },
+  {path: '/student/live/location', title: 'Students Live Location', end: true}
 ]
 
 function resolvePageTitle(pathname: string): string {

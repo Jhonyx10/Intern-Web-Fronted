@@ -21,6 +21,7 @@ import { CoordinatorSectionPage } from './pages/coordinator/CoordinatorSectionPa
 import { SupervisorInternsPage } from './pages/supervisor/SupervisorInternsPage'
 import { SupervisorAttendancePage } from './pages/supervisor/SupervisorAttendancePage'
 import { SettingsPage } from './pages/SettingsPage'
+import StudentLiveTracker from './pages/coordinator/StudentLiveTracker'
 
 export default function App() {
   return (
@@ -53,6 +54,7 @@ export default function App() {
                 <Route path="/dean/school-year-section/:id" element={<SectionDetailsPage />} />
                 <Route path="/coordinator/my-section" element={<CoordinatorSectionPage />} />
                 <Route path="/supervisor/interns" element={<SupervisorInternsPage />} />
+                <Route path="student/live/location" element={<StudentLiveTracker />} />
                 <Route path="/supervisor/attendance" element={<SupervisorAttendancePage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Route>

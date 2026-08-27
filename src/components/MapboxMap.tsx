@@ -19,6 +19,7 @@ export type MapMarker = {
   latitude: number
   title?: string
   color?: 'accent' | 'amber' | 'campus'
+  hexColor?: string
   popupHtml?: string
 }
 
@@ -26,6 +27,7 @@ export type MapPolygonFeature = {
   id: number | string
   name?: string
   polygon: GeofencePolygon
+  color?: string
 }
 
 export type MapRouteDestination = {
@@ -45,6 +47,8 @@ export type MapboxMapHandle = {
   startDrawPolygon: () => void
   setSimpleSelect: () => void
   getDrawPolygon: () => GeofencePolygon | null
+  /** Restore a saved polygon onto the draw canvas so it is visually editable. */
+  loadPolygon: (polygon: GeofencePolygon) => void
 }
 
 type MapboxMapProps = {
@@ -55,6 +59,7 @@ type MapboxMapProps = {
   markers?: MapMarker[]
   polygons?: MapPolygonFeature[]
   fitMarkers?: boolean
+  fitRouteBounds?: boolean
   drawEnabled?: boolean
   showCampusMarker?: boolean
   routeTo?: MapRouteDestination | null
@@ -101,6 +106,7 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
     markers = [],
     polygons = [],
     fitMarkers = true,
+    fitRouteBounds = true,
     drawEnabled = false,
     showCampusMarker = true,
     routeTo = null,
@@ -178,6 +184,21 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
     getDrawPolygon() {
       return drawRef.current ? extractPolygon(drawRef.current) : null
     },
+    loadPolygon(polygon) {
+      const draw = drawRef.current
+      if (!draw) return
+      draw.deleteAll()
+      const added = draw.add({
+        type: 'Feature',
+        properties: {},
+        geometry: polygon,
+      })
+      if (added.length > 0) {
+        draw.changeMode('simple_select', { featureIds: added })
+      }
+      // Notify listeners so state stays in sync
+      onDrawChangeRef.current?.(extractPolygon(draw))
+    },
   }))
 
   useEffect(() => {
@@ -210,7 +231,7 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
         type: 'fill',
         source: 'map-polygons',
         paint: {
-          'fill-color': '#0b6e4f',
+          'fill-color': ['coalesce', ['get', 'color'], '#0b6e4f'],
           'fill-opacity': 0.22,
         },
       })
@@ -220,7 +241,7 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
         type: 'line',
         source: 'map-polygons',
         paint: {
-          'line-color': '#0b6e4f',
+          'line-color': ['coalesce', ['get', 'color'], '#0b6e4f'],
           'line-width': 2,
         },
       })
@@ -293,7 +314,7 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
         type: 'FeatureCollection',
         features: polygons.map((feature) => ({
           type: 'Feature' as const,
-          properties: { id: feature.id, name: feature.name ?? null },
+          properties: { id: feature.id, name: feature.name ?? null, color: feature.color ?? null },
           geometry: feature.polygon,
         })),
       })
@@ -368,13 +389,15 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
             durationSeconds: route.durationSeconds,
           })
 
-          const bounds = new mapboxgl.LngLatBounds()
-          bounds.extend(OCC_CENTER)
-          bounds.extend([routeTo.longitude, routeTo.latitude])
-          for (const coordinate of route.coordinates) {
-            bounds.extend(coordinate)
+          if (fitRouteBounds) {
+            const bounds = new mapboxgl.LngLatBounds()
+            bounds.extend(OCC_CENTER)
+            bounds.extend([routeTo.longitude, routeTo.latitude])
+            for (const coordinate of route.coordinates) {
+              bounds.extend(coordinate)
+            }
+            map.fitBounds(bounds, { padding: 72, maxZoom: 15 })
           }
-          map.fitBounds(bounds, { padding: 72, maxZoom: 15 })
         } catch (error) {
           if (cancelled || (error instanceof DOMException && error.name === 'AbortError')) {
             return
@@ -406,22 +429,25 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
     const activeMarkers: mapboxgl.Marker[] = []
     const allMarkers: MapMarker[] = showCampusMarker
       ? [
-          {
-            id: 'occ-campus',
-            longitude: OCC_CENTER[0],
-            latitude: OCC_CENTER[1],
-            title: OCC_NAME,
-            color: 'campus',
-            popupHtml: `<strong>${OCC_NAME}</strong><br/>Campus center`,
-          },
-          ...markers,
-        ]
+        {
+          id: 'occ-campus',
+          longitude: OCC_CENTER[0],
+          latitude: OCC_CENTER[1],
+          title: OCC_NAME,
+          color: 'campus',
+          popupHtml: `<strong>${OCC_NAME}</strong><br/>Campus center`,
+        },
+        ...markers,
+      ]
       : markers
 
     for (const marker of allMarkers) {
       const el = document.createElement('button')
       el.type = 'button'
       el.className = markerClassName(marker.color)
+      if (marker.hexColor) {
+        el.style.backgroundColor = marker.hexColor
+      }
       el.title = marker.title ?? ''
       el.addEventListener('click', () => {
         if (marker.id !== 'occ-campus') {
