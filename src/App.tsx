@@ -22,6 +22,7 @@ import { SupervisorInternsPage } from './pages/supervisor/SupervisorInternsPage'
 import { SupervisorAttendancePage } from './pages/supervisor/SupervisorAttendancePage'
 import { SettingsPage } from './pages/SettingsPage'
 import StudentLiveTracker from './pages/coordinator/StudentLiveTracker'
+import CompanyInfo from './pages/supervisor/CompanyInfo'
 
 export default function App() {
   return (
@@ -56,6 +57,7 @@ export default function App() {
                 <Route path="/supervisor/interns" element={<SupervisorInternsPage />} />
                 <Route path="student/live/location" element={<StudentLiveTracker />} />
                 <Route path="/supervisor/attendance" element={<SupervisorAttendancePage />} />
+                <Route path="/supervisor/company-info" element={<CompanyInfo />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Route>
             </Route>

@@ -12,6 +12,7 @@ export type SupervisorIntern = {
     section: { id: number; name: string } | null
     required_hours: number | null
     total_hours: number
+    building_id: number | null
 }
 
 export type SupervisorAttendanceLog = {
@@ -54,6 +55,22 @@ export type SupervisorProfile = {
         name: string
         address: string
     } | null
+}
+
+export type BuildingWithInterns = {
+    id: number
+    name: string
+    interns: SupervisorIntern[]
+}
+
+export type BuildingAssigment = {
+    student_id: number
+    building_id: number
+    date_start: string
+    date_end: string | null
+    assigned_by: number
+    created_at: string
+    updated_at: string
 }
 
 export function useSupervisorProfile() {
@@ -142,4 +159,36 @@ export function useDeleteSupervisorSchedule() {
         },
     })
 }
+
+export function useAssignInternsToBuilding() {
+    const { token } = useAuth()
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            buildingId,
+            studentIds,
+            dateStart,
+            dateEnd,
+        }: {
+            buildingId: number
+            studentIds: number[]
+            dateStart: string
+            dateEnd: string | null
+        }) =>
+            apiRequest(`/buildings/${buildingId}/assign-interns`, {
+                method: 'POST',
+                token: token!,
+                body: {
+                    student_ids: studentIds,
+                    date_start: dateStart,
+                    date_end: dateEnd,
+                },
+            }),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: ['supervisor', 'interns'] })
+        },
+    })
+}
+
 

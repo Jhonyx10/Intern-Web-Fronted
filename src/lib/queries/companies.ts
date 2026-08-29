@@ -35,6 +35,17 @@ export async function createCompany(token: string, body: CreateCompanyInput): Pr
   return response.data
 }
 
+export function useMyCompany() {
+  const { user } = useAuth()
+  const { data: companies, ...rest } = useCompanies()
+
+  const myCompany = companies?.find((company) =>
+    company.supervisors?.some((s) => s.user_id === user?.id)
+  )
+
+  return { data: myCompany, ...rest }
+}
+
 export function useCompanies() {
   const { token } = useAuth()
 

@@ -4,7 +4,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/context/ThemeContext'
 import OCCLOGO from '@/assets/OCC logo.webp'
-import { Calendar1Icon, UserIcon, Settings } from 'lucide-react'
+import { Calendar1Icon, UserIcon, Settings, BuildingIcon } from 'lucide-react'
 
 type Role = 'super_admin' | 'supervisor' | 'dean' | 'program_head' | 'coordinator' | 'student'
 
@@ -27,6 +27,7 @@ const navItems: NavItem[] = [
   { to: '/school-year-section', label: 'Year & Section', end: false, icon: Calendar1Icon, roles: ['dean', 'program_head'] },
   { to: '/students', label: 'Students', end: false, icon: UserIcon, roles: ['dean', 'program_head'] },
   { to: '/companies', label: 'Companies', end: false, icon: MapIcon, roles: ['super_admin'] },
+  { to: '/supervisor/company-info', label: 'Company Info', end: true, icon: BuildingIcon, roles: ['supervisor'] },
   { to: '/supervisor/interns', label: 'Interns', end: true, icon: UserIcon, roles: ['supervisor'] },
   { to: '/supervisor/attendance', label: 'Attendance', end: true, icon: Calendar1Icon, roles: ['supervisor'] },
   {to: '/student/live/location' , label: 'Live Locations', end: true, icon: MapIcon, roles: ['coordinator']}
@@ -42,6 +43,7 @@ const pageTitles: Array<{ path: string, title: string, end?: boolean }> = [
   { path: '/school-year-section', title: 'Year & Section' },
   { path: '/coordinators', title: 'Coordinators' },
   { path: '/students', title: 'Students' },
+  { path: '/supervisor/company-info', title: 'Company Info', end: true },
   { path: '/supervisor/interns', title: 'Interns', end: true },
   { path: '/supervisor/attendance', title: 'Attendance', end: true },
   { path: '/settings', title: 'Account & Department Settings', end: true },
