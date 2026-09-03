@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { AnimatePresence, motion, type Variants } from 'framer-motion'
 import { CheckCircle2, XCircle, Info, X } from 'lucide-react'
 
-export type ToastType = 'success' | 'error' | 'info'
+export type ToastType = "success" | "error" | "info" | "warning";
 
 export type ToastItem = {
   id: string

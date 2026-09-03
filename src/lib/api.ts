@@ -1,5 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000/api'
 
+const TOKEN_KEY = 'occ_spa_token'
+
 type RequestOptions = {
   method?: string
   body?: unknown
@@ -23,12 +25,15 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     Accept: 'application/json',
   }
 
+  // Retrieve explicitly provided token or fall back to localStorage
+  const authToken = options.token ?? localStorage.getItem(TOKEN_KEY)
+
   if (options.body !== undefined && !(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json'
   }
 
-  if (options.token) {
-    headers.Authorization = `Bearer ${options.token}`
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`
   }
 
   const isFormData = options.body instanceof FormData
@@ -47,6 +52,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const payload = await response.json().catch(() => ({}))
 
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem(TOKEN_KEY)
+    }
+
     const message =
       payload.message ??
       Object.values(payload.errors ?? {}).flat()[0] ??

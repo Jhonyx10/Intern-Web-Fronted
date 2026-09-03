@@ -4,7 +4,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/context/ThemeContext'
 import OCCLOGO from '@/assets/OCC logo.webp'
-import { Calendar1Icon, UserIcon, Settings, BuildingIcon } from 'lucide-react'
+import { Calendar1Icon, UserIcon, Settings, BuildingIcon, FolderIcon } from 'lucide-react'
 
 type Role = 'super_admin' | 'supervisor' | 'dean' | 'program_head' | 'coordinator' | 'student'
 
@@ -18,20 +18,99 @@ type NavItem = {
 }
 
 const navItems: NavItem[] = [
-  { to: '/', label: 'Dashboard', end: true, icon: DashboardIcon },
-  { to: '/administrator', label: 'Administrators', end: false, icon: AdministratorIcon, roles: ['super_admin'] },
-  { to: '/courses', label: 'Departments', end: false, icon: CoursesIcon, roles: ['super_admin'] },
-  { to: '/companies/map', label: 'Companies', end: false, icon: MapIcon, roles: ['coordinator'] },
-  { to: '/coordinator/my-section', label: 'My Section', end: true, icon: UserIcon, roles: ['coordinator'] },
-  { to: '/coordinators', label: 'Coordinators', end: false, icon: AdministratorIcon, roles: ['dean', 'program_head'] },
-  { to: '/school-year-section', label: 'Year & Section', end: false, icon: Calendar1Icon, roles: ['dean', 'program_head'] },
-  { to: '/students', label: 'Students', end: false, icon: UserIcon, roles: ['dean', 'program_head'] },
-  { to: '/companies', label: 'Companies', end: false, icon: MapIcon, roles: ['super_admin'] },
-  { to: '/supervisor/company-info', label: 'Company Info', end: true, icon: BuildingIcon, roles: ['supervisor'] },
-  { to: '/supervisor/interns', label: 'Interns', end: true, icon: UserIcon, roles: ['supervisor'] },
-  { to: '/supervisor/attendance', label: 'Attendance', end: true, icon: Calendar1Icon, roles: ['supervisor'] },
-  {to: '/student/live/location' , label: 'Live Locations', end: true, icon: MapIcon, roles: ['coordinator']}
-]
+  { to: "/", label: "Dashboard", end: true, icon: DashboardIcon },
+  {
+    to: "/administrator",
+    label: "Administrators",
+    end: false,
+    icon: AdministratorIcon,
+    roles: ["super_admin"],
+  },
+  {
+    to: "/courses",
+    label: "Departments",
+    end: false,
+    icon: CoursesIcon,
+    roles: ["super_admin"],
+  },
+  {
+    to: "/companies/map",
+    label: "Companies",
+    end: false,
+    icon: MapIcon,
+    roles: ["coordinator"],
+  },
+  {
+    to: "/coordinator/my-section",
+    label: "My Section",
+    end: true,
+    icon: UserIcon,
+    roles: ["coordinator"],
+  },
+  {
+    to: "/coordinators",
+    label: "Coordinators",
+    end: false,
+    icon: AdministratorIcon,
+    roles: ["dean", "program_head"],
+  },
+  {
+    to: "/evaluation",
+    label: "Evaluation",
+    end: false,
+    icon: FolderIcon,
+    roles: ["dean"],
+  },
+  {
+    to: "/school-year-section",
+    label: "Year & Section",
+    end: false,
+    icon: Calendar1Icon,
+    roles: ["dean", "program_head"],
+  },
+  {
+    to: "/students",
+    label: "Students",
+    end: false,
+    icon: UserIcon,
+    roles: ["dean", "program_head"],
+  },
+  {
+    to: "/companies",
+    label: "Companies",
+    end: false,
+    icon: MapIcon,
+    roles: ["super_admin"],
+  },
+  {
+    to: "/supervisor/company-info",
+    label: "Company Info",
+    end: true,
+    icon: BuildingIcon,
+    roles: ["supervisor"],
+  },
+  {
+    to: "/supervisor/interns",
+    label: "Interns",
+    end: true,
+    icon: UserIcon,
+    roles: ["supervisor"],
+  },
+  {
+    to: "/supervisor/attendance",
+    label: "Attendance",
+    end: true,
+    icon: Calendar1Icon,
+    roles: ["supervisor"],
+  },
+  {
+    to: "/student/live/location",
+    label: "Live Locations",
+    end: true,
+    icon: MapIcon,
+    roles: ["coordinator"],
+  },
+];
 
 const pageTitles: Array<{ path: string, title: string, end?: boolean }> = [
   { path: '/', title: 'Dashboard', end: true },

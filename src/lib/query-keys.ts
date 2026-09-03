@@ -57,4 +57,16 @@ export const queryKeys = {
     bySchoolYear: (syId: string | number) => ['sections', 'school-year', syId] as const,
     detail: (id: string | number) => ['sections', 'detail', id] as const,
   },
+ notifications: {
+    all: ['notifications'] as const,
+    list: () => ['notifications', 'list'] as const,
+    unread: (userId?: number) => ['notifications', 'unread', userId ?? 'all'] as const,
+    unreadCount: () => ['notifications', 'unread-count'] as const,
+  },
+
+  evaluations: {
+    all: ['evaluations'] as const,
+    templates: () => ['evaluations', 'templates'] as const,
+    templateDetail: (id: string | number) => ['evaluations', 'templates', id] as const,
+  },
 }

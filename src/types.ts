@@ -247,3 +247,46 @@ export type Setting = {
   updated_at?: string | null
 }
 
+export type ItemType = 'rating' | 'text' | 'textarea' | 'single_choice' | 'multiple_choice'
+
+export interface EvaluationItemOption {
+  min?: number
+  max?: number
+  choices?: string[]
+  placeholder?: string
+}
+
+export interface EvaluationTemplateItem {
+  id?: number
+  item_type: ItemType
+  label: string
+  is_required: boolean
+  options?: EvaluationItemOption
+  sort_order?: number
+}
+
+export interface EvaluationTemplateFormData {
+  title: string
+  description: string
+  course_ids: number[] // Replaces single section_id
+  is_active: boolean
+  items: EvaluationTemplateItem[]
+}
+
+export interface CourseOption {
+  id: number
+  title: string
+  code: string
+}
+
+export interface EvaluationTemplate {
+  id: number;
+  title: string; // Updated from 'name' to match model attribute
+  description?: string;
+  is_active: boolean;
+  courses?: Course[]; // Many-to-Many attached courses
+  items?: EvaluationTemplateItem[];
+  items_count?: number;
+  created_at: string;
+}
+

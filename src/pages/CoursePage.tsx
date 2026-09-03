@@ -13,6 +13,7 @@ import {
     XCircle,
     BookOpen,
     GraduationCap,
+    EyeIcon,
 } from 'lucide-react'
 import { useCourses, useDeleteCourse } from '@/lib/queries/courses'
 import { useMajors, useCreateMajor, useDeleteMajor, useUpdateMajor } from '@/lib/queries/majors'
@@ -442,84 +443,117 @@ function CourseRow({
     onEdit: (c: Course) => void
     onDelete: (c: Course) => void
 }) {
+     const navigate = useNavigate();
+     
     return (
-        <motion.tr
-            variants={row}
-            className="group border-b border-[var(--color-line)] last:border-0"
-        >
-            {/* Code + Name */}
-            <td className="py-3.5 pl-5 pr-4">
-                <div className="flex items-center gap-3">
-                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--color-accent-soft)] text-xs font-bold text-[var(--color-accent)]">
-                        <BookOpen size={15} />
-                    </div>
-                    <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-[var(--color-ink)]">{course.name}</p>
-                        <p className="font-mono text-xs text-[var(--color-muted)]">{course.code}</p>
-                    </div>
-                </div>
-            </td>
+      <motion.tr
+        variants={row}
+        className="group border-b border-[var(--color-line)] last:border-0"
+      >
+        {/* Code + Name */}
+        <td className="py-3.5 pl-5 pr-4">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--color-accent-soft)] text-xs font-bold text-[var(--color-accent)]">
+              <BookOpen size={15} />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-[var(--color-ink)]">
+                {course.name}
+              </p>
+              <p className="font-mono text-xs text-[var(--color-muted)]">
+                {course.code}
+              </p>
+            </div>
+          </div>
+        </td>
 
-            {/* Dean */}
-            <td className="px-4 py-3.5">
-                <div className="flex items-center gap-1.5 text-sm text-[var(--color-ink)]">
-                    <UserRound size={13} className="shrink-0 text-[var(--color-muted)]" />
-                    <span className="truncate">{course.dean?.name ?? <span className="text-[var(--color-muted)]">—</span>}</span>
-                </div>
-            </td>
+        {/* Dean */}
+        <td className="px-4 py-3.5">
+          <div className="flex items-center gap-1.5 text-sm text-[var(--color-ink)]">
+            <UserRound
+              size={13}
+              className="shrink-0 text-[var(--color-muted)]"
+            />
+            <span className="truncate">
+              {course.dean?.name ?? (
+                <span className="text-[var(--color-muted)]">—</span>
+              )}
+            </span>
+          </div>
+        </td>
 
-            {/* Program Head */}
-            <td className="px-4 py-3.5">
-                <div className="flex items-center gap-1.5 text-sm text-[var(--color-ink)]">
-                    <UserRound size={13} className="shrink-0 text-[var(--color-muted)]" />
-                    <span className="truncate">{course.program_head?.name ?? <span className="text-[var(--color-muted)]">—</span>}</span>
-                </div>
-            </td>
+        {/* Program Head */}
+        <td className="px-4 py-3.5">
+          <div className="flex items-center gap-1.5 text-sm text-[var(--color-ink)]">
+            <UserRound
+              size={13}
+              className="shrink-0 text-[var(--color-muted)]"
+            />
+            <span className="truncate">
+              {course.program_head?.name ?? (
+                <span className="text-[var(--color-muted)]">—</span>
+              )}
+            </span>
+          </div>
+        </td>
 
-            {/* Required Hours */}
-            <td className="px-4 py-3.5">
-                <div className="flex items-center gap-1.5 text-sm text-[var(--color-ink)]">
-                    <Clock size={13} className="shrink-0 text-[var(--color-muted)]" />
-                    <span>{course.required_hours} hrs</span>
-                </div>
-            </td>
+        {/* Required Hours */}
+        <td className="px-4 py-3.5">
+          <div className="flex items-center gap-1.5 text-sm text-[var(--color-ink)]">
+            <Clock size={13} className="shrink-0 text-[var(--color-muted)]" />
+            <span>{course.required_hours} hrs</span>
+          </div>
+        </td>
 
-            {/* Status */}
-            <td className="px-4 py-3.5">
-                <span
-                    className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold ${course.is_active
-                        ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
-                        : 'bg-red-50 text-red-600'
-                        }`}
-                >
-                    {course.is_active ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
-                    {course.is_active ? 'Active' : 'Inactive'}
-                </span>
-            </td>
+        {/* Status */}
+        <td className="px-4 py-3.5">
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold ${
+              course.is_active
+                ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
+                : "bg-red-50 text-red-600"
+            }`}
+          >
+            {course.is_active ? (
+              <CheckCircle2 size={10} />
+            ) : (
+              <XCircle size={10} />
+            )}
+            {course.is_active ? "Active" : "Inactive"}
+          </span>
+        </td>
 
-            {/* Actions */}
-            <td className="py-3.5 pl-4 pr-5 text-right">
-                <div className="flex items-center justify-end gap-2">
-                    <button
-                        type="button"
-                        onClick={() => onEdit(course)}
-                        aria-label={`Edit ${course.name}`}
-                        className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-                    >
-                        <Edit2 size={11} /> Edit
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => onDelete(course)}
-                        aria-label={`Delete ${course.name}`}
-                        className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-red-300 hover:text-red-600"
-                    >
-                        <Trash2 size={11} /> Delete
-                    </button>
-                </div>
-            </td>
-        </motion.tr>
-    )
+        {/* Actions */}
+        <td className="py-3.5 pl-4 pr-5 text-right">
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => navigate(`/course/details/${course.id}`)}
+              aria-label={`Edit ${course.name}`}
+              className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+            >
+              <EyeIcon size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onEdit(course)}
+              aria-label={`Edit ${course.name}`}
+              className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+            >
+              <Edit2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(course)}
+              aria-label={`Delete ${course.name}`}
+              className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-red-300 hover:text-red-600"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </td>
+      </motion.tr>
+    );
 }
 
 // ─── MajorsTable ──────────────────────────────────────────────────────────────
