@@ -46,6 +46,12 @@ export interface EvaluationTemplateCreator {
   email?: string;
 }
 
+export interface BulkAssignPayload {
+  template_id: number;
+  course_id: number;
+  coordinator_id?: number;
+}
+
 export interface EvaluationTemplateDetail {
   id: number;
   created_by_user_id: number;
@@ -75,6 +81,12 @@ export const useEvaluationTemplate = (id?: number | string, token?: string | nul
   });
 };
 
+export const useEvaluationTemplates = (token?: string | null) => {
+  return useQuery({
+    queryKey: queryKeys.evaluations.templates(),
+    queryFn: () => apiRequest<EvaluationTemplateDetail[]>('/evaluation-templates', { token }), // Adjust endpoint path if yours differs
+  });
+};
 // Fetch unread notifications for a user
 export const useUnreadNotifications = (userId?: number, token?: string | null) => {
   return useQuery({
@@ -117,3 +129,21 @@ export const useCreateEvaluationTemplate = (token?: string | null) => {
     },
   });
 };
+
+export const useBulkAssignEvaluations = (token?: string | null) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: BulkAssignPayload) =>
+      apiRequest<{ message: string; assignedCount: number }>('/evaluations/bulk-assign', {
+        method: 'POST',
+        body: payload,
+        token,
+      }),
+    onSuccess: () => {
+      // Invalidate relevant queries if needed (e.g., evaluations or dashboard counts)
+      queryClient.invalidateQueries({ queryKey: queryKeys.evaluations.all });
+    },
+  });
+};
+

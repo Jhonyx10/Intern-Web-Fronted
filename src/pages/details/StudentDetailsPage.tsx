@@ -17,9 +17,86 @@ import {
   Briefcase,
   ExternalLink,
   FileCheck,
+  ClipboardCheck,
+  Star,
 } from "lucide-react";
 import { useStudent } from "@/lib/queries/students";
-import type { CompanySchedule, TimeLog, StudentDocument } from "@/types";
+import type {
+  CompanySchedule,
+  TimeLog,
+  StudentDocument,
+  ItemType,
+} from "@/types";
+
+// --- Shapes matching the actual /students/{id} payload ---
+// Note: `options` comes back as a raw JSON string, not a parsed object —
+// same field name as EvaluationItemOption in your types.ts, different
+// wire format. Parse it with parseItemOptions() before use.
+interface EvaluationTemplateItemResponse {
+  id: number;
+  evaluation_template_id: number;
+  sort_order: number;
+  item_type: ItemType;
+  label: string;
+  options: string | null;
+  is_required: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface EvaluationTemplateResponse {
+  id: number;
+  created_by_user_id: number;
+  title: string;
+  description: string | null;
+  is_active: boolean | number;
+  created_at: string;
+  updated_at: string;
+  items: EvaluationTemplateItemResponse[];
+}
+
+type EvaluationResponseValue = string | number | string[] | null;
+
+interface OjtEvaluation {
+  id: number;
+  course_id: number;
+  evaluation_template_id: number;
+  student_id: number;
+  evaluator_id: number | null;
+  responses: Record<string, EvaluationResponseValue> | [];
+  computed_score: number | string | null;
+  status: "pending" | "submitted";
+  submitted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  template: EvaluationTemplateResponse;
+}
+
+function parseItemOptions(
+  raw: string | null
+): {
+  min?: number;
+  max?: number;
+  choices?: string[];
+  placeholder?: string;
+} | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function getResponseFor(
+  evaluation: OjtEvaluation,
+  itemId: number
+): EvaluationResponseValue {
+  const responses = evaluation.responses;
+  if (Array.isArray(responses)) return null; // empty array = no responses yet
+  return responses[String(itemId)] ?? null;
+}
+
 function formatTime12Hour(timeStr?: string | null): string {
   if (!timeStr) return "—";
   if (/am|pm/i.test(timeStr)) return timeStr;
@@ -73,7 +150,7 @@ export function StudentDetailsPage() {
   const navigate = useNavigate();
   const { data: student, isLoading, isError } = useStudent(id);
   const [activeTab, setActiveTab] = useState<
-    "overview" | "company" | "timelogs" | "reports"
+    "overview" | "company" | "timelogs" | "reports" | "evaluations"
   >("overview");
 
   const fullName = useMemo(() => {
@@ -103,6 +180,19 @@ export function StudentDetailsPage() {
   const companySchedules: CompanySchedule[] = assignedCompany?.schedules ?? [];
   const timeLogs: TimeLog[] = student?.time_logs ?? [];
   const documents: StudentDocument[] = student?.documents ?? [];
+  const evaluations: OjtEvaluation[] = (student as any)?.ojt_evaluations ?? [];
+  const [viewingEvaluation, setViewingEvaluation] =
+    useState<OjtEvaluation | null>(null);
+
+  const submittedEvaluations = evaluations.filter(
+    (e) => e.status === "submitted" && e.computed_score != null
+  );
+  const avgScore = submittedEvaluations.length
+    ? submittedEvaluations.reduce(
+        (acc, e) => acc + Number(e.computed_score ?? 0),
+        0
+      ) / submittedEvaluations.length
+    : null;
 
   if (isLoading) {
     return (
@@ -221,6 +311,18 @@ export function StudentDetailsPage() {
                 </p>
               </div>
             )}
+
+            {avgScore !== null && (
+              <div className="rounded-xl border border-[var(--color-line)] bg-amber-50/60 px-3.5 py-2">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-amber-600">
+                  Avg. Evaluation Score
+                </p>
+                <p className="flex items-center gap-1 text-xs font-bold text-amber-900">
+                  <Star size={11} className="fill-amber-500 text-amber-500" />
+                  {avgScore.toFixed(1)}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -277,6 +379,16 @@ export function StudentDetailsPage() {
         >
           <FileText size={16} /> Weekly Reports &amp; Documents (
           {documents.length})
+        </button>
+        <button
+          onClick={() => setActiveTab("evaluations")}
+          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition ${
+            activeTab === "evaluations"
+              ? "border-[var(--color-accent)] text-[var(--color-accent)]"
+              : "border-transparent text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+          }`}
+        >
+          <ClipboardCheck size={16} /> Evaluations ({evaluations.length})
         </button>
       </div>
 
@@ -745,6 +857,262 @@ export function StudentDetailsPage() {
                 </p>
               </div>
             )}
+          </motion.div>
+        )}
+
+        {/* TAB 4: Evaluations */}
+        {evaluations.length > 0 ? (
+          <div className="space-y-3">
+            {evaluations.map((evaluation) => {
+              const isSubmitted = evaluation.status === "submitted";
+              return (
+                <div
+                  key={evaluation.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-[var(--color-line)] bg-white p-4 shadow-[var(--shadow-soft)]"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                      <ClipboardCheck size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-[var(--color-ink)] truncate">
+                        {evaluation.template.title}
+                      </p>
+                      <p className="text-[11px] text-[var(--color-muted)]">
+                        {isSubmitted
+                          ? `Submitted ${formatDateReadable(
+                              evaluation.submitted_at
+                            )}`
+                          : `Sent ${formatDateReadable(
+                              evaluation.created_at
+                            )} · awaiting response`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    {isSubmitted && evaluation.computed_score != null && (
+                      <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-700">
+                        <Star
+                          size={11}
+                          className="fill-amber-500 text-amber-500"
+                        />
+                        {Number(evaluation.computed_score).toFixed(1)}
+                      </span>
+                    )}
+                    <span
+                      className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                        isSubmitted
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-amber-200 bg-amber-50 text-amber-700"
+                      }`}
+                    >
+                      {evaluation.status}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setViewingEvaluation(evaluation)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-line)] bg-white px-3 py-1.5 text-[11px] font-semibold text-sky-600 shadow-sm hover:bg-sky-50 transition"
+                    >
+                      <ExternalLink size={12} /> View
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-[var(--color-line)] bg-white p-12 text-center shadow-[var(--shadow-soft)]">
+            <ClipboardCheck className="mx-auto text-slate-300 mb-2" size={32} />
+            <p className="text-sm font-medium text-[var(--color-ink)]">
+              No Evaluations Yet
+            </p>
+            <p className="text-xs text-[var(--color-muted)] mt-1">
+              Evaluations sent by the coordinator or company supervisor will
+              appear here once submitted.
+            </p>
+          </div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {viewingEvaluation && (
+          <motion.div
+            key="evaluation-modal-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
+            onClick={() => setViewingEvaluation(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: 8 }}
+              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-md border border-[var(--color-line)] bg-[var(--color-paper,#FAF9F5)]"
+            >
+              {/* Cover sheet — stays fixed, only the item list scrolls */}
+              <div className="shrink-0 border-t-2 border-b border-[var(--color-ink)] bg-[var(--color-paper,#FAF9F5)] px-7 py-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-[var(--color-muted)]">
+                      On-the-job training evaluation
+                    </p>
+                    <h2
+                      className="mt-1 truncate text-xl font-semibold text-[var(--color-ink)]"
+                      style={{ fontFamily: '"Source Serif 4", Georgia, serif' }}
+                    >
+                      {viewingEvaluation.template.title}
+                    </h2>
+                    {viewingEvaluation.template.description && (
+                      <p className="mt-0.5 text-xs leading-relaxed text-[var(--color-muted)] line-clamp-2">
+                        {viewingEvaluation.template.description}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setViewingEvaluation(null)}
+                    aria-label="Close"
+                    className="shrink-0 p-1.5 text-[var(--color-muted)] transition hover:text-[var(--color-ink)]"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <path
+                        d="M3.5 3.5l9 9M12.5 3.5l-9 9"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Meta row: status, score, date */}
+                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-[var(--color-line)] pt-3 text-xs text-[var(--color-muted)]">
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        viewingEvaluation.status === "submitted"
+                          ? "bg-emerald-600"
+                          : "bg-amber-500"
+                      }`}
+                    />
+                    <span className="font-medium text-[var(--color-ink)]">
+                      {viewingEvaluation.status === "submitted"
+                        ? "Submitted"
+                        : "Pending"}
+                    </span>
+                  </span>
+
+                  {viewingEvaluation.status === "submitted" &&
+                    viewingEvaluation.computed_score != null && (
+                      <span>
+                        Score{" "}
+                        <span className="font-medium text-[var(--color-ink)]">
+                          {Number(viewingEvaluation.computed_score).toFixed(1)}
+                        </span>
+                      </span>
+                    )}
+
+                  <span>
+                    {viewingEvaluation.status === "submitted"
+                      ? formatDateReadable(viewingEvaluation.submitted_at)
+                      : `Sent ${formatDateReadable(
+                          viewingEvaluation.created_at
+                        )}`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Item list — the scrollable region */}
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {[...viewingEvaluation.template.items]
+                  .sort((a, b) => a.sort_order - b.sort_order)
+                  .map((item, index) => {
+                    const response = getResponseFor(viewingEvaluation, item.id);
+                    const options = parseItemOptions(item.options);
+                    const hasResponse = response != null;
+                    const ratingMax = options?.max ?? 5;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`flex gap-4 px-7 py-5 ${
+                          index !== 0
+                            ? "border-t border-[var(--color-line)]"
+                            : ""
+                        }`}
+                      >
+                        <span
+                          className="mt-0.5 shrink-0 text-xs text-[var(--color-accent)]"
+                          style={{
+                            fontFamily: '"Source Serif 4", Georgia, serif',
+                          }}
+                        >
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-[var(--color-ink)]">
+                            {item.label}
+                          </p>
+
+                          <div className="mt-2.5">
+                            {!hasResponse ? (
+                              <p className="text-xs text-[var(--color-muted)]">
+                                No response yet
+                              </p>
+                            ) : item.item_type === "rating" ? (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex items-center gap-1.5">
+                                  {Array.from({ length: ratingMax }).map(
+                                    (_, i) => {
+                                      const boxValue = i + 1;
+                                      const isFilled =
+                                        boxValue <= Number(response);
+                                      return (
+                                        <span
+                                          key={i}
+                                          className={`flex h-7 w-7 items-center justify-center border text-xs font-medium ${
+                                            isFilled
+                                              ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                                              : "border-[var(--color-line)] text-[var(--color-muted)]"
+                                          }`}
+                                        >
+                                          {boxValue}
+                                        </span>
+                                      );
+                                    }
+                                  )}
+                                </div>
+                                <span className="text-xs text-[var(--color-muted)]">
+                                  {response} / {ratingMax}
+                                </span>
+                              </div>
+                            ) : Array.isArray(response) ? (
+                              <div className="flex flex-wrap gap-1.5">
+                                {response.map((val, i) => (
+                                  <span
+                                    key={i}
+                                    className="border border-[var(--color-line)] px-2 py-0.5 text-[11px] text-[var(--color-ink)]"
+                                  >
+                                    {val}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-xs leading-relaxed text-[var(--color-ink)]">
+                                {response}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

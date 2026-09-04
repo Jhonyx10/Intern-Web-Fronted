@@ -28,6 +28,7 @@ import CourseDetailsPage from "./pages/details/CourseDetails";
 import EvaluationPage from "./pages/dean/Evaluation";
 import CreateEvaluationTemplatePage from "./pages/forms/CreateEvaluationTemplatePage";
 import EvaluationTemplateDetails from "./pages/details/EvaluationTemplateDetails";
+import EvaluationInternPage from "./pages/forms/EvaluationInternPage";
 
 function AppContent() {
   const { user } = useAuth();
@@ -59,6 +60,10 @@ function AppContent() {
               <Route
                 path="/evaluation/details/:id"
                 element={<EvaluationTemplateDetails />}
+              />
+              <Route
+                path="/supervisor/interns/:internId/evaluations/:evaluationId"
+                element={<EvaluationInternPage />}
               />
               <Route
                 path="/evaluation/create"

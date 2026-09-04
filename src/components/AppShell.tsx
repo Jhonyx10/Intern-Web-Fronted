@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, matchPath } from "react-router-dom";
 import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/context/ThemeContext'
 import OCCLOGO from '@/assets/OCC logo.webp'
@@ -126,24 +126,22 @@ const pageTitles: Array<{ path: string, title: string, end?: boolean }> = [
   { path: '/supervisor/interns', title: 'Interns', end: true },
   { path: '/supervisor/attendance', title: 'Attendance', end: true },
   { path: '/settings', title: 'Account & Department Settings', end: true },
-  {path: '/student/live/location', title: 'Students Live Location', end: true}
+  {path: '/student/live/location', title: 'Students Live Location', end: true},
+  {path: '/supervisor/interns/:internId/evaluations/:evaluationId', title: 'Evaluation', end: true}
 ]
 
 function resolvePageTitle(pathname: string): string {
   for (const page of pageTitles) {
-    if (page.end) {
-      if (pathname === page.path) {
-        return page.title
-      }
-      continue
-    }
+    const matched = page.end
+      ? matchPath({ path: page.path, end: true }, pathname)
+      : matchPath({ path: page.path, end: false }, pathname);
 
-    if (pathname === page.path || pathname.startsWith(`${page.path}/`)) {
-      return page.title
+    if (matched) {
+      return page.title;
     }
   }
 
-  return navItems.find((item) => item.to === pathname)?.label ?? 'Dashboard'
+  return navItems.find((item) => item.to === pathname)?.label ?? "Dashboard";
 }
 
 const SIDEBAR_KEY = 'occ-sidenav-open'

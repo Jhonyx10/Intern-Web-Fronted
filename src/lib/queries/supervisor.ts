@@ -13,6 +13,34 @@ export type SupervisorIntern = {
     required_hours: number | null
     total_hours: number
     building_id: number | null
+    ojt_evaluations: SupervisorInternEvaluation[] 
+}
+
+export interface SupervisorInternEvaluation {
+  id: number;
+  course_id: number;
+  evaluation_template_id: number;
+  student_id: number;
+  evaluator_id: number | null;
+  responses: Record<string, unknown> | [];
+  computed_score: number | null;
+  status: "pending" | "submitted";
+  submitted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  template: {
+    id: number;
+    title: string;
+    description: string | null;
+    items: Array<{
+      id: number;
+      sort_order: number;
+      item_type: "rating" | "text" | "textarea";
+      label: string;
+      options: string | null;
+      is_required: boolean;
+    }>;
+  };
 }
 
 export type SupervisorAttendanceLog = {
@@ -72,6 +100,12 @@ export type BuildingAssigment = {
     created_at: string
     updated_at: string
 }
+
+export type SubmitEvaluationInput = {
+    evaluationId: number
+    responses: Record<number, string | number>
+}
+
 
 export function useSupervisorProfile() {
     const { token } = useAuth()
@@ -184,6 +218,22 @@ export function useAssignInternsToBuilding() {
                     date_start: dateStart,
                     date_end: dateEnd,
                 },
+            }),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: ['supervisor', 'interns'] })
+        },
+    })
+}
+
+export function useSubmitEvaluation() {
+    const { token } = useAuth()
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ evaluationId, responses }: SubmitEvaluationInput) =>
+            apiRequest(`/evaluations/${evaluationId}/submit`, {
+                method: 'POST',
+                token: token!,
+                body: { responses },
             }),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ['supervisor', 'interns'] })

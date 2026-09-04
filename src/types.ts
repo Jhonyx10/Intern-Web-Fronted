@@ -1,3 +1,28 @@
+export type EvaluationStatus = 'pending' | 'submitted'
+
+export type EvaluationResponseValue = string | number | string[] | null
+
+export type EvaluationResponses = Record<string, EvaluationResponseValue>
+
+export interface Evaluation {
+  id: number
+  course_id: number
+  evaluation_template_id: number
+  student_id: number
+  evaluator_id: number | null
+  responses: EvaluationResponses
+  computed_score: number | null
+  status: EvaluationStatus
+  submitted_at: string | null
+  created_at: string
+  updated_at: string
+  // Eager-loaded relations — present only if the endpoint includes them
+  course?: Course | null
+  evaluation_template?: EvaluationTemplate | null
+  student?: Student | null
+  evaluator?: User | null
+}
+
 export type Role = {
   id: number
   name: string
@@ -44,6 +69,7 @@ export type Company = {
   students?: Student[]
   supervisors?: Supervisor[]
   buildings?: Building[]
+  evaluations: Evaluation[]
 }
 
 export type CompanyRequest = {
@@ -194,6 +220,7 @@ export type Student = {
   ojt_schedule?: OjtSchedule | null
   time_logs?: TimeLog[]
   documents?: StudentDocument[]
+  evaluations: Evaluation[]
 }
 
 export type Supervisor = {
@@ -249,12 +276,10 @@ export type Setting = {
 
 export type ItemType = 'rating' | 'text' | 'textarea' | 'single_choice' | 'multiple_choice'
 
-export interface EvaluationItemOption {
-  min?: number
-  max?: number
-  choices?: string[]
-  placeholder?: string
-}
+export type EvaluationItemOption =
+  | { item_type: 'rating'; min: number; max: number }
+  | { item_type: 'text' | 'textarea'; placeholder?: string }
+  | { item_type: 'single_choice' | 'multiple_choice'; choices: string[] }
 
 export interface EvaluationTemplateItem {
   id?: number
@@ -289,4 +314,6 @@ export interface EvaluationTemplate {
   items_count?: number;
   created_at: string;
 }
+
+
 

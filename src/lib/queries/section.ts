@@ -11,4 +11,8 @@ export const sectionQueries = {
         queryKey: queryKeys.sections.detail(id),
         queryFn: () => apiRequest<Section>(`/sections/${id}`, { token }),
     }),
+    coordinatorSections: (token: string) => ({
+        queryKey: ['sections', 'coordinator', 'list'],
+        queryFn: () => apiRequest<Section[]>('/coordinator/sections', { token }),
+    }),
 }
