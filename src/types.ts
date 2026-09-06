@@ -174,6 +174,14 @@ export type TimeLog = {
   }>
 }
 
+export type ReviewedBy = {
+  id: number
+  role_id: number
+  name: string
+  email: string
+  is_active: boolean
+}
+
 export type StudentDocument = {
   id: number
   student_id: number
@@ -184,7 +192,7 @@ export type StudentDocument = {
   mime_type: string | null
   uploaded_at: string
   notes: string | null
-  review_status: string
+  review_status: 'pending' | 'approved' | 'rejected'
   reviewed_at: string | null
   rejection_reason: string | null
   document_type?: {
@@ -197,6 +205,7 @@ export type StudentDocument = {
     title: string
     description: string | null
   } | null
+  reviewed_by?: ReviewedBy | null
 }
 
 export type OjtSchedule = {

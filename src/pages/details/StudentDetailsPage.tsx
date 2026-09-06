@@ -27,7 +27,9 @@ import type {
   StudentDocument,
   ItemType,
 } from "@/types";
-
+import { DocumentPreviewModal } from "@/components/modal/DocumentPreviewModal";
+import { useUpdateDocumentStatus } from "@/lib/queries/documents";
+import { useAuth } from "@/lib/auth";
 // --- Shapes matching the actual /students/{id} payload ---
 // Note: `options` comes back as a raw JSON string, not a parsed object —
 // same field name as EvaluationItemOption in your types.ts, different
@@ -146,12 +148,28 @@ function formatDateReadable(dateStr?: string | null): string {
 }
 
 export function StudentDetailsPage() {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role?.name === "super_admin";
+  const isDean = user?.role?.name === "dean";
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: student, isLoading, isError } = useStudent(id);
   const [activeTab, setActiveTab] = useState<
     "overview" | "company" | "timelogs" | "reports" | "evaluations"
   >("overview");
+  const updateStatus = useUpdateDocumentStatus();
+  const [previewDoc, setPreviewDoc] = useState<{
+    id: number;
+    title: string;
+    filename?: string;
+    fileSize?: number;
+    mimeType?: string;
+    notes?: string | null;
+    status?: string;
+    rejectionReason?: string | null;
+    reviewedAt?: string | null;
+    reviewedByName?: string | null;
+  } | null>(null);
 
   const fullName = useMemo(() => {
     if (!student) return "";
@@ -189,9 +207,9 @@ export function StudentDetailsPage() {
   );
   const avgScore = submittedEvaluations.length
     ? submittedEvaluations.reduce(
-        (acc, e) => acc + Number(e.computed_score ?? 0),
-        0
-      ) / submittedEvaluations.length
+      (acc, e) => acc + Number(e.computed_score ?? 0),
+      0
+    ) / submittedEvaluations.length
     : null;
 
   if (isLoading) {
@@ -827,16 +845,26 @@ export function StudentDetailsPage() {
                               )}
                             </td>
                             <td className="px-4 py-3 text-right">
-                              <a
-                                href={`${
-                                  import.meta.env.VITE_API_URL
-                                }/storage/${doc.file_path}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPreviewDoc({
+                                    id: doc.id,
+                                    title: doc.document_requirement.title,
+                                    filename: doc.original_filename,
+                                    fileSize: doc.file_size,
+                                    mimeType: doc.mime_type,
+                                    notes: doc.notes,
+                                    status: doc.review_status,
+                                    rejectionReason: doc.rejection_reason,
+                                    reviewedAt: doc.reviewed_at,
+                                    reviewedByName: doc?.reviewed_by?.name,
+                                  })
+                                }
                                 className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-sky-600 shadow-sm hover:bg-sky-50 transition whitespace-nowrap"
                               >
                                 <ExternalLink size={12} /> View
-                              </a>
+                              </button>
                             </td>
                           </tr>
                         );
@@ -861,77 +889,90 @@ export function StudentDetailsPage() {
         )}
 
         {/* TAB 4: Evaluations */}
-        {evaluations.length > 0 ? (
-          <div className="space-y-3">
-            {evaluations.map((evaluation) => {
-              const isSubmitted = evaluation.status === "submitted";
-              return (
-                <div
-                  key={evaluation.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-[var(--color-line)] bg-white p-4 shadow-[var(--shadow-soft)]"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                      <ClipboardCheck size={18} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-[var(--color-ink)] truncate">
-                        {evaluation.template.title}
-                      </p>
-                      <p className="text-[11px] text-[var(--color-muted)]">
-                        {isSubmitted
-                          ? `Submitted ${formatDateReadable(
-                              evaluation.submitted_at
-                            )}`
-                          : `Sent ${formatDateReadable(
-                              evaluation.created_at
-                            )} · awaiting response`}
-                      </p>
-                    </div>
-                  </div>
+        {activeTab === "evaluations" && (
+          <motion.div
+            key="tab-evaluations"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+          >
+            {evaluations.length > 0 ? (
+              <div className="space-y-3">
+                {evaluations.map((evaluation) => {
+                  const isSubmitted = evaluation.status === "submitted";
+                  return (
+                    <div
+                      key={evaluation.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-[var(--color-line)] bg-white p-4 shadow-[var(--shadow-soft)]"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                          <ClipboardCheck size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-[var(--color-ink)] truncate">
+                            {evaluation.template.title}
+                          </p>
+                          <p className="text-[11px] text-[var(--color-muted)]">
+                            {isSubmitted
+                              ? `Submitted ${formatDateReadable(
+                                  evaluation.submitted_at
+                                )}`
+                              : `Sent ${formatDateReadable(
+                                  evaluation.created_at
+                                )} · awaiting response`}
+                          </p>
+                        </div>
+                      </div>
 
-                  <div className="flex items-center gap-2.5 shrink-0">
-                    {isSubmitted && evaluation.computed_score != null && (
-                      <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-700">
-                        <Star
-                          size={11}
-                          className="fill-amber-500 text-amber-500"
-                        />
-                        {Number(evaluation.computed_score).toFixed(1)}
-                      </span>
-                    )}
-                    <span
-                      className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                        isSubmitted
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : "border-amber-200 bg-amber-50 text-amber-700"
-                      }`}
-                    >
-                      {evaluation.status}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setViewingEvaluation(evaluation)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-line)] bg-white px-3 py-1.5 text-[11px] font-semibold text-sky-600 shadow-sm hover:bg-sky-50 transition"
-                    >
-                      <ExternalLink size={12} /> View
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-[var(--color-line)] bg-white p-12 text-center shadow-[var(--shadow-soft)]">
-            <ClipboardCheck className="mx-auto text-slate-300 mb-2" size={32} />
-            <p className="text-sm font-medium text-[var(--color-ink)]">
-              No Evaluations Yet
-            </p>
-            <p className="text-xs text-[var(--color-muted)] mt-1">
-              Evaluations sent by the coordinator or company supervisor will
-              appear here once submitted.
-            </p>
-          </div>
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        {isSubmitted && evaluation.computed_score != null && (
+                          <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-700">
+                            <Star
+                              size={11}
+                              className="fill-amber-500 text-amber-500"
+                            />
+                            {Number(evaluation.computed_score).toFixed(1)}
+                          </span>
+                        )}
+                        <span
+                          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                            isSubmitted
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-amber-200 bg-amber-50 text-amber-700"
+                          }`}
+                        >
+                          {evaluation.status}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setViewingEvaluation(evaluation)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-line)] bg-white px-3 py-1.5 text-[11px] font-semibold text-sky-600 shadow-sm hover:bg-sky-50 transition"
+                        >
+                          <ExternalLink size={12} /> View
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-[var(--color-line)] bg-white p-12 text-center shadow-[var(--shadow-soft)]">
+                <ClipboardCheck
+                  className="mx-auto text-slate-300 mb-2"
+                  size={32}
+                />
+                <p className="text-sm font-medium text-[var(--color-ink)]">
+                  No Evaluations Yet
+                </p>
+                <p className="text-xs text-[var(--color-muted)] mt-1">
+                  Evaluations sent by the coordinator or company supervisor will
+                  appear here once submitted.
+                </p>
+              </div>
+            )}
+          </motion.div>
         )}
       </AnimatePresence>
       <AnimatePresence>
@@ -951,7 +992,7 @@ export function StudentDetailsPage() {
               exit={{ opacity: 0, scale: 0.98, y: 8 }}
               transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
               onClick={(e) => e.stopPropagation()}
-              className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-md border border-[var(--color-line)] bg-[var(--color-paper,#FAF9F5)]"
+              className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-[var(--color-line)] bg-[var(--color-paper,#FAF9F5)]"
             >
               {/* Cover sheet — stays fixed, only the item list scrolls */}
               <div className="shrink-0 border-t-2 border-b border-[var(--color-ink)] bg-[var(--color-paper,#FAF9F5)] px-7 py-5">
@@ -976,7 +1017,7 @@ export function StudentDetailsPage() {
                     type="button"
                     onClick={() => setViewingEvaluation(null)}
                     aria-label="Close"
-                    className="shrink-0 p-1.5 text-[var(--color-muted)] transition hover:text-[var(--color-ink)]"
+                    className="shrink-0 rounded p-1.5 text-[var(--color-muted)] transition hover:bg-slate-100 hover:text-[var(--color-ink)]"
                   >
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                       <path
@@ -1074,7 +1115,7 @@ export function StudentDetailsPage() {
                                       return (
                                         <span
                                           key={i}
-                                          className={`flex h-7 w-7 items-center justify-center border text-xs font-medium ${
+                                          className={`flex h-7 w-7 items-center justify-center rounded border text-xs font-medium ${
                                             isFilled
                                               ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
                                               : "border-[var(--color-line)] text-[var(--color-muted)]"
@@ -1095,14 +1136,14 @@ export function StudentDetailsPage() {
                                 {response.map((val, i) => (
                                   <span
                                     key={i}
-                                    className="border border-[var(--color-line)] px-2 py-0.5 text-[11px] text-[var(--color-ink)]"
+                                    className="rounded border border-[var(--color-line)] px-2 py-0.5 text-[11px] text-[var(--color-ink)]"
                                   >
                                     {val}
                                   </span>
                                 ))}
                               </div>
                             ) : (
-                              <p className="border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-xs leading-relaxed text-[var(--color-ink)]">
+                              <p className="rounded border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-xs leading-relaxed text-[var(--color-ink)]">
                                 {response}
                               </p>
                             )}
@@ -1114,6 +1155,48 @@ export function StudentDetailsPage() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+        {previewDoc && (
+          <DocumentPreviewModal
+            key="document-preview"
+            visible={!!previewDoc}
+            onClose={() => setPreviewDoc(null)}
+            fetchUrl={`${import.meta.env.VITE_API_URL?.replace(
+              /\/$/,
+              ""
+            )}/student/documents/${previewDoc.id}/view`}
+            title={previewDoc.title}
+            filename={previewDoc.filename}
+            fileSize={previewDoc.fileSize}
+            mimeType={previewDoc.mimeType}
+            notes={previewDoc.notes}
+            status={previewDoc.status}
+            rejectionReason={previewDoc.rejectionReason}
+            reviewedAt={previewDoc.reviewedAt}
+            reviewedByName={previewDoc.reviewedByName}
+            isSubmittingReview={updateStatus.isPending}
+            onApprove={async () => {
+              await updateStatus.mutateAsync({
+                id: previewDoc.id,
+                status: "approved",
+              });
+              setPreviewDoc((prev) =>
+                prev ? { ...prev, status: "approved" } : prev
+              );
+            }}
+            onReject={async (reason) => {
+              await updateStatus.mutateAsync({
+                id: previewDoc.id,
+                status: "rejected",
+                rejection_reason: reason,
+              });
+              setPreviewDoc((prev) =>
+                prev
+                  ? { ...prev, status: "rejected", rejectionReason: reason }
+                  : prev
+              );
+            }}
+          />
         )}
       </AnimatePresence>
     </section>

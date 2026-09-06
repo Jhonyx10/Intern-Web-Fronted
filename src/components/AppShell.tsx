@@ -4,7 +4,7 @@ import { NavLink, Outlet, useLocation, matchPath } from "react-router-dom";
 import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/context/ThemeContext'
 import OCCLOGO from '@/assets/OCC logo.webp'
-import { Calendar1Icon, UserIcon, Settings, BuildingIcon, FolderIcon } from 'lucide-react'
+import { Calendar1Icon, UserIcon, Settings, BuildingIcon, FolderIcon, FolderCheckIcon, Building2Icon } from 'lucide-react'
 
 type Role = 'super_admin' | 'supervisor' | 'dean' | 'program_head' | 'coordinator' | 'student'
 
@@ -27,6 +27,13 @@ const navItems: NavItem[] = [
     roles: ["super_admin"],
   },
   {
+    to: "/documents",
+    label: "Documents",
+    end: false,
+    icon: FolderCheckIcon,
+    roles: ["super_admin", "dean", "coordinator"],
+  },
+  {
     to: "/courses",
     label: "Departments",
     end: false,
@@ -37,7 +44,7 @@ const navItems: NavItem[] = [
     to: "/companies/map",
     label: "Companies",
     end: false,
-    icon: MapIcon,
+    icon: Building2Icon,
     roles: ["coordinator"],
   },
   {
@@ -79,7 +86,7 @@ const navItems: NavItem[] = [
     to: "/companies",
     label: "Companies",
     end: false,
-    icon: MapIcon,
+    icon: Building2Icon,
     roles: ["super_admin"],
   },
   {
@@ -112,23 +119,32 @@ const navItems: NavItem[] = [
   },
 ];
 
-const pageTitles: Array<{ path: string, title: string, end?: boolean }> = [
-  { path: '/', title: 'Dashboard', end: true },
-  { path: '/companies/map/add', title: 'Add Companies' },
-  { path: '/companies/map', title: 'Locations' },
-  { path: '/courses', title: 'Departments' },
-  { path: '/administrator', title: 'Administrator' },
-  { path: '/coordinator/my-section', title: 'My Section', end: true },
-  { path: '/school-year-section', title: 'Year & Section' },
-  { path: '/coordinators', title: 'Coordinators' },
-  { path: '/students', title: 'Students' },
-  { path: '/supervisor/company-info', title: 'Company Info', end: true },
-  { path: '/supervisor/interns', title: 'Interns', end: true },
-  { path: '/supervisor/attendance', title: 'Attendance', end: true },
-  { path: '/settings', title: 'Account & Department Settings', end: true },
-  {path: '/student/live/location', title: 'Students Live Location', end: true},
-  {path: '/supervisor/interns/:internId/evaluations/:evaluationId', title: 'Evaluation', end: true}
-]
+const pageTitles: Array<{ path: string; title: string; end?: boolean }> = [
+  { path: "/", title: "Dashboard", end: true },
+  { path: "/companies/map/add", title: "Add Companies" },
+  { path: "/companies/map", title: "Locations" },
+  { path: "/courses", title: "Departments" },
+  { path: "/administrator", title: "Administrator" },
+  { path: "/documents", title: "Documents" },
+  { path: "/coordinator/my-section", title: "My Section", end: true },
+  { path: "/school-year-section", title: "Year & Section" },
+  { path: "/coordinators", title: "Coordinators" },
+  { path: "/students", title: "Students" },
+  { path: "/supervisor/company-info", title: "Company Info", end: true },
+  { path: "/supervisor/interns", title: "Interns", end: true },
+  { path: "/supervisor/attendance", title: "Attendance", end: true },
+  { path: "/settings", title: "Account & Department Settings", end: true },
+  {
+    path: "/student/live/location",
+    title: "Students Live Location",
+    end: true,
+  },
+  {
+    path: "/supervisor/interns/:internId/evaluations/:evaluationId",
+    title: "Evaluation",
+    end: true,
+  },
+];
 
 function resolvePageTitle(pathname: string): string {
   for (const page of pageTitles) {

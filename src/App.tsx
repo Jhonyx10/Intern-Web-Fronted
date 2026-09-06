@@ -29,6 +29,7 @@ import EvaluationPage from "./pages/dean/Evaluation";
 import CreateEvaluationTemplatePage from "./pages/forms/CreateEvaluationTemplatePage";
 import EvaluationTemplateDetails from "./pages/details/EvaluationTemplateDetails";
 import EvaluationInternPage from "./pages/forms/EvaluationInternPage";
+import DocumentPage from "./pages/DocumentPage";
 
 function AppContent() {
   const { user } = useAuth();
@@ -110,6 +111,10 @@ function AppContent() {
               <Route
                 path="/supervisor/company-info"
                 element={<CompanyInfo />}
+              />
+              <Route
+                path="/documents"
+                element={<DocumentPage />}
               />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
