@@ -23,7 +23,7 @@ export default function SectionDetailsPage() {
     const { id } = useParams();
     const navigate = useNavigate();
     const { token, user } = useAuth();
-    const isProgramHead = user?.role?.name === 'program_head';
+    const canAddStudent = user?.role?.name === 'dean' || user?.role?.name === 'coordinator';
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const { data: section, isLoading, isError } = useQuery({
@@ -88,7 +88,7 @@ export default function SectionDetailsPage() {
                     </p>
                 </div>
 
-                {!isProgramHead && (
+                {canAddStudent && (
                     <button
                         type="button"
                         onClick={() => setIsModalOpen(true)}

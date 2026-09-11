@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, type Variants } from 'framer-motion'
-import { CheckCircle2, XCircle, Info, X } from 'lucide-react'
+import { CheckCircle2, XCircle, Info, AlertCircle, X } from 'lucide-react'
 
 export type ToastType = "success" | "error" | "info" | "warning";
 
@@ -82,6 +82,7 @@ export const toast = {
   success: (message: string, description?: string) => externalAddToast?.('success', message, description),
   error: (message: string, description?: string) => externalAddToast?.('error', message, description),
   info: (message: string, description?: string) => externalAddToast?.('info', message, description),
+  warning: (message: string, description?: string) => externalAddToast?.('warning', message, description),
 }
 
 const toastVariants: Variants = {
@@ -90,16 +91,23 @@ const toastVariants: Variants = {
   exit: { opacity: 0, x: 40, scale: 0.96, transition: { duration: 0.18 } },
 }
 
-const ICONS: Record<ToastType, typeof CheckCircle2> = { success: CheckCircle2, error: XCircle, info: Info }
+const ICONS: Record<ToastType, typeof CheckCircle2> = { 
+  success: CheckCircle2, 
+  error: XCircle, 
+  info: Info,
+  warning: AlertCircle,
+}
 const ICON_COLORS: Record<ToastType, string> = {
   success: 'text-emerald-600',
   error: 'text-red-500',
   info: 'text-[var(--color-accent)]',
+  warning: 'text-amber-600',
 }
 const BORDER_COLORS: Record<ToastType, string> = {
   success: 'border-emerald-100',
   error: 'border-red-100',
   info: 'border-[var(--color-line)]',
+  warning: 'border-amber-100',
 }
 
 function Toaster() {

@@ -18,6 +18,7 @@ import {
 import { useCourses, useDeleteCourse } from '@/lib/queries/courses'
 import { useMajors, useCreateMajor, useDeleteMajor, useUpdateMajor } from '@/lib/queries/majors'
 import { useUsers } from '@/lib/queries/users'
+import { useAuth } from '@/lib/auth'
 import type { Course, Major } from '@/types'
 
 // ─── animation variants ───────────────────────────────────────────────────────
@@ -29,6 +30,12 @@ const container = {
 const row = {
     hidden: { opacity: 0, y: 10 },
     show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] as const } },
+}
+
+// ─── Helper function to check if user is super_admin ───────────────────────────
+
+function isSuperAdmin(userRole: any): boolean {
+    return userRole?.name?.toLowerCase() === 'super_admin' || userRole?.label?.toLowerCase() === 'super_admin'
 }
 
 // ─── DeleteConfirmModal ───────────────────────────────────────────────────────
@@ -438,10 +445,12 @@ function CourseRow({
     course,
     onEdit,
     onDelete,
+    canManage,
 }: {
     course: Course
     onEdit: (c: Course) => void
     onDelete: (c: Course) => void
+    canManage: boolean
 }) {
      const navigate = useNavigate();
      
@@ -481,22 +490,6 @@ function CourseRow({
             </span>
           </div>
         </td>
-
-        {/* Program Head */}
-        <td className="px-4 py-3.5">
-          <div className="flex items-center gap-1.5 text-sm text-[var(--color-ink)]">
-            <UserRound
-              size={13}
-              className="shrink-0 text-[var(--color-muted)]"
-            />
-            <span className="truncate">
-              {course.program_head?.name ?? (
-                <span className="text-[var(--color-muted)]">—</span>
-              )}
-            </span>
-          </div>
-        </td>
-
         {/* Required Hours */}
         <td className="px-4 py-3.5">
           <div className="flex items-center gap-1.5 text-sm text-[var(--color-ink)]">
@@ -529,27 +522,32 @@ function CourseRow({
             <button
               type="button"
               onClick={() => navigate(`/course/details/${course.id}`)}
-              aria-label={`Edit ${course.name}`}
+              aria-label={`View ${course.name}`}
               className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
             >
               <EyeIcon size={14} />
             </button>
-            <button
-              type="button"
-              onClick={() => onEdit(course)}
-              aria-label={`Edit ${course.name}`}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-            >
-              <Edit2 size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={() => onDelete(course)}
-              aria-label={`Delete ${course.name}`}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-red-300 hover:text-red-600"
-            >
-              <Trash2 size={14} />
-            </button>
+            
+            {canManage && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onEdit(course)}
+                  aria-label={`Edit ${course.name}`}
+                  className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                >
+                  <Edit2 size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(course)}
+                  aria-label={`Delete ${course.name}`}
+                  className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-red-300 hover:text-red-600"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </>
+            )}
           </div>
         </td>
       </motion.tr>
@@ -561,9 +559,11 @@ function CourseRow({
 function MajorsTable({
     onEdit,
     onDelete,
+    canManage,
 }: {
     onEdit: (m: Major) => void
     onDelete: (m: Major) => void
+    canManage: boolean
 }) {
     const { data: majors, isLoading } = useMajors()
 
@@ -590,8 +590,9 @@ function MajorsTable({
                                 <th className="py-3 pl-5 pr-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">Code</th>
                                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">Name</th>
                                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">Department</th>
-                                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">Program Head</th>
-                                <th className="py-3 pl-4 pr-5 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">Actions</th>
+                                {canManage && (
+                                    <th className="py-3 pl-4 pr-5 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">Actions</th>
+                                )}
                             </tr>
                         </thead>
                         <tbody>
@@ -606,32 +607,26 @@ function MajorsTable({
                                             </span>
                                         ) : '—'}
                                     </td>
-                                    <td className="px-4 py-3 text-xs text-[var(--color-muted)]">
-                                        {m.program_head ? (
-                                            <div className="flex items-center gap-1.5">
-                                                <UserRound size={11} />
-                                                <span>{m.program_head.name}</span>
+                                    {canManage && (
+                                        <td className="py-3.5 pl-4 pr-5 text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onEdit(m)}
+                                                    className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                                                >
+                                                    <Edit2 size={11} /> Edit
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onDelete(m)}
+                                                    className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-red-300 hover:text-red-600"
+                                                >
+                                                    <Trash2 size={11} /> Delete
+                                                </button>
                                             </div>
-                                        ) : '—'}
-                                    </td>
-                                    <td className="py-3.5 pl-4 pr-5 text-right">
-                                        <div className="flex items-center justify-end gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => onEdit(m)}
-                                                className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-                                            >
-                                                <Edit2 size={11} /> Edit
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => onDelete(m)}
-                                                className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-red-300 hover:text-red-600"
-                                            >
-                                                <Trash2 size={11} /> Delete
-                                            </button>
-                                        </div>
-                                    </td>
+                                        </td>
+                                    )}
                                 </tr>
                             ))}
                         </tbody>
@@ -646,6 +641,7 @@ function MajorsTable({
 
 export default function CoursePage() {
     const navigate = useNavigate()
+    const { user } = useAuth()
     const { data: courses, isLoading, error } = useCourses()
 
     const [search, setSearch] = useState('')
@@ -653,6 +649,9 @@ export default function CoursePage() {
     const [showAddMajor, setShowAddMajor] = useState(false)
     const [editMajorTarget, setEditMajorTarget] = useState<Major | null>(null)
     const [deleteMajorTarget, setDeleteMajorTarget] = useState<Major | null>(null)
+
+    // Check if the current user can manage courses and majors
+    const canManage = user && isSuperAdmin(user.role)
 
     const filtered = (courses ?? []).filter((c) =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -682,21 +681,24 @@ export default function CoursePage() {
                             Manage course records, required hours, and assigned deans.
                         </p>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <button
-                            type="button"
-                            onClick={() => setShowAddMajor(true)}
-                            className="flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm font-medium text-[var(--color-muted)] shadow-sm transition hover:border-violet-300 hover:text-violet-600"
-                        >
-                            <GraduationCap size={15} /> Add Major
-                        </button>
-                        <Link
-                            to="/courses/add"
-                            className="flex items-center !text-white gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
-                        >
-                            <Plus size={15} /> Add Course
-                        </Link>
-                    </div>
+                    
+                    {canManage && (
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowAddMajor(true)}
+                                className="flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm font-medium text-[var(--color-muted)] shadow-sm transition hover:border-violet-300 hover:text-violet-600"
+                            >
+                                <GraduationCap size={15} /> Add Major
+                            </button>
+                            <Link
+                                to="/courses/add"
+                                className="flex items-center !text-white gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
+                            >
+                                <Plus size={15} /> Add Course
+                            </Link>
+                        </div>
+                    )}
                 </motion.div>
 
                 {/* ── Stat cards ───────────────────────────────────── */}
@@ -800,9 +802,6 @@ export default function CoursePage() {
                                             Dean
                                         </th>
                                         <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                                            Program Head
-                                        </th>
-                                        <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
                                             Req. Hours
                                         </th>
                                         <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
@@ -821,6 +820,7 @@ export default function CoursePage() {
                                                 course={course}
                                                 onEdit={(c) => navigate(`/courses/${c.id}`)}
                                                 onDelete={setDeleteTarget}
+                                                canManage={canManage}
                                             />
                                         ))}
                                     </AnimatePresence>
@@ -831,32 +831,32 @@ export default function CoursePage() {
                 </motion.div>
 
                 {/* ── Majors Table ─────────────────────────────────── */}
-                <MajorsTable onEdit={setEditMajorTarget} onDelete={setDeleteMajorTarget} />
+                <MajorsTable onEdit={setEditMajorTarget} onDelete={setDeleteMajorTarget} canManage={canManage} />
             </motion.section>
 
             {/* ── Modals ─────────────────────────────────────────── */}
             <AnimatePresence>
-                {deleteTarget !== null && (
+                {canManage && deleteTarget !== null && (
                     <DeleteConfirmModal
                         key="delete-confirm"
                         course={deleteTarget}
                         onClose={() => setDeleteTarget(null)}
                     />
                 )}
-                {showAddMajor && (
+                {canManage && showAddMajor && (
                     <MajorModal
                         key="add-major"
                         onClose={() => setShowAddMajor(false)}
                     />
                 )}
-                {editMajorTarget !== null && (
+                {canManage && editMajorTarget !== null && (
                     <MajorModal
                         key="edit-major"
                         major={editMajorTarget}
                         onClose={() => setEditMajorTarget(null)}
                     />
                 )}
-                {deleteMajorTarget !== null && (
+                {canManage && deleteMajorTarget !== null && (
                     <DeleteMajorConfirmModal
                         key="delete-major-confirm"
                         major={deleteMajorTarget}

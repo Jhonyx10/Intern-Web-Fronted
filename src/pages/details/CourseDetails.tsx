@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
@@ -30,7 +29,7 @@ export default function CourseDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { token, user } = useAuth();
-  const isProgramHead = user?.role?.name === "program_head";
+  const isDean = user?.role?.name === "dean";
 
   const {
     data: course,
@@ -106,7 +105,7 @@ export default function CourseDetailsPage() {
           </p>
         </div>
 
-        {!isProgramHead && (
+        {isDean && (
           <button
             type="button"
             onClick={() => navigate(`/sections/new?course_id=${id}`)}
@@ -177,16 +176,11 @@ export default function CourseDetailsPage() {
           </div>
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-              Program head
+              Total students
             </p>
             <p className="mt-0.5 truncate text-sm font-semibold text-[var(--color-ink)]">
-              {course.program_head?.name ?? "Unassigned"}
+              {totalStudents}
             </p>
-            {course.program_head?.email && (
-              <p className="truncate text-xs text-[var(--color-muted)]">
-                {course.program_head.email}
-              </p>
-            )}
           </div>
         </div>
       </motion.div>

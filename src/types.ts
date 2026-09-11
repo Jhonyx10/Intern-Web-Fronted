@@ -30,6 +30,7 @@ export type Role = {
 }
 
 export type User = {
+  dean_portal_course_id: any
   id: number
   name: string
   email: string
@@ -125,6 +126,7 @@ export type Course = {
   program_head_id: string | number | null
   program_head: User | null
   majors?: Major[]
+  sections: Section[]
 }
 
 export type Major = {

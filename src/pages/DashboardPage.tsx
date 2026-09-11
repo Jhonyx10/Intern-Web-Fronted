@@ -1,7 +1,7 @@
 import { useAuth } from '@/lib/auth'
 import { SuperAdminDashboard } from '@/components/dashboard/SuperAdminDashboard'
 import { DeanDashboard } from '@/components/dashboard/DeanDashboard'
-import { ProgramHeadDashboard } from '@/components/dashboard/ProgramHeadDashboard'
+import { AdminDashboard } from '@/components/dashboard/AdminDashboard'
 import { CoordinatorDashboard } from '@/components/dashboard/CoordinatorDashboard'
 import { SupervisorDashboard } from '@/components/dashboard/SupervisorDashboard'
 
@@ -17,8 +17,8 @@ export function DashboardPage() {
     return <DeanDashboard />
   }
 
-  if (role === 'program_head') {
-    return <ProgramHeadDashboard />
+  if (role === 'admin') {
+    return <AdminDashboard />
   }
 
   if (role === 'coordinator') {

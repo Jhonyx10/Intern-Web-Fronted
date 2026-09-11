@@ -6,7 +6,7 @@ import { useTheme } from '@/context/ThemeContext'
 import OCCLOGO from '@/assets/OCC logo.webp'
 import { Calendar1Icon, UserIcon, Settings, BuildingIcon, FolderIcon, FolderCheckIcon, Building2Icon } from 'lucide-react'
 
-type Role = 'super_admin' | 'supervisor' | 'dean' | 'program_head' | 'coordinator' | 'student'
+type Role = 'super_admin' | 'supervisor' | 'dean' | 'admin' | 'coordinator' | 'student'
 
 type NavItem = {
   to: string
@@ -38,14 +38,14 @@ const navItems: NavItem[] = [
     label: "Departments",
     end: false,
     icon: CoursesIcon,
-    roles: ["super_admin"],
+    roles: ["super_admin", "admin"],
   },
   {
     to: "/companies/map",
-    label: "Companies",
+    label: "Organizations",
     end: false,
     icon: Building2Icon,
-    roles: ["coordinator"],
+    roles: ["coordinator", "dean", "admin"],
   },
   {
     to: "/coordinator/my-section",
@@ -59,7 +59,7 @@ const navItems: NavItem[] = [
     label: "Coordinators",
     end: false,
     icon: AdministratorIcon,
-    roles: ["dean", "program_head"],
+    roles: ["dean"],
   },
   {
     to: "/evaluation",
@@ -73,25 +73,25 @@ const navItems: NavItem[] = [
     label: "Year & Section",
     end: false,
     icon: Calendar1Icon,
-    roles: ["dean", "program_head"],
+    roles: ["dean"],
   },
   {
     to: "/students",
     label: "Students",
     end: false,
     icon: UserIcon,
-    roles: ["dean", "program_head"],
+    roles: ["dean", "admin"],
   },
   {
     to: "/companies",
-    label: "Companies",
+    label: "Organizations",
     end: false,
     icon: Building2Icon,
     roles: ["super_admin"],
   },
   {
     to: "/supervisor/company-info",
-    label: "Company Info",
+    label: "Organizations Info",
     end: true,
     icon: BuildingIcon,
     roles: ["supervisor"],

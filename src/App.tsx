@@ -30,9 +30,12 @@ import CreateEvaluationTemplatePage from "./pages/forms/CreateEvaluationTemplate
 import EvaluationTemplateDetails from "./pages/details/EvaluationTemplateDetails";
 import EvaluationInternPage from "./pages/forms/EvaluationInternPage";
 import DocumentPage from "./pages/DocumentPage";
+import { useGeofenceAlerts } from "./hooks/useGeofenceAlert";
+import AddOrganization from "./pages/dean/AddOrganizaton";
 
 function AppContent() {
   const { user } = useAuth();
+  useGeofenceAlerts();
 
   return (
     <NotificationProvider userId={user?.id}>
@@ -44,6 +47,7 @@ function AppContent() {
               <Route index element={<DashboardPage />} />
               <Route path="/companies/map" element={<CompaniesMapPage />} />
               <Route path="/companies/map/add" element={<AddCompanyPage />} />
+               <Route path="/add/organization" element={<AddOrganization />} />
               <Route path="/companies/:id" element={<CompanyDetailsPage />} />
               <Route path="/companies" element={<Companies />} />
               <Route path="/courses" element={<CoursePage />} />

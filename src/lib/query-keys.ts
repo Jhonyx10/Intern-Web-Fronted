@@ -63,10 +63,13 @@ export const queryKeys = {
     unread: (userId?: number) => ['notifications', 'unread', userId ?? 'all'] as const,
     unreadCount: () => ['notifications', 'unread-count'] as const,
   },
-
   evaluations: {
     all: ['evaluations'] as const,
     templates: () => ['evaluations', 'templates'] as const,
     templateDetail: (id: string | number) => ['evaluations', 'templates', id] as const,
   },
+  geofenceEvents: {
+  all: ['geofence-events'] as const,
+  latest: () => ['geofence-events', 'latest'] as const,
+},
 }

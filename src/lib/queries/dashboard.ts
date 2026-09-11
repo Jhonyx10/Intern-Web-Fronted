@@ -38,7 +38,58 @@ export type DeanDashboardData = {
     }
 }
 
-export type ProgramHeadDashboardData = DeanDashboardData
+export type CourseAnalytics = {
+    id: number
+    code: string
+    name: string
+
+    total_sections: number
+    total_students: number
+
+    assigned_students: number
+    unassigned_students: number
+    assignment_rate: number
+
+    total_required_hours: number
+    total_rendered_hours: number
+    internship_percentage: number
+    avg_hours_per_student: number
+    avg_completion_percentage: number
+
+    completed_students: number
+    in_progress_students: number
+    not_started_students: number
+}
+
+export type AdminDashboardData = {
+    overview: {
+        total_courses: number
+        total_sections: number
+        total_students: number
+        assigned_students: number
+        unassigned_students: number
+        total_required_hours: number
+        total_rendered_hours: number
+        completed_students: number
+        in_progress_students: number
+        not_started_students: number
+        overall_internship_percentage: number
+    }
+    courses: CourseAnalytics[]
+    charts: {
+        enrollment_by_course: Array<{ name: string; value: number }>
+        placement_by_course: Array<{ name: string; assigned: number; unassigned: number }>
+        internship_progress_by_course: Array<{ name: string; percentage: number }>
+        status_by_course: Array<{
+            name: string
+            completed: number
+            in_progress: number
+            not_started: number
+        }>
+        placement_status: Array<{ name: string; value: number; color: string }>
+        completion_status: Array<{ name: string; value: number; color: string }>
+    }
+}
 
 export type CoordinatorDashboardData = {
     section: { id: number; name: string; code: string } | null
@@ -87,11 +138,11 @@ export function useDeanDashboard() {
     })
 }
 
-export function useProgramHeadDashboard() {
+export function useAdminDashboard() {
     const { token } = useAuth()
     return useQuery({
         queryKey: ['dashboard', 'program-head'],
-        queryFn: () => apiRequest<{ data: ProgramHeadDashboardData }>('/dashboard/program-head', { token: token! }),
+        queryFn: () => apiRequest<{ data: AdminDashboardData }>('/dashboard/program-head', { token: token! }),
         enabled: Boolean(token),
         select: (res) => res.data,
     })

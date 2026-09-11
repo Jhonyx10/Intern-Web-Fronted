@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { Search, Building2, Loader2, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 import { useStudents } from '@/lib/queries/students'
+import { useAuth } from '@/lib/auth'
 import type { Student } from '@/types'
 
 type InternshipStatus = 'pending' | 'ongoing' | 'completed'
 
 type StudentListItem = Student & {
     section?: { id: number; name: string } | null
+    course?: { id: number; name: string } | null
     company?: { id: number; name: string } | null
     status?: InternshipStatus
     hours_completed?: number
@@ -64,9 +66,13 @@ function initialsOf(student: StudentListItem) {
 
 const StudentsPage = () => {
     const navigate = useNavigate()
+    const { user } = useAuth()
     const [page, setPage] = useState(1)
     const [query, setQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState<InternshipStatus | 'all'>('all')
+    const [courseFilter, setCourseFilter] = useState<string>('all')
+
+    const isAdmin = user?.role?.name === 'super_admin' || user?.role?.name === 'admin'
 
     // Pass page to your query hook
     const { data: paginatedData, isLoading, isError } = useStudents(page)
@@ -82,11 +88,32 @@ const StudentsPage = () => {
     const currentPage = paginatedData && 'current_page' in paginatedData ? paginatedData.current_page : page
     const lastPage = paginatedData && 'last_page' in paginatedData ? paginatedData.last_page : 1
 
+    // NOTE: derived only from the current page of results, since the list is
+    // paginated server-side. A course that only has students on another page
+    // won't show up here until that page loads. Swap this for a dedicated
+    // /courses fetch if a complete, stable list is needed.
+    const courseOptions = useMemo(() => {
+        const seen = new Map<string, string>()
+        for (const student of rawStudents as StudentListItem[]) {
+            if (student.course) seen.set(String(student.course.id), student.course.name)
+        }
+        return [{ key: 'all', label: 'All courses' }, ...Array.from(seen, ([key, label]) => ({ key, label }))]
+    }, [rawStudents])
+
+    // TODO: real scoping for non-admins (e.g. by course for dean/program_head,
+    // by section for coordinator) hasn't been defined yet. For now everyone
+    // sees the same set; only the isAdmin flag is wired up as a seam.
+    const scopedStudents = useMemo(() => {
+        if (isAdmin) return rawStudents as StudentListItem[]
+        return rawStudents as StudentListItem[]
+    }, [rawStudents, isAdmin])
+
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase()
-        return (rawStudents as StudentListItem[]).filter((student) => {
+        return scopedStudents.filter((student) => {
             const status = student.status ?? 'pending'
             const matchesStatus = statusFilter === 'all' || status === statusFilter
+            const matchesCourse = courseFilter === 'all' || String(student.course?.id) === courseFilter
             const matchesQuery =
                 !q ||
                 [
@@ -94,10 +121,11 @@ const StudentsPage = () => {
                     student.student_number ?? '',
                     student.section?.name ?? '',
                     student.company?.name ?? '',
+                    student.course?.name ?? '',
                 ].some((field) => field.toLowerCase().includes(q))
-            return matchesStatus && matchesQuery
+            return matchesStatus && matchesCourse && matchesQuery
         })
-    }, [rawStudents, query, statusFilter])
+    }, [scopedStudents, query, statusFilter, courseFilter])
 
     return (
         <section>
@@ -138,25 +166,32 @@ const StudentsPage = () => {
                     />
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5">
-                    {FILTERS.map((filter) => {
-                        const isActive = statusFilter === filter.key
-                        return (
-                            <button
-                                key={filter.key}
-                                type="button"
-                                onClick={() => setStatusFilter(filter.key)}
-                                className={[
-                                    'rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
-                                    isActive
-                                        ? 'bg-[var(--color-accent)] text-white'
-                                        : 'bg-white/80 text-[var(--color-muted)] ring-1 ring-[var(--color-line)] hover:text-[var(--color-ink)]',
-                                ].join(' ')}
-                            >
+                <div className="flex flex-wrap items-center gap-2">
+                    {courseOptions.length > 1 && (
+                        <select
+                            value={courseFilter}
+                            onChange={(event) => setCourseFilter(event.target.value)}
+                            className="rounded-lg border border-[var(--color-line)] bg-white/80 px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                        >
+                            {courseOptions.map((course) => (
+                                <option key={course.key} value={course.key}>
+                                    {course.label}
+                                </option>
+                            ))}
+                        </select>
+                    )}
+
+                    <select
+                        value={statusFilter}
+                        onChange={(event) => setStatusFilter(event.target.value as InternshipStatus | 'all')}
+                        className="rounded-lg border border-[var(--color-line)] bg-white/80 px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                    >
+                        {FILTERS.map((filter) => (
+                            <option key={filter.key} value={filter.key}>
                                 {filter.label}
-                            </button>
-                        )
-                    })}
+                            </option>
+                        ))}
+                    </select>
                 </div>
             </motion.div>
 

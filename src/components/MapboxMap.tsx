@@ -63,9 +63,11 @@ type MapboxMapProps = {
   drawEnabled?: boolean
   showCampusMarker?: boolean
   routeTo?: MapRouteDestination | null
+  pickPointMode?: boolean
   onMarkerClick?: (id: number | string) => void
   onDrawChange?: (polygon: GeofencePolygon | null) => void
   onRouteInfo?: (info: MapRouteInfo | null) => void
+  onMapClick?: (longitude: number, latitude: number) => void
 }
 
 function extractPolygon(draw: MapboxDraw): GeofencePolygon | null {
@@ -110,9 +112,11 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
     drawEnabled = false,
     showCampusMarker = true,
     routeTo = null,
+    pickPointMode = false,
     onMarkerClick,
     onDrawChange,
     onRouteInfo,
+    onMapClick,
   },
   ref,
 ) {
@@ -124,10 +128,14 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
   const onMarkerClickRef = useRef(onMarkerClick)
   const onDrawChangeRef = useRef(onDrawChange)
   const onRouteInfoRef = useRef(onRouteInfo)
+  const onMapClickRef = useRef(onMapClick)
+  const pickPointModeRef = useRef(pickPointMode)
 
   onMarkerClickRef.current = onMarkerClick
   onDrawChangeRef.current = onDrawChange
   onRouteInfoRef.current = onRouteInfo
+  onMapClickRef.current = onMapClick
+  pickPointModeRef.current = pickPointMode
 
   const syncGeofenceFromDraw = useEffectEvent(() => {
     const draw = drawRef.current
@@ -220,6 +228,14 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
 
     map.addControl(new mapboxgl.NavigationControl({ visualizePitch: false }), 'top-right')
 
+    const handleMapClick = (event: mapboxgl.MapMouseEvent) => {
+      if (!pickPointModeRef.current) {
+        return
+      }
+      onMapClickRef.current?.(event.lngLat.lng, event.lngLat.lat)
+    }
+    map.on('click', handleMapClick)
+
     map.on('load', () => {
       map.addSource('map-polygons', {
         type: 'geojson',
@@ -287,6 +303,7 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
     mapRef.current = map
 
     return () => {
+      map.off('click', handleMapClick)
       if (drawRef.current) {
         map.off('draw.create', syncGeofenceFromDraw)
         map.off('draw.update', syncGeofenceFromDraw)
@@ -297,6 +314,13 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
       drawRef.current = null
     }
   }, [drawEnabled])
+
+  // Update cursor style while in "click to pick a point" mode
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    map.getCanvas().style.cursor = pickPointMode ? 'crosshair' : ''
+  }, [pickPointMode])
 
   useEffect(() => {
     const map = mapRef.current

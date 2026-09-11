@@ -38,15 +38,25 @@ export function CompaniesMapPage() {
             Host companies available for intern placements.
           </p>
         </div>
-        {user?.role?.name === 'coordinator' ? (
+        {user?.role?.name === 'coordinator' && (
           <button
             type="button"
             className="rounded-md bg-[var(--color-accent)] px-4 py-2 text-sm text-white hover:bg-[var(--color-accent-hover)]"
             onClick={() => navigate('/companies/map/add')}
           >
-            Company requests
+            Organization requests
           </button>
-        ) : null}
+        )}
+
+        {user?.role?.name === 'dean' && (
+          <button
+            type="button"
+            className="rounded-md bg-[var(--color-accent)] px-4 py-2 text-sm text-white hover:bg-[var(--color-accent-hover)]"
+            onClick={() => navigate('/add/organization')}
+          >
+            Add Organization
+          </button>
+        )}
       </div>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
@@ -88,13 +98,12 @@ export function CompaniesMapPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${
-                          status === 'Polygon set'
-                            ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
-                            : status === 'Disabled'
-                              ? 'bg-slate-100 text-[var(--color-muted)]'
-                              : 'bg-amber-50 text-amber-800'
-                        }`}
+                        className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${status === 'Polygon set'
+                          ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
+                          : status === 'Disabled'
+                            ? 'bg-slate-100 text-[var(--color-muted)]'
+                            : 'bg-amber-50 text-amber-800'
+                          }`}
                       >
                         {status}
                       </span>
@@ -112,12 +121,12 @@ export function CompaniesMapPage() {
                             Email
                           </a>
                         ) : null}
-                          <Link
-                            to={`/companies/${company.id}`}
-                            className="rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-                          >
-                            View
-                          </Link>
+                        <Link
+                          to={`/companies/${company.id}`}
+                          className="rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                        >
+                          View
+                        </Link>
                         {!company.contact_email && !company.contact_phone ? (
                           <span className="text-xs text-[var(--color-muted)]">—</span>
                         ) : null}

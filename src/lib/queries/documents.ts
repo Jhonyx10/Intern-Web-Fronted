@@ -10,6 +10,7 @@ export interface DocumentType {
 }
 
 export interface DocumentRequirement {
+  pivot: any
   id: number
   document_type_id: number
   created_by_user_id: number | null
