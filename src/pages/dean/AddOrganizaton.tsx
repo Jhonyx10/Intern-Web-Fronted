@@ -126,9 +126,6 @@ export function AddOrganization() {
   }
 
   const handleSelectSearchResult = (result: MapMarker) => {
-    // Just navigate to the location, don't open the form yet.
-    // The user still needs to click the map to set the exact center,
-    // then draw the boundary.
     setSearchResults([])
     mapRef.current?.flyTo(result.longitude, result.latitude, 16)
   }

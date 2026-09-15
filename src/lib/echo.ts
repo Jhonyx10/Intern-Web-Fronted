@@ -1,5 +1,6 @@
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
+const apiUrl = import.meta.env.VITE_API_URL;
 
 declare global {
   interface Window {
@@ -21,6 +22,15 @@ export interface EvaluationNotificationPayload {
   created_at: string;
 }
 
+export interface LiveLocationPayload {
+  intern_id: number;
+  intern_name: string;
+  latitude: number;
+  longitude: number;
+  accuracy_meters: number | null;
+  recorded_at: string; // ISO 8601
+}
+
 const pusherKey = import.meta.env.VITE_PUSHER_APP_KEY;
 
 if (!pusherKey) {
@@ -34,9 +44,9 @@ export const echo = new Echo({
   forceTLS: true,
   authorizer: (channel: { name: string }) => ({
     authorize: (socketId: string, callback: Function) => {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('occ_spa_token');
 
-      fetch('http://localhost:8000/api/broadcasting/auth', {
+      fetch(`${apiUrl}/broadcasting/auth`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

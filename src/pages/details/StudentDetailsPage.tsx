@@ -668,7 +668,7 @@ export function StudentDetailsPage() {
                         <th className="px-4 py-3">Time Out</th>
                         <th className="px-4 py-3">Duration</th>
                         <th className="px-4 py-3">Verification</th>
-                        <th className="px-4 py-3">Task / Note</th>
+                        <th className="px-4 py-3">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--color-line)]">
@@ -720,7 +720,9 @@ export function StudentDetailsPage() {
                               </span>
                             </td>
                             <td className="px-4 py-3 text-[var(--color-muted)] max-w-xs truncate">
-                              {log.task_note || "—"}
+                              <a type="button">
+                                View
+                              </a>
                             </td>
                           </tr>
                         );

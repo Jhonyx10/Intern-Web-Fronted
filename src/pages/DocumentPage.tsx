@@ -66,9 +66,8 @@ function formatFileSize(bytes?: number) {
     size /= 1024;
     unitIndex++;
   }
-  return `${size.toFixed(size < 10 && unitIndex > 0 ? 1 : 0)} ${
-    units[unitIndex]
-  }`;
+  return `${size.toFixed(size < 10 && unitIndex > 0 ? 1 : 0)} ${units[unitIndex]
+    }`;
 }
 
 function formatDateTime(dateStr?: string | null) {
@@ -88,10 +87,11 @@ function formatDateTime(dateStr?: string | null) {
 export default function DocumentPage() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role?.name === "super_admin";
+  const isAdmin = user?.role?.name === "admin";
   const isDean = user?.role?.name === "dean";
   const courseId = user?.course?.id as number | undefined;
   const updateStatus = useUpdateDocumentStatus();
-  const [activeTab, setActiveTab] = useState<"requirements" | "submitted">("requirements");
+  const [activeTab, setActiveTab] = useState<"requirements" | "submitted">(isAdmin ? "submitted" : "requirements");
   const [search, setSearch] = useState("");
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -184,15 +184,15 @@ export default function DocumentPage() {
               {activeTab === "submitted"
                 ? "Intern Submitted Documents"
                 : isDean
-                ? "Your Course Requirements"
-                : "Document Requirements"}
+                  ? "Your Course Requirements"
+                  : "Document Requirements"}
             </h2>
             <p className="mt-1.5 text-sm text-[var(--color-muted)]">
               {activeTab === "submitted"
                 ? "Review and track all documents uploaded by students and interns."
                 : isDean
-                ? "Documents your students are required to submit, and when they're due."
-                : "Manage the master list of document types and requirements."}
+                  ? "Documents your students are required to submit, and when they're due."
+                  : "Manage the master list of document types and requirements."}
             </p>
           </div>
 
@@ -230,20 +230,21 @@ export default function DocumentPage() {
 
         {/* ── View Toggle Tabs ─────────────────────────────── */}
         <motion.div variants={row} className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("requirements");
-              setSearch("");
-            }}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
-              activeTab === "requirements"
+          {!isAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("requirements");
+                setSearch("");
+              }}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${activeTab === "requirements"
                 ? "bg-[var(--color-accent)] text-white shadow-sm"
                 : "bg-white text-[var(--color-muted)] hover:bg-slate-100 border border-[var(--color-line)]"
-            }`}
-          >
-            <FileText size={16} /> Requirements Needed
-          </button>
+                }`}
+            >
+              <FileText size={16} /> Requirements Needed
+            </button>
+          )}
 
           <button
             type="button"
@@ -251,11 +252,10 @@ export default function DocumentPage() {
               setActiveTab("submitted");
               setSearch("");
             }}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
-              activeTab === "submitted"
-                ? "bg-[var(--color-accent)] text-white shadow-sm"
-                : "bg-white text-[var(--color-muted)] hover:bg-slate-100 border border-[var(--color-line)]"
-            }`}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${activeTab === "submitted"
+              ? "bg-[var(--color-accent)] text-white shadow-sm"
+              : "bg-white text-[var(--color-muted)] hover:bg-slate-100 border border-[var(--color-line)]"
+              }`}
           >
             <UserRound size={16} /> Intern Submitted Documents
           </button>
@@ -361,16 +361,16 @@ export default function DocumentPage() {
         {(activeTab === "requirements"
           ? isErrorRequirements
           : errorSubmitted) && (
-          <motion.div
-            variants={row}
-            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3"
-          >
-            <p className="text-sm font-medium text-red-700">
-              Couldn't load documents. Please check your network connection and
-              try again.
-            </p>
-          </motion.div>
-        )}
+            <motion.div
+              variants={row}
+              className="rounded-xl border border-red-200 bg-red-50 px-4 py-3"
+            >
+              <p className="text-sm font-medium text-red-700">
+                Couldn't load documents. Please check your network connection and
+                try again.
+              </p>
+            </motion.div>
+          )}
 
         {/* ── Table card ───────────────────────────────────── */}
         <motion.div
@@ -385,7 +385,7 @@ export default function DocumentPage() {
                 type="search"
                 placeholder={
                   activeTab === "submitted"
-                    ? "Search student name, student number, or filename…"
+                    ? "Search course, student name, ID, or filename…"
                     : "Search requirements…"
                 }
                 value={search}
@@ -428,8 +428,8 @@ export default function DocumentPage() {
                   ? "Loading…"
                   : `${filteredRequirements.length} of ${totalRequirements}`
                 : loadingSubmitted
-                ? "Loading…"
-                : `${submittedDocs?.length ?? 0} submitted`}
+                  ? "Loading…"
+                  : `${submittedDocs?.length ?? 0} submitted`}
             </span>
           </div>
 
@@ -447,8 +447,8 @@ export default function DocumentPage() {
                   {search
                     ? "No requirements match your search."
                     : isDean
-                    ? "No requirements assigned yet."
-                    : "No document requirements have been created yet."}
+                      ? "No requirements assigned yet."
+                      : "No document requirements have been created yet."}
                 </p>
                 {search ? (
                   <button
@@ -547,11 +547,10 @@ export default function DocumentPage() {
 
                           <td className="px-4 py-3.5">
                             <span
-                              className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold ${
-                                req.is_active
-                                  ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
-                                  : "bg-red-50 text-red-600"
-                              }`}
+                              className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold ${req.is_active
+                                ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
+                                : "bg-red-50 text-red-600"
+                                }`}
                             >
                               {req.is_active ? "Active" : "Inactive"}
                             </span>
@@ -564,193 +563,192 @@ export default function DocumentPage() {
               </div>
             )
           ) : /* ── Submitted Documents Table ───────────────────── */
-          loadingSubmitted ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-20 text-[var(--color-muted)]">
-              <span className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
-              <p className="text-sm">Loading submitted documents…</p>
-            </div>
-          ) : (submittedDocs?.length ?? 0) === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 px-6 py-20 text-center">
-              <UserRound size={36} className="text-[var(--color-line)]" />
-              <p className="text-sm font-medium text-[var(--color-muted)]">
-                {search
-                  ? "No submitted documents match your search."
-                  : "No intern document submissions found."}
-              </p>
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="text-xs font-semibold text-[var(--color-accent)] hover:underline"
-                >
-                  Clear search
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-[var(--color-line)] bg-slate-50/70">
-                    <th className="py-3 pl-5 pr-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                      Student / Intern
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                      Course / Section
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                      Requirement / Document
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                      Filename
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                      Submitted Date
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <motion.tbody
-                  variants={container}
-                  initial="hidden"
-                  animate="show"
-                >
-                  <AnimatePresence>
-                    {submittedDocs?.map((doc) => {
-                      const studentName = doc.student
-                        ? `${doc.student.last_name}, ${doc.student.first_name}`
-                        : "Unknown Student";
-                      const courseCode =
-                        doc.student?.section?.course?.code ?? "—";
-                      const sectionCode = doc.student?.section?.code ?? "";
+            loadingSubmitted ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-20 text-[var(--color-muted)]">
+                <span className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
+                <p className="text-sm">Loading submitted documents…</p>
+              </div>
+            ) : (submittedDocs?.length ?? 0) === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-3 px-6 py-20 text-center">
+                <UserRound size={36} className="text-[var(--color-line)]" />
+                <p className="text-sm font-medium text-[var(--color-muted)]">
+                  {search
+                    ? "No submitted documents match your search."
+                    : "No intern document submissions found."}
+                </p>
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="text-xs font-semibold text-[var(--color-accent)] hover:underline"
+                  >
+                    Clear search
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[760px] border-collapse text-left">
+                  <thead>
+                    <tr className="border-b border-[var(--color-line)] bg-slate-50/70">
+                      <th className="py-3 pl-5 pr-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
+                        Student / Intern
+                      </th>
+                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
+                        Course / Section
+                      </th>
+                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
+                        Requirement / Document
+                      </th>
+                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
+                        Filename
+                      </th>
+                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
+                        Submitted Date
+                      </th>
+                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+                  <motion.tbody
+                    variants={container}
+                    initial="hidden"
+                    animate="show"
+                  >
+                    <AnimatePresence>
+                      {submittedDocs?.map((doc) => {
+                        const studentName = doc.student
+                          ? `${doc.student.last_name}, ${doc.student.first_name}`
+                          : "Unknown Student";
+                        const courseCode =
+                          doc.student?.section?.course?.code ?? "—";
+                        const sectionCode = doc.student?.section?.code ?? "";
 
-                      const reqTitle =
-                        doc.document_requirement?.title ??
-                        doc.document_type?.name ??
-                        "Submitted Document";
+                        const reqTitle =
+                          doc.document_requirement?.title ??
+                          doc.document_type?.name ??
+                          "Submitted Document";
 
-                      const status =
-                        doc.review_status?.toLowerCase() ?? "pending";
+                        const status =
+                          doc.review_status?.toLowerCase() ?? "pending";
 
-                      return (
-                        <motion.tr
-                          key={doc.id}
-                          variants={row}
-                          className="group border-b border-[var(--color-line)] last:border-0 hover:bg-slate-50/50 transition"
-                        >
-                          {/* Student */}
-                          <td className="py-3.5 pl-5 pr-4">
-                            <div className="flex items-center gap-3">
-                              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-violet-100 text-violet-700 font-semibold text-xs">
-                                {doc.student?.first_name?.[0]}
-                                {doc.student?.last_name?.[0]}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-medium text-[var(--color-ink)]">
-                                  {studentName}
-                                </p>
-                                {doc.student?.student_number && (
-                                  <p className="truncate text-xs text-[var(--color-muted)]">
-                                    {doc.student.student_number}
+                        return (
+                          <motion.tr
+                            key={doc.id}
+                            variants={row}
+                            className="group border-b border-[var(--color-line)] last:border-0 hover:bg-slate-50/50 transition"
+                          >
+                            {/* Student */}
+                            <td className="py-3.5 pl-5 pr-4">
+                              <div className="flex items-center gap-3">
+                                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-violet-100 text-violet-700 font-semibold text-xs">
+                                  {doc.student?.first_name?.[0]}
+                                  {doc.student?.last_name?.[0]}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-[var(--color-ink)]">
+                                    {studentName}
                                   </p>
-                                )}
+                                  {doc.student?.student_number && (
+                                    <p className="truncate text-xs text-[var(--color-muted)]">
+                                      {doc.student.student_number}
+                                    </p>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* Course / Section */}
-                          <td className="px-4 py-3.5">
-                            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                              {courseCode}{" "}
-                              {sectionCode ? `(${sectionCode})` : ""}
-                            </span>
-                          </td>
+                            {/* Course / Section */}
+                            <td className="px-4 py-3.5">
+                              <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                                {courseCode}{" "}
+                                {sectionCode ? `(${sectionCode})` : ""}
+                              </span>
+                            </td>
 
-                          {/* Requirement / Document */}
-                          <td className="px-4 py-3.5">
-                            <p className="truncate text-sm font-medium text-[var(--color-ink)] max-w-xs">
-                              {reqTitle}
-                            </p>
-                          </td>
-
-                          {/* Filename */}
-                          <td className="px-4 py-3.5">
-                            <p
-                              className="truncate text-xs text-[var(--color-muted)] max-w-44"
-                              title={doc.original_filename}
-                            >
-                              {doc.original_filename}
-                            </p>
-                            {(doc.file_size || doc.mime_type) && (
-                              <p className="mt-0.5 text-[10px] text-[var(--color-muted)]">
-                                {[
-                                  formatFileSize(doc.file_size),
-                                  doc.mime_type?.split("/")[1]?.toUpperCase(),
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ")}
+                            {/* Requirement / Document */}
+                            <td className="px-4 py-3.5">
+                              <p className="truncate text-sm font-medium text-[var(--color-ink)] max-w-xs">
+                                {reqTitle}
                               </p>
-                            )}
-                          </td>
+                            </td>
 
-                          {/* Submitted Date */}
-                          <td className="px-4 py-3.5">
-                            <span className="text-xs text-[var(--color-muted)]">
-                              {formatDeadline(doc.uploaded_at)}
-                            </span>
-                          </td>
+                            {/* Filename */}
+                            <td className="px-4 py-3.5">
+                              <p
+                                className="truncate text-xs text-[var(--color-muted)] max-w-44"
+                                title={doc.original_filename}
+                              >
+                                {doc.original_filename}
+                              </p>
+                              {(doc.file_size || doc.mime_type) && (
+                                <p className="mt-0.5 text-[10px] text-[var(--color-muted)]">
+                                  {[
+                                    formatFileSize(doc.file_size),
+                                    doc.mime_type?.split("/")[1]?.toUpperCase(),
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </p>
+                              )}
+                            </td>
 
-                          {/* Status */}
-                          <td className="px-4 py-3.5">
-                            <span
-                              className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold ${
-                                status === "approved"
+                            {/* Submitted Date */}
+                            <td className="px-4 py-3.5">
+                              <span className="text-xs text-[var(--color-muted)]">
+                                {formatDeadline(doc.uploaded_at)}
+                              </span>
+                            </td>
+
+                            {/* Status */}
+                            <td className="px-4 py-3.5">
+                              <span
+                                className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold ${status === "approved"
                                   ? "bg-emerald-50 text-emerald-700"
                                   : status === "rejected"
-                                  ? "bg-red-50 text-red-600"
-                                  : "bg-amber-50 text-amber-700"
-                              }`}
-                            >
-                              {status.charAt(0).toUpperCase() + status.slice(1)}
-                            </span>
-                          </td>
+                                    ? "bg-red-50 text-red-600"
+                                    : "bg-amber-50 text-amber-700"
+                                  }`}
+                              >
+                                {status.charAt(0).toUpperCase() + status.slice(1)}
+                              </span>
+                            </td>
 
-                          {/* Action */}
-                          <td className="px-4 py-3.5">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setPreviewDoc({
-                                  id: doc.id,
-                                  title: reqTitle,
-                                  filename: doc.original_filename,
-                                  fileSize: doc.file_size,
-                                  mimeType: doc.mime_type,
-                                  notes: doc.notes,
-                                  status: doc.review_status,
-                                  rejectionReason: doc.rejection_reason,
-                                  reviewedAt: doc.reviewed_at,
-                                  reviewedByName: doc.reviewed_by?.name,
-                                })
-                              }
-                              className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-sky-600 shadow-sm hover:bg-sky-50 transition whitespace-nowrap"
-                            >
-                              <ExternalLink size={12} /> View
-                            </button>
-                          </td>
-                        </motion.tr>
-                      );
-                    })}
-                  </AnimatePresence>
-                </motion.tbody>
-              </table>
-            </div>
-          )}
+                            {/* Action */}
+                            <td className="px-4 py-3.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPreviewDoc({
+                                    id: doc.id,
+                                    title: reqTitle,
+                                    filename: doc.original_filename,
+                                    fileSize: doc.file_size,
+                                    mimeType: doc.mime_type,
+                                    notes: doc.notes,
+                                    status: doc.review_status,
+                                    rejectionReason: doc.rejection_reason,
+                                    reviewedAt: doc.reviewed_at,
+                                    reviewedByName: doc.reviewed_by?.name,
+                                  })
+                                }
+                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-sky-600 shadow-sm hover:bg-sky-50 transition whitespace-nowrap"
+                              >
+                                <ExternalLink size={12} /> View
+                              </button>
+                            </td>
+                          </motion.tr>
+                        );
+                      })}
+                    </AnimatePresence>
+                  </motion.tbody>
+                </table>
+              </div>
+            )}
         </motion.div>
       </motion.section>
 

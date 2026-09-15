@@ -18,7 +18,8 @@ export type MapMarker = {
   longitude: number
   latitude: number
   title?: string
-  color?: 'accent' | 'amber' | 'campus'
+  color?: 'accent' | 'amber' | 'campus' | 'danger' | 'success' | 'primary'
+  shape?: 'circle' | 'pin' | 'square'
   hexColor?: string
   popupHtml?: string
 }
@@ -83,16 +84,66 @@ function extractPolygon(draw: MapboxDraw): GeofencePolygon | null {
   }
 }
 
-function markerClassName(color: MapMarker['color']): string {
-  if (color === 'amber') {
-    return 'h-3.5 w-3.5 rounded-full border-2 border-white bg-amber-500 shadow'
+function markerColorClass(color: MapMarker['color']): string {
+  if (color === 'amber') return 'bg-amber-500'
+  if (color === 'campus') return 'bg-[var(--color-ink)]'
+  if (color === 'danger') return 'bg-red-500'
+  if (color === 'success') return 'bg-green-500'
+  if (color === 'primary') return 'bg-blue-500'
+  return 'bg-[var(--color-accent)]'
+}
+
+/**
+ * Builds the DOM element used for a map marker.
+ *
+ * IMPORTANT: mapboxgl.Marker anchors an element by its layout bounding box
+ * (center, by default) — a CSS `rotate` transform is purely visual and does
+ * NOT change that box. So a rotated "diamond/pin" square still gets centered
+ * on the coordinate using its *unrotated* box, which makes the visible point
+ * of the pin drift away from the actual location the further you look at it.
+ *
+ * Fix: keep an unrotated wrapper element for Mapbox to anchor (sized/laid out
+ * normally), and nest the rotated diamond inside it, positioned so its tip
+ * sits at the wrapper's bottom-center. Then tell the Marker to anchor at
+ * 'bottom' for pins specifically, so the tip — not the box center — lines up
+ * with the coordinate. Circles/squares are symmetric, so they keep the
+ * default center anchor.
+ */
+function buildMarkerElement(color: MapMarker['color'], shape: MapMarker['shape'] = 'circle'): HTMLElement {
+  const colorClass = markerColorClass(color)
+  const el = document.createElement('button')
+  el.type = 'button'
+
+  if (shape === 'pin') {
+    // Outer wrapper: unrotated, defines the actual anchor box that Mapbox positions.
+    el.className = 'relative h-6 w-5 border-0 bg-transparent p-0'
+
+    const diamond = document.createElement('div')
+    diamond.className = `absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 rotate-45 rounded-tl-full rounded-tr-full rounded-br-full border-2 border-white shadow ${colorClass}`
+    el.appendChild(diamond)
+    return el
   }
 
-  if (color === 'campus') {
-    return 'h-4 w-4 rounded-sm border-2 border-white bg-[var(--color-ink)] shadow'
+  if (shape === 'square') {
+    el.className = `h-4 w-4 rounded-sm border-2 border-white shadow ${colorClass}`
+    return el
   }
 
-  return 'h-3.5 w-3.5 rounded-full border-2 border-white bg-[var(--color-accent)] shadow'
+  // default: circle (interns, generic points)
+  el.className = `h-3.5 w-3.5 rounded-full border-2 border-white shadow ${colorClass}`
+  return el
+}
+
+/**
+ * Returns the element that should actually receive a custom hexColor
+ * override — for pins that's the inner diamond, for everything else
+ * it's the element itself.
+ */
+function markerColorTarget(el: HTMLElement, shape: MapMarker['shape'] = 'circle'): HTMLElement {
+  if (shape === 'pin') {
+    return (el.firstElementChild as HTMLElement) ?? el
+  }
+  return el
 }
 
 function emptyLineCollection(): GeoJSON.FeatureCollection {
@@ -466,12 +517,12 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
       : markers
 
     for (const marker of allMarkers) {
-      const el = document.createElement('button')
-      el.type = 'button'
-      el.className = markerClassName(marker.color)
+      const el = buildMarkerElement(marker.color, marker.shape)
+
       if (marker.hexColor) {
-        el.style.backgroundColor = marker.hexColor
+        markerColorTarget(el, marker.shape).style.backgroundColor = marker.hexColor
       }
+
       el.title = marker.title ?? ''
       el.addEventListener('click', () => {
         if (marker.id !== 'occ-campus') {
@@ -483,10 +534,14 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
         })
       })
 
-      const mapMarker = new mapboxgl.Marker({ element: el }).setLngLat([
-        marker.longitude,
-        marker.latitude,
-      ])
+      const mapMarker = new mapboxgl.Marker({
+        element: el,
+        // Pins are drawn as a rotated diamond whose visible "point" sits at
+        // the bottom of an unrotated wrapper box — anchor there so the tip,
+        // not the wrapper's center, lines up with the coordinate. Circles/
+        // squares are symmetric, so the default center anchor is correct.
+        anchor: marker.shape === 'pin' ? 'bottom' : 'center',
+      }).setLngLat([marker.longitude, marker.latitude])
 
       if (marker.popupHtml) {
         mapMarker.setPopup(new mapboxgl.Popup({ offset: 12 }).setHTML(marker.popupHtml))

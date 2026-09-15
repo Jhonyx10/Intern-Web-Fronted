@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/context/ThemeContext'
 import OCCLOGO from '@/assets/OCC logo.webp'
 import { Calendar1Icon, UserIcon, Settings, BuildingIcon, FolderIcon, FolderCheckIcon, Building2Icon } from 'lucide-react'
+import StudentLiveTracker from '@/pages/coordinator/StudentLiveTracker'
 
 type Role = 'super_admin' | 'supervisor' | 'dean' | 'admin' | 'coordinator' | 'student'
 
@@ -31,7 +32,7 @@ const navItems: NavItem[] = [
     label: "Documents",
     end: false,
     icon: FolderCheckIcon,
-    roles: ["super_admin", "dean", "coordinator"],
+    roles: ["super_admin", "dean", "coordinator", "admin"],
   },
   {
     to: "/courses",
@@ -112,7 +113,7 @@ const navItems: NavItem[] = [
   },
   {
     to: "/student/live/location",
-    label: "Live Locations",
+    label: "Interns Logs",
     end: true,
     icon: MapIcon,
     roles: ["coordinator"],
@@ -136,7 +137,7 @@ const pageTitles: Array<{ path: string; title: string; end?: boolean }> = [
   { path: "/settings", title: "Account & Department Settings", end: true },
   {
     path: "/student/live/location",
-    title: "Students Live Location",
+    title: "Interns Live Location",
     end: true,
   },
   {
@@ -163,6 +164,7 @@ function resolvePageTitle(pathname: string): string {
 const SIDEBAR_KEY = 'occ-sidenav-open'
 const SIDEBAR_EXPANDED = 256
 const SIDEBAR_COLLAPSED = 76
+const LIVE_TRACKER_PATH = "/student/live/location";
 
 export function AppShell() {
   const { user, logout } = useAuth()
@@ -178,6 +180,8 @@ export function AppShell() {
   })
   const [profileOpen, setProfileOpen] = useState(false)
   const profileMenuRef = useRef<HTMLDivElement>(null)
+  const isOnLiveTracker = location.pathname === LIVE_TRACKER_PATH;
+  const [hasVisitedLiveTracker, setHasVisitedLiveTracker] = useState(isOnLiveTracker);
 
   useEffect(() => {
     try {
@@ -230,6 +234,12 @@ export function AppShell() {
   )
 
   const pageTitle = resolvePageTitle(location.pathname)
+
+  useEffect(() => {
+    if (isOnLiveTracker) {
+      setHasVisitedLiveTracker(true);
+    }
+  }, [isOnLiveTracker]);
 
   return (
     <div className="flex min-h-screen">
@@ -449,17 +459,25 @@ export function AppShell() {
 
         <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-4 sm:px-6 lg:px-10">
           <div className="mx-auto max-w-6xl">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={location.pathname}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <Outlet />
-              </motion.div>
-            </AnimatePresence>
+            {!isOnLiveTracker && (
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={location.pathname}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <Outlet />
+                </motion.div>
+              </AnimatePresence>
+            )}
+
+            {hasVisitedLiveTracker && (
+              <div style={{ display: isOnLiveTracker ? 'block' : 'none' }}>
+                <StudentLiveTracker />
+              </div>
+            )}
           </div>
         </main>
       </div>
