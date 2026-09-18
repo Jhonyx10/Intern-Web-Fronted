@@ -123,7 +123,7 @@ const navItems: NavItem[] = [
 const pageTitles: Array<{ path: string; title: string; end?: boolean }> = [
   { path: "/", title: "Dashboard", end: true },
   { path: "/companies/map/add", title: "Add Companies" },
-  { path: "/companies/map", title: "Locations" },
+  { path: "/companies/map", title: "Organizations" },
   { path: "/courses", title: "Departments" },
   { path: "/administrator", title: "Administrator" },
   { path: "/documents", title: "Documents" },
@@ -143,6 +143,11 @@ const pageTitles: Array<{ path: string; title: string; end?: boolean }> = [
   {
     path: "/supervisor/interns/:internId/evaluations/:evaluationId",
     title: "Evaluation",
+    end: true,
+  },
+  {
+    path: "/course/details/:id",
+    title: "Department Details",
     end: true,
   },
 ];
@@ -168,7 +173,7 @@ const LIVE_TRACKER_PATH = "/student/live/location";
 
 export function AppShell() {
   const { user, logout } = useAuth()
-  const { logoUrl } = useTheme()
+  const { logoUrl, themeColor } = useTheme()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
@@ -247,7 +252,8 @@ export function AppShell() {
         initial={false}
         animate={{ width: sidebarOpen ? SIDEBAR_EXPANDED : SIDEBAR_COLLAPSED }}
         transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-        className="sticky top-0 flex h-screen shrink-0 flex-col overflow-hidden border-r border-[var(--color-line)] bg-[var(--color-surface)] backdrop-blur-xl"
+        style={{ backgroundColor: themeColor || 'var(--color-accent)' }}
+        className="sticky top-0 z-40 flex h-screen shrink-0 flex-col border-r border-[var(--color-line)] backdrop-blur-xl text-white"
       >
         <div className={`flex items-center pt-6 pb-5 ${sidebarOpen ? 'px-4' : 'justify-center px-2'}`}>
           <div className={`flex min-w-0 items-center ${sidebarOpen ? 'gap-3' : 'justify-center'}`}>
@@ -274,7 +280,7 @@ export function AppShell() {
                   transition={{ duration: 0.2 }}
                   className="min-w-0"
                 >
-                  <p className="truncate text-[11px] font-semibold tracking-[0.22em] text-[var(--color-accent)] uppercase">
+                  <p className="truncate text-[11px] font-semibold tracking-[0.22em] text-white/70 uppercase">
                     Internship
                   </p>
                   <h1 className="truncate text-base font-semibold tracking-tight">
@@ -294,7 +300,7 @@ export function AppShell() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="px-3 pb-2 text-[11px] font-semibold tracking-[0.16em] text-[var(--color-muted)] uppercase"
+                className="px-3 pb-2 text-[11px] font-semibold tracking-[0.16em] text-white/70 uppercase"
               >
                 Navigate
               </motion.p>
@@ -306,14 +312,13 @@ export function AppShell() {
               key={to}
               to={to}
               end={end}
-              title={label}
               className={({ isActive }) =>
                 [
-                  'relative flex items-center rounded-xl text-sm font-medium transition-colors',
+                  'group relative flex items-center rounded-xl text-sm font-medium transition-colors',
                   sidebarOpen ? 'gap-3 px-3 py-2.5' : 'justify-center p-2',
                   isActive
-                    ? 'text-[var(--color-accent)]'
-                    : 'text-[var(--color-muted)] hover:text-[var(--color-ink)]',
+                    ? 'text-white'
+                    : 'text-white/70 hover:text-white',
                 ].join(' ')
               }
             >
@@ -322,11 +327,11 @@ export function AppShell() {
                   {isActive ? (
                     <motion.span
                       layoutId="nav-active"
-                      className="absolute inset-0 rounded-xl bg-[var(--color-accent-soft)]"
+                      className="absolute inset-0 rounded-xl bg-white/10"
                       transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                     />
                   ) : null}
-                  <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-white/70 text-[var(--color-accent)] shadow-sm ring-1 ring-[var(--color-line)]">
+                  <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white shadow-sm ring-1 ring-white/10">
                     <Icon />
                   </span>
                   <AnimatePresence initial={false}>
@@ -341,7 +346,14 @@ export function AppShell() {
                       >
                         {label}
                       </motion.span>
-                    ) : null}
+                    ) : (
+                      <div
+                        className="absolute left-full ml-3 hidden items-center whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold tracking-wide text-white opacity-0 shadow-lg transition-all delay-75 duration-200 group-hover:flex group-hover:opacity-100 z-50"
+                        style={{ backgroundColor: themeColor || 'var(--color-accent)' }}
+                      >
+                        {label}
+                      </div>
+                    )}
                   </AnimatePresence>
                 </>
               )}
@@ -357,7 +369,7 @@ export function AppShell() {
             onClick={() => setSidebarOpen((open) => !open)}
             aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
             title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            className={`flex items-center rounded-xl border border-[var(--color-line)] bg-white/80 text-sm font-medium text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)] ${sidebarOpen ? 'w-full justify-between gap-3 px-3 py-2.5' : 'mx-auto grid h-10 w-10 place-items-center'
+            className={`flex items-center rounded-xl border border-white/20 bg-white/10 text-sm font-medium text-white/80 transition-colors hover:bg-white/20 hover:text-white ${sidebarOpen ? 'w-full justify-between gap-3 px-3 py-2.5' : 'mx-auto grid h-10 w-10 place-items-center'
               }`}
           >
             {sidebarOpen ? (

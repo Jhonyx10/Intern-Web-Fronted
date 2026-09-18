@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Send, X, Loader2, FileText } from "lucide-react";
+import { Send, X, Loader2 } from "lucide-react";
 
 interface EvaluationTemplate {
   id: number;

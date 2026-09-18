@@ -34,6 +34,7 @@ export type User = {
   id: number
   name: string
   email: string
+  email_verified_at: string | null
   is_active: boolean
   role: Role | null
   role_id: number | string
@@ -218,6 +219,25 @@ export type OjtSchedule = {
   start_date: string | null
 }
 
+export type GeofenceExcursionPoint = {
+  id: number
+  geofence_excursion_id: number
+  latitude: number
+  longitude: number
+  recorded_at: string
+}
+
+export type GeofenceExcursion = {
+  id: number
+  student_id: number
+  session_period: string
+  reason: string | null
+  excursion_start: string
+  excursion_end: string | null
+  duration_minutes: number | null
+  points?: GeofenceExcursionPoint[]
+}
+
 export type Student = {
   id: number
   student_number: string
@@ -232,6 +252,7 @@ export type Student = {
   time_logs?: TimeLog[]
   documents?: StudentDocument[]
   evaluations: Evaluation[]
+  geofence_excursions?: GeofenceExcursion[]
 }
 
 export type Supervisor = {

@@ -5,6 +5,7 @@ import type { Setting } from '@/types'
 
 export interface UpdateProfileInput {
     name: string
+    email: string
 }
 
 export interface UpdatePasswordInput {
@@ -98,5 +99,30 @@ export function useUpdateDeanSettings() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['settings'] })
         },
+    })
+}
+
+export function useSendEmailVerification() {
+    const { token } = useAuth()
+    return useMutation({
+        mutationFn: () => apiRequest<{ message: string }>('/auth/email/verification-notification', {
+            method: 'POST',
+            token
+        })
+    })
+}
+
+export function useVerifyEmail() {
+    const { token } = useAuth()
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (code: string) => apiRequest<{ message: string }>('/auth/email/verify', {
+            method: 'POST',
+            body: { code },
+            token
+        }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
+        }
     })
 }

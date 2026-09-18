@@ -9,6 +9,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 
 function formatFileSize(bytes?: number) {
   if (!bytes) return null;
@@ -178,7 +179,7 @@ export function DocumentPreviewModal({
   const [menuOpen, setMenuOpen] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
+  const { user } = useAuth()
   // Reset any leftover local UI state every time the modal opens, so a
   // dropdown left open (or a reject modal left mid-flow) from a previous
   // viewing doesn't carry over to the next document.
@@ -234,7 +235,7 @@ export function DocumentPreviewModal({
   const isApproved = normalizedStatus === "approved";
   const isRejected = normalizedStatus === "rejected";
   const isDecided = isApproved || isRejected;
-
+  const isAdmin = user?.role?.name === "admin" || user?.role?.name === "super_admin"
   const canReview = !!(onApprove || onReject);
 
   return (
@@ -278,7 +279,7 @@ export function DocumentPreviewModal({
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
-                  {canReview && !isDecided && (
+                  {!isAdmin && canReview && !isDecided && (
                     <div className="relative" ref={menuRef}>
                       <button
                         type="button"
@@ -334,9 +335,8 @@ export function DocumentPreviewModal({
 
                   {isDecided && (
                     <span
-                      className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${
-                        isApproved ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
-                      }`}
+                      className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${isApproved ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
+                        }`}
                     >
                       {isApproved ? <Check size={13} /> : <XCircle size={13} />}
                       {isApproved ? "Approved" : "Rejected"}

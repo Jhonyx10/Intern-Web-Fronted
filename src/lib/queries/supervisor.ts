@@ -13,34 +13,34 @@ export type SupervisorIntern = {
     required_hours: number | null
     total_hours: number
     building_id: number | null
-    ojt_evaluations: SupervisorInternEvaluation[] 
+    ojt_evaluations: SupervisorInternEvaluation[]
 }
 
 export interface SupervisorInternEvaluation {
-  id: number;
-  course_id: number;
-  evaluation_template_id: number;
-  student_id: number;
-  evaluator_id: number | null;
-  responses: Record<string, unknown> | [];
-  computed_score: number | null;
-  status: "pending" | "submitted";
-  submitted_at: string | null;
-  created_at: string;
-  updated_at: string;
-  template: {
     id: number;
-    title: string;
-    description: string | null;
-    items: Array<{
-      id: number;
-      sort_order: number;
-      item_type: "rating" | "text" | "textarea";
-      label: string;
-      options: string | null;
-      is_required: boolean;
-    }>;
-  };
+    course_id: number;
+    evaluation_template_id: number;
+    student_id: number;
+    evaluator_id: number | null;
+    responses: Record<string, unknown> | [];
+    computed_score: number | null;
+    status: "pending" | "submitted";
+    submitted_at: string | null;
+    created_at: string;
+    updated_at: string;
+    template: {
+        id: number;
+        title: string;
+        description: string | null;
+        items: Array<{
+            id: number;
+            sort_order: number;
+            item_type: "rating" | "text" | "textarea" | "select" | "radio" | "single_choice" | "checkbox" | "multiple_choice";
+            label: string;
+            options: string | null;
+            is_required: boolean;
+        }>;
+    };
 }
 
 export type SupervisorAttendanceLog = {
@@ -103,7 +103,7 @@ export type BuildingAssigment = {
 
 export type SubmitEvaluationInput = {
     evaluationId: number
-    responses: Record<number, string | number>
+    responses: Record<number, string | number | string[]>
 }
 
 
@@ -241,4 +241,19 @@ export function useSubmitEvaluation() {
     })
 }
 
+export function useRemoveIntern() {
+    const { token } = useAuth()
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ studentId, reason }: { studentId: number; reason: string }) =>
+            apiRequest(`/supervisor/interns/${studentId}/remove`, {
+                method: 'POST',
+                token: token!,
+                body: { reason },
+            }),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: ['supervisor', 'interns'] })
+        },
+    })
+}
 

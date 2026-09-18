@@ -651,7 +651,7 @@ export default function CoursePage() {
     const [deleteMajorTarget, setDeleteMajorTarget] = useState<Major | null>(null)
 
     // Check if the current user can manage courses and majors
-    const canManage = user && isSuperAdmin(user.role)
+    const canManage = !!user && isSuperAdmin(user.role)
 
     const filtered = (courses ?? []).filter((c) =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||

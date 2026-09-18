@@ -15,31 +15,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
-
-export interface EvaluationTemplateItem {
-  id: number;
-  item_type:
-    | "rating"
-    | "single_choice"
-    | "multiple_choice"
-    | "text"
-    | "textarea";
-  label: string;
-  is_required: boolean;
-  options?: Record<string, unknown>;
-}
-
-export interface EvaluationTemplate {
-  id: number;
-  section_id: number;
-  section?: { id: number; name: string };
-  name: string;
-  description?: string;
-  is_active: boolean;
-  items?: EvaluationTemplateItem[];
-  items_count?: number;
-  created_at: string;
-}
+import type { EvaluationTemplateDetail } from "@/lib/queries/evaluation";
 
 export const EvaluationPage: React.FC = () => {
   const navigate = useNavigate();
@@ -51,7 +27,8 @@ export const EvaluationPage: React.FC = () => {
   // Query templates using your TanStack Query setup
   const { data: templates = [], isLoading } = useQuery({
     queryKey: queryKeys.evaluations.templates(),
-    queryFn: () => apiRequest<EvaluationTemplate[]>("/evaluation-templates"),
+    queryFn: () =>
+      apiRequest<EvaluationTemplateDetail[]>("/evaluation-templates"),
   });
 
   const filteredTemplates = templates.filter((template) => {
@@ -62,22 +39,19 @@ export const EvaluationPage: React.FC = () => {
       activeTab === "all"
         ? true
         : activeTab === "active"
-        ? template.is_active
-        : !template.is_active;
+          ? template.is_active
+          : !template.is_active;
 
     if (!matchesTab) return false;
     if (!query) return true;
 
     // Search against template fields safely (name, description, section)
-    const nameMatches = (template.name ?? "").toLowerCase().includes(query);
+    const nameMatches = (template.title ?? "").toLowerCase().includes(query);
     const descriptionMatches = (template.description ?? "")
       .toLowerCase()
       .includes(query);
-    const sectionMatches = (template.section?.name ?? "")
-      .toLowerCase()
-      .includes(query);
 
-    return nameMatches || descriptionMatches || sectionMatches;
+    return nameMatches || descriptionMatches;
   });
 
   const truncateText = (text: string, maxLength: number = 60) => {
@@ -175,11 +149,10 @@ export const EvaluationPage: React.FC = () => {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-medium rounded-md capitalize transition-all ${
-                activeTab === tab
-                  ? "bg-white shadow-sm"
-                  : "text-gray-500 hover:text-gray-900"
-              }`}
+              className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-medium rounded-md capitalize transition-all ${activeTab === tab
+                ? "bg-white shadow-sm"
+                : "text-gray-500 hover:text-gray-900"
+                }`}
               style={
                 activeTab === tab ? { color: "var(--color-accent)" } : undefined
               }
@@ -233,37 +206,7 @@ export const EvaluationPage: React.FC = () => {
               ) : filteredTemplates.length > 0 ? (
                 <AnimatePresence>
                   {filteredTemplates.map(
-                    (template: {
-                      id: React.Key;
-                      title:
-                        | string
-                        | number
-                        | bigint
-                        | boolean
-                        | React.ReactElement<
-                            unknown,
-                            string | React.JSXElementConstructor<any>
-                          >
-                        | Iterable<React.ReactNode>
-                        | React.ReactPortal
-                        | Promise<
-                            | string
-                            | number
-                            | bigint
-                            | boolean
-                            | React.ReactPortal
-                            | React.ReactElement<
-                                unknown,
-                                string | React.JSXElementConstructor<any>
-                              >
-                            | Iterable<React.ReactNode>
-                          >;
-                      description: string;
-                      items_count: any;
-                      items: string | any[];
-                      is_active: any;
-                      created_at: string | number | Date;
-                    }) => (
+                    (template: EvaluationTemplateDetail) => (
                       <motion.tr
                         key={template.id}
                         initial={{ opacity: 0 }}
@@ -283,7 +226,7 @@ export const EvaluationPage: React.FC = () => {
                           )}
                         </td>
                         <td className="px-6 py-4">
-                          {template.items_count ?? template.items?.length ?? 0}{" "}
+                          {template.items?.length ?? 0}{" "}
                           items
                         </td>
                         <td className="px-6 py-4">

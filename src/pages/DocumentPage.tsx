@@ -70,20 +70,6 @@ function formatFileSize(bytes?: number) {
     }`;
 }
 
-function formatDateTime(dateStr?: string | null) {
-  if (!dateStr) return null;
-  try {
-    return new Date(dateStr).toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return dateStr;
-  }
-}
 export default function DocumentPage() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role?.name === "super_admin";
@@ -685,11 +671,11 @@ export default function DocumentPage() {
                               >
                                 {doc.original_filename}
                               </p>
-                              {(doc.file_size || doc.mime_type) && (
+                              {(doc?.file_size || doc.mime_type) && (
                                 <p className="mt-0.5 text-[10px] text-[var(--color-muted)]">
                                   {[
-                                    formatFileSize(doc.file_size),
-                                    doc.mime_type?.split("/")[1]?.toUpperCase(),
+                                    formatFileSize(doc?.file_size ?? undefined),
+                                    doc?.mime_type?.split("/")[1]?.toUpperCase(),
                                   ]
                                     .filter(Boolean)
                                     .join(" · ")}
@@ -727,8 +713,8 @@ export default function DocumentPage() {
                                     id: doc.id,
                                     title: reqTitle,
                                     filename: doc.original_filename,
-                                    fileSize: doc.file_size,
-                                    mimeType: doc.mime_type,
+                                    fileSize: doc.file_size ?? undefined,
+                                    mimeType: doc.mime_type ?? undefined,
                                     notes: doc.notes,
                                     status: doc.review_status,
                                     rejectionReason: doc.rejection_reason,

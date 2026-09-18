@@ -9,6 +9,7 @@ export interface ThemePreset {
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
+  { name: "Navy", hex: "#16305C", hover: "#0F2245", soft: "#dde4ee" },
   { name: "Emerald", hex: "#0b6e4f", hover: "#095c42", soft: "#d8f3e7" },
   { name: "Indigo", hex: "#4f46e5", hover: "#4338ca", soft: "#e0e7ff" },
   { name: "Sky Blue", hex: "#0284c7", hover: "#0369a1", soft: "#e0f2fe" },
@@ -26,7 +27,7 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-  themeColor: "#0b6e4f",
+  themeColor: "#16305C",
   logoUrl: null,
   departmentName: null,
   isLoading: false,
@@ -39,7 +40,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     const root = document.documentElement;
-    const activeColor = settings?.theme_color || "#0b6e4f";
+    const activeColor = settings?.theme_color || "#16305C";
 
     // Check if color matches a known preset
     const matchedPreset = THEME_PRESETS.find(
@@ -59,7 +60,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   return (
     <ThemeContext.Provider
       value={{
-        themeColor: settings?.theme_color || "#0b6e4f",
+        themeColor: settings?.theme_color || "#16305C",
         logoUrl: settings?.logo_url || null,
         departmentName: settings?.department_name || null,
         isLoading,

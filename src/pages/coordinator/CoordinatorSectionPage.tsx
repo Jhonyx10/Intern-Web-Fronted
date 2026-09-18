@@ -89,7 +89,7 @@ const { mutate: bulkAssign, isPending } = useBulkAssignEvaluations(token);
   }
 
   async function handleConfirmSend() {
-    if (!selectedTemplateId || !currentSection) return;
+    if (!selectedTemplateId || !currentSection || !user) return;
 
     bulkAssign(
       {
@@ -98,7 +98,7 @@ const { mutate: bulkAssign, isPending } = useBulkAssignEvaluations(token);
         coordinator_id: user.id, // passing the logged-in coordinator's ID
       },
       {
-        onSuccess: (data) => {
+        onSuccess: () => {
           console.log(`Successfully assigned evaluations to students.`);
           setShowConfirm(false);
         },
@@ -441,7 +441,11 @@ const { mutate: bulkAssign, isPending } = useBulkAssignEvaluations(token);
         isSending={isPending}
         sectionCount={sections.length}
         totalStudentCount={totalStudentsAcrossAllSections}
-        templates={templates}
+        templates={templates.map((t) => ({
+          id: t.id,
+          title: t.title,
+          is_active: Boolean(t.is_active),
+        }))}
         selectedTemplateId={selectedTemplateId}
         onSelectTemplate={setSelectedTemplateId}
         onConfirm={handleConfirmSend}

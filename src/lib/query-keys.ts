@@ -72,4 +72,9 @@ export const queryKeys = {
   all: ['geofence-events'] as const,
   latest: () => ['geofence-events', 'latest'] as const,
 },
+timeLogs: {
+  all: ['time-logs'] as const,
+  list: () => ['time-logs', 'list'] as const,
+  detail: (id: number | string) => ['time-logs', 'detail', id] as const,
+},
 }

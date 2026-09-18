@@ -1,0 +1,7 @@
+﻿
+> frontend@0.0.0 build
+> tsc -b && vite build
+
+src/pages/dean/Evaluation.tsx(229,37): error TS2339: Property 'items_count' does not exist on type 'EvaluationTemplateDetail'.
+src/pages/details/StudentDetailsPage.tsx(855,37): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.

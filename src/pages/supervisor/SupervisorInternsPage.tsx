@@ -1,11 +1,14 @@
-import { AlertCircle, Clock, Building2, ArrowUpRight } from "lucide-react";
+import { AlertCircle, Clock, Building2, ArrowUpRight, UserX } from "lucide-react";
 import {
   useSupervisorInterns,
   useSupervisorProfile,
+  useRemoveIntern,
   type SupervisorIntern,
 } from "@/lib/queries/supervisor";
 import { useAuth } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { RemoveInternModal } from "@/components/modal/RemoveInternModal";
 
 const AVATAR_STYLES = [
   "bg-emerald-50 text-emerald-700",
@@ -35,6 +38,16 @@ export function SupervisorInternsPage() {
   const { user } = useAuth();
   const { data: profile } = useSupervisorProfile();
   const { data: interns, isLoading, error } = useSupervisorInterns();
+  const removeIntern = useRemoveIntern()
+  const [removeTarget, setRemoveTarget] = useState<SupervisorIntern | null>(null)
+
+  const handleConfirmRemove = (reason: string) => {
+    if (!removeTarget) return;
+    removeIntern.mutate(
+      { studentId: removeTarget.id, reason },
+      { onSuccess: () => setRemoveTarget(null) }
+    );
+  };
 
   if (!user || user.role?.name !== "supervisor") {
     return (
@@ -231,24 +244,33 @@ export function SupervisorInternsPage() {
                           )}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <button
-                            onClick={() =>
-                              pending &&
-                              navigate(
-                                `/supervisor/interns/${intern.id}/evaluations/${pending.id}`
-                              )
-                            }
-                            disabled={!pending}
-                            className="relative inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-[var(--color-line)] disabled:hover:text-[var(--color-ink)]"
-                          >
-                            Evaluate
-                            <ArrowUpRight size={13} />
-                            {pending && (
-                              <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white ring-2 ring-white">
-                                !
-                              </span>
-                            )}
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() =>
+                                pending &&
+                                navigate(
+                                  `/supervisor/interns/${intern.id}/evaluations/${pending.id}`
+                                )
+                              }
+                              disabled={!pending}
+                              className="relative inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-[var(--color-line)] disabled:hover:text-[var(--color-ink)]"
+                            >
+                              Evaluate
+                              <ArrowUpRight size={13} />
+                              {pending && (
+                                <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white ring-2 ring-white">
+                                  !
+                                </span>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRemoveTarget(intern)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-xs font-medium text-rose-600 transition-colors hover:border-rose-300 hover:bg-rose-50"
+                            >
+                              <UserX size={13} /> Remove
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -337,6 +359,13 @@ export function SupervisorInternsPage() {
                         </span>
                       )}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setRemoveTarget(intern)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-xs font-medium text-rose-600 transition-colors hover:border-rose-300 hover:bg-rose-50"
+                    >
+                      <UserX size={13} /> Remove
+                    </button>
                   </div>
                 );
               })}
@@ -356,6 +385,17 @@ export function SupervisorInternsPage() {
           </div>
         )}
       </div>
+      <RemoveInternModal
+        isOpen={!!removeTarget}
+        isSubmitting={removeIntern.isPending}
+        internName={
+          removeTarget
+            ? `${removeTarget.first_name} ${removeTarget.last_name}`
+            : ""
+        }
+        onConfirm={handleConfirmRemove}
+        onClose={() => setRemoveTarget(null)}
+      />
     </section>
   );
 }

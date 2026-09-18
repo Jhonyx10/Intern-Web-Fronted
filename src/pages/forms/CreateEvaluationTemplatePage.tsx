@@ -40,32 +40,32 @@ const QUESTION_TYPES: {
   hint: string;
   icon: React.ElementType;
 }[] = [
-  { type: "rating", label: "Rating scale", hint: "1–5 stars", icon: Star },
-  {
-    type: "single_choice",
-    label: "Single choice",
-    hint: "Pick one option",
-    icon: ListChecks,
-  },
-  {
-    type: "multiple_choice",
-    label: "Multiple choice",
-    hint: "Pick several options",
-    icon: CheckSquare,
-  },
-  {
-    type: "text",
-    label: "Short text",
-    hint: "One line answer",
-    icon: TypeIcon,
-  },
-  {
-    type: "textarea",
-    label: "Paragraph",
-    hint: "Longer written answer",
-    icon: AlignLeft,
-  },
-];
+    { type: "rating", label: "Rating scale", hint: "1–5 stars", icon: Star },
+    {
+      type: "single_choice",
+      label: "Single choice",
+      hint: "Pick one option",
+      icon: ListChecks,
+    },
+    {
+      type: "multiple_choice",
+      label: "Multiple choice",
+      hint: "Pick several options",
+      icon: CheckSquare,
+    },
+    {
+      type: "text",
+      label: "Short text",
+      hint: "One line answer",
+      icon: TypeIcon,
+    },
+    {
+      type: "textarea",
+      label: "Paragraph",
+      hint: "Longer written answer",
+      icon: AlignLeft,
+    },
+  ];
 
 const typeMeta = (type: ItemType) =>
   QUESTION_TYPES.find((t) => t.type === type) ?? QUESTION_TYPES[0];
@@ -74,7 +74,7 @@ const defaultOptionsFor = (type: ItemType) => {
   if (type === "rating") return { min: 1, max: 5 };
   if (type === "single_choice" || type === "multiple_choice")
     return { choices: ["Option 1", "Option 2"] };
-  return null;
+  return undefined;
 };
 
 const STEPS = ["Details", "Questions", "Review"] as const;
@@ -274,8 +274,8 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
       options: ["rating", "single_choice", "multiple_choice"].includes(
         item.item_type
       )
-        ? item.options ?? null
-        : null,
+        ? item.options ?? undefined
+        : undefined,
     }));
 
     createMutation.mutate(
@@ -348,40 +348,37 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
               <button
                 onClick={() => goToStep(i as 0 | 1 | 2)}
                 disabled={disabled}
-                className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                  isActiveStep
+                className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-medium transition-colors ${isActiveStep
                     ? "text-white"
                     : isDone
-                    ? "hover:opacity-80"
-                    : "bg-gray-50 text-gray-400"
-                } ${
-                  disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-                }`}
+                      ? "hover:opacity-80"
+                      : "bg-gray-50 text-gray-400"
+                  } ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                  }`}
                 style={
                   isActiveStep
                     ? { backgroundColor: "var(--color-accent)" }
                     : isDone
-                    ? {
+                      ? {
                         backgroundColor: "var(--color-accent-soft)",
                         color: "var(--color-accent)",
                       }
-                    : undefined
+                      : undefined
                 }
               >
                 <span
-                  className={`flex items-center justify-center w-4 h-4 rounded-full text-[10px] shrink-0 ${
-                    isActiveStep
+                  className={`flex items-center justify-center w-4 h-4 rounded-full text-[10px] shrink-0 ${isActiveStep
                       ? "bg-white"
                       : isDone
-                      ? "text-white"
-                      : "bg-gray-200 text-gray-500"
-                  }`}
+                        ? "text-white"
+                        : "bg-gray-200 text-gray-500"
+                    }`}
                   style={
                     isActiveStep
                       ? { color: "var(--color-accent)" }
                       : isDone
-                      ? { backgroundColor: "var(--color-accent)" }
-                      : undefined
+                        ? { backgroundColor: "var(--color-accent)" }
+                        : undefined
                   }
                 >
                   {isDone ? <Check className="w-3 h-3" /> : i + 1}
@@ -649,52 +646,52 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
 
                         {(item.item_type === "single_choice" ||
                           item.item_type === "multiple_choice") && (
-                          <div className="space-y-1.5 bg-gray-50 p-2.5 rounded-lg border">
-                            {(item.options?.choices ?? []).map((choice, ci) => (
-                              <div key={ci} className="flex items-center gap-2">
-                                <span
-                                  className="shrink-0"
-                                  style={{ color: "var(--color-accent)" }}
-                                >
-                                  {item.item_type === "single_choice"
-                                    ? "○"
-                                    : "☐"}
-                                </span>
-                                <input
-                                  type="text"
-                                  value={choice}
-                                  onChange={(e) =>
-                                    handleChoiceChange(
-                                      index,
-                                      ci,
-                                      e.target.value
-                                    )
-                                  }
-                                  className="flex-1 px-2 py-1 text-xs border rounded bg-white min-w-0"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveChoice(index, ci)}
-                                  disabled={
-                                    (item.options?.choices?.length ?? 0) <= 2
-                                  }
-                                  className="p-1 text-gray-300 hover:text-rose-600 disabled:opacity-30 disabled:hover:text-gray-300 shrink-0"
-                                  aria-label="Remove option"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ))}
-                            <button
-                              type="button"
-                              onClick={() => handleAddChoice(index)}
-                              className="inline-flex items-center gap-1 text-xs font-medium hover:opacity-80 pt-0.5"
-                              style={{ color: "var(--color-accent)" }}
-                            >
-                              <Plus className="w-3.5 h-3.5" /> Add option
-                            </button>
-                          </div>
-                        )}
+                            <div className="space-y-1.5 bg-gray-50 p-2.5 rounded-lg border">
+                              {(item.options?.choices ?? []).map((choice, ci) => (
+                                <div key={ci} className="flex items-center gap-2">
+                                  <span
+                                    className="shrink-0"
+                                    style={{ color: "var(--color-accent)" }}
+                                  >
+                                    {item.item_type === "single_choice"
+                                      ? "○"
+                                      : "☐"}
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={choice}
+                                    onChange={(e) =>
+                                      handleChoiceChange(
+                                        index,
+                                        ci,
+                                        e.target.value
+                                      )
+                                    }
+                                    className="flex-1 px-2 py-1 text-xs border rounded bg-white min-w-0"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveChoice(index, ci)}
+                                    disabled={
+                                      (item.options?.choices?.length ?? 0) <= 2
+                                    }
+                                    className="p-1 text-gray-300 hover:text-rose-600 disabled:opacity-30 disabled:hover:text-gray-300 shrink-0"
+                                    aria-label="Remove option"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => handleAddChoice(index)}
+                                className="inline-flex items-center gap-1 text-xs font-medium hover:opacity-80 pt-0.5"
+                                style={{ color: "var(--color-accent)" }}
+                              >
+                                <Plus className="w-3.5 h-3.5" /> Add option
+                              </button>
+                            </div>
+                          )}
 
                         <div className="flex items-center justify-between">
                           <label className="flex items-center gap-2 cursor-pointer">
@@ -787,19 +784,19 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
                     )}
                     {(item.item_type === "single_choice" ||
                       item.item_type === "multiple_choice") && (
-                      <ul className="space-y-1 text-xs text-gray-500">
-                        {(item.options?.choices ?? []).map((choice, ci) => (
-                          <li key={ci} className="flex items-center gap-1.5">
-                            {item.item_type === "single_choice" ? "○" : "☐"}{" "}
-                            {choice}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                        <ul className="space-y-1 text-xs text-gray-500">
+                          {(item.options?.choices ?? []).map((choice, ci) => (
+                            <li key={ci} className="flex items-center gap-1.5">
+                              {item.item_type === "single_choice" ? "○" : "☐"}{" "}
+                              {choice}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     {(item.item_type === "text" ||
                       item.item_type === "textarea") && (
-                      <div className="h-6 bg-gray-50 border rounded-md w-full max-w-sm" />
-                    )}
+                        <div className="h-6 bg-gray-50 border rounded-md w-full max-w-sm" />
+                      )}
                   </div>
                 );
               })}
@@ -830,8 +827,8 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
             className="inline-flex items-center gap-2 px-4 py-2 text-white font-medium text-sm rounded-lg shadow-sm disabled:opacity-50 transition-colors"
             style={{ backgroundColor: "var(--color-accent)" }}
             onMouseEnter={(e) =>
-              (e.currentTarget.style.backgroundColor =
-                "var(--color-accent-hover)")
+            (e.currentTarget.style.backgroundColor =
+              "var(--color-accent-hover)")
             }
             onMouseLeave={(e) =>
               (e.currentTarget.style.backgroundColor = "var(--color-accent)")
@@ -847,8 +844,8 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
             className="inline-flex items-center gap-2 px-4 py-2 text-white font-medium text-sm rounded-lg shadow-sm disabled:opacity-50 transition-colors"
             style={{ backgroundColor: "var(--color-accent)" }}
             onMouseEnter={(e) =>
-              (e.currentTarget.style.backgroundColor =
-                "var(--color-accent-hover)")
+            (e.currentTarget.style.backgroundColor =
+              "var(--color-accent-hover)")
             }
             onMouseLeave={(e) =>
               (e.currentTarget.style.backgroundColor = "var(--color-accent)")

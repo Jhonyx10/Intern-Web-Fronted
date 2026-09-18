@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
     User,
     Lock,
@@ -9,13 +9,11 @@ import {
     Check,
     AlertCircle,
     Loader2,
-    RefreshCw,
-    Shield,
     Eye,
     EyeOff
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
-import { useSettings, useUpdateProfile, useUpdatePassword, useUpdateDeanSettings } from '@/lib/queries/settings'
+import { useSettings, useUpdateProfile, useUpdatePassword, useUpdateDeanSettings, useSendEmailVerification, useVerifyEmail } from '@/lib/queries/settings'
 import { THEME_PRESETS } from '@/context/ThemeContext'
 import OCCLOGO from '@/assets/OCC logo.webp'
 
@@ -27,6 +25,7 @@ export function SettingsPage() {
 
     // Profile state
     const [name, setName] = useState(user?.name || '')
+    const [email, setEmail] = useState(user?.email || '')
     const [profileSuccess, setProfileSuccess] = useState<string | null>(null)
     const [profileError, setProfileError] = useState<string | null>(null)
 
@@ -40,7 +39,7 @@ export function SettingsPage() {
     const [passwordError, setPasswordError] = useState<string | null>(null)
 
     // General / Dean settings state
-    const { data: settings, isLoading: isLoadingSettings } = useSettings()
+    const { data: settings } = useSettings()
     const [departmentName, setDepartmentName] = useState('')
     const [selectedColor, setSelectedColor] = useState('#0b6e4f')
     const [logoFile, setLogoFile] = useState<File | null>(null)
@@ -53,16 +52,25 @@ export function SettingsPage() {
     const updatePasswordMutation = useUpdatePassword()
     const updateDeanSettingsMutation = useUpdateDeanSettings()
 
+    // Email Verification state
+    const sendVerificationMutation = useSendEmailVerification()
+    const verifyEmailMutation = useVerifyEmail()
+    const [verificationCode, setVerificationCode] = useState('')
+    const [isAwaitingCode, setIsAwaitingCode] = useState(false)
+
     useEffect(() => {
         if (user?.name) {
             setName(user.name)
+        }
+        if (user?.email) {
+            setEmail(user.email)
         }
     }, [user])
 
     useEffect(() => {
         if (settings) {
             setDepartmentName(settings.department_name || '')
-            setSelectedColor(settings.theme_color || '#0b6e4f')
+            setSelectedColor(settings.theme_color || "#16305C");
             setLogoPreview(settings.logo_url || null)
         }
     }, [settings])
@@ -77,8 +85,13 @@ export function SettingsPage() {
             return
         }
 
+        if (!email.trim()) {
+            setProfileError('Email cannot be empty.')
+            return
+        }
+
         updateProfileMutation.mutate(
-            { name: name.trim() },
+            { name: name.trim(), email: email.trim() },
             {
                 onSuccess: (data) => {
                     setProfileSuccess(data.message || 'Profile updated successfully.')
@@ -88,6 +101,40 @@ export function SettingsPage() {
                 },
             }
         )
+    }
+
+    const handleSendVerification = () => {
+        setProfileError(null)
+        setProfileSuccess(null)
+        sendVerificationMutation.mutate(undefined, {
+            onSuccess: (data) => {
+                setProfileSuccess(data?.message || 'Verification code sent to your email.')
+                setIsAwaitingCode(true)
+            },
+            onError: (err: any) => {
+                setProfileError(err?.response?.data?.message || 'Failed to send verification code.')
+            }
+        })
+    }
+
+    const handleVerifyCode = () => {
+        setProfileError(null)
+        setProfileSuccess(null)
+        if (verificationCode.length !== 4) {
+            setProfileError('Please enter a valid 4-digit code.')
+            return
+        }
+
+        verifyEmailMutation.mutate(verificationCode, {
+            onSuccess: (data) => {
+                setProfileSuccess(data?.message || 'Email verified successfully.')
+                setIsAwaitingCode(false)
+                setVerificationCode('')
+            },
+            onError: (err: any) => {
+                setProfileError(err?.response?.data?.message || 'Failed to verify code.')
+            }
+        })
     }
 
     const handlePasswordSubmit = (e: React.FormEvent) => {
@@ -258,11 +305,63 @@ export function SettingsPage() {
                                 </label>
                                 <input
                                     type="email"
-                                    disabled
-                                    value={user?.email || ''}
-                                    className="w-full rounded-xl border border-[var(--color-line)] bg-slate-100/80 px-3.5 py-2.5 text-xs text-[var(--color-muted)] font-medium cursor-not-allowed"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    placeholder="Enter your email address"
+                                    className="w-full rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-xs text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)] font-medium"
                                 />
-                                <p className="text-[11px] text-[var(--color-muted)] mt-1">Email cannot be changed directly.</p>
+                                <p className="text-[11px] text-[var(--color-muted)] mt-1">Changing your email will require reverification.</p>
+
+                                <div className="mt-2.5">
+                                    {email !== user?.email ? (
+                                        <p className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 text-[11px] font-bold border border-amber-200">
+                                            <AlertCircle size={12} /> Save profile to verify this new email
+                                        </p>
+                                    ) : user?.email_verified_at ? (
+                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                                            <Check size={12} /> Email Verified
+                                        </div>
+                                    ) : (
+                                        !isAwaitingCode ? (
+                                            <button
+                                                type="button"
+                                                disabled={sendVerificationMutation.isPending}
+                                                onClick={handleSendVerification}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 text-[11px] font-bold border border-orange-200 transition disabled:opacity-50"
+                                            >
+                                                {sendVerificationMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <AlertCircle size={12} />}
+                                                {sendVerificationMutation.isPending ? 'Sending...' : 'Verify your email'}
+                                            </button>
+                                        ) : (
+                                            <div className="flex items-center gap-2 mt-2">
+                                                <input
+                                                    type="text"
+                                                    disabled={verifyEmailMutation.isPending}
+                                                    value={verificationCode}
+                                                    onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                                    placeholder="4-Digit Code"
+                                                    className="w-24 rounded-lg border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs text-center font-bold text-[var(--color-ink)] focus:border-[var(--color-accent)] outline-none disabled:opacity-50"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={verifyEmailMutation.isPending || verificationCode.length !== 4}
+                                                    onClick={handleVerifyCode}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--color-accent)] text-white text-[11px] font-bold shadow-sm hover:bg-[var(--color-accent-hover)] transition disabled:opacity-50"
+                                                >
+                                                    {verifyEmailMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                                                    Confirm
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsAwaitingCode(false)}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-[11px] font-bold transition"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        )
+                                    )}
+                                </div>
                             </div>
 
                             <div>

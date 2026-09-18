@@ -7,6 +7,7 @@ export interface DocumentType {
   code: string
   name: string
   is_required: boolean
+  recurrence: 'none' | 'daily' | 'weekly'
 }
 
 export interface DocumentRequirement {
@@ -52,7 +53,6 @@ export function useCreateDocumentRequirement() {
       document_type_id: number
       title: string
       description?: string
-      deadline_at: string
       accepted_file_types?: string
     }) =>
       apiRequest<DocumentRequirement>('/document-requirements', {
@@ -69,7 +69,7 @@ export function useCreateDocumentType() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (payload: { code: string; name: string; is_required?: boolean }) =>
+    mutationFn: (payload: { code: string; name: string; is_required?: boolean, recurrence?: 'none' | 'daily' | 'weekly' }) =>
       apiRequest<DocumentType>('/document-types', {
         method: 'POST',
         body: payload,

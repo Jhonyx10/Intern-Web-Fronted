@@ -19,6 +19,7 @@ import {
   FileCheck,
   ClipboardCheck,
   Star,
+  Map,
 } from "lucide-react";
 import { useStudent } from "@/lib/queries/students";
 import type {
@@ -26,10 +27,12 @@ import type {
   TimeLog,
   StudentDocument,
   ItemType,
+  GeofenceExcursion,
 } from "@/types";
 import { DocumentPreviewModal } from "@/components/modal/DocumentPreviewModal";
+import { TimeLogDetails } from "@/components/modal/TimeLogDetails";
+import { GeofenceExcursionDetailsModal } from "@/components/modal/GeofenceExcursionDetailsModal";
 import { useUpdateDocumentStatus } from "@/lib/queries/documents";
-import { useAuth } from "@/lib/auth";
 // --- Shapes matching the actual /students/{id} payload ---
 // Note: `options` comes back as a raw JSON string, not a parsed object —
 // same field name as EvaluationItemOption in your types.ts, different
@@ -148,14 +151,11 @@ function formatDateReadable(dateStr?: string | null): string {
 }
 
 export function StudentDetailsPage() {
-  const { user } = useAuth();
-  const isSuperAdmin = user?.role?.name === "super_admin";
-  const isDean = user?.role?.name === "dean";
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: student, isLoading, isError } = useStudent(id);
   const [activeTab, setActiveTab] = useState<
-    "overview" | "company" | "timelogs" | "reports" | "evaluations"
+    "overview" | "company" | "timelogs" | "reports" | "evaluations" | "geo_excursions"
   >("overview");
   const updateStatus = useUpdateDocumentStatus();
   const [previewDoc, setPreviewDoc] = useState<{
@@ -170,6 +170,10 @@ export function StudentDetailsPage() {
     reviewedAt?: string | null;
     reviewedByName?: string | null;
   } | null>(null);
+  const [viewingTimeLogId, setViewingTimeLogId] = useState<number | null>(
+    null
+  );
+  const [viewingExcursion, setViewingExcursion] = useState<GeofenceExcursion | null>(null);
 
   const fullName = useMemo(() => {
     if (!student) return "";
@@ -199,6 +203,7 @@ export function StudentDetailsPage() {
   const timeLogs: TimeLog[] = student?.time_logs ?? [];
   const documents: StudentDocument[] = student?.documents ?? [];
   const evaluations: OjtEvaluation[] = (student as any)?.ojt_evaluations ?? [];
+  const excursions: GeofenceExcursion[] = student?.geofence_excursions ?? [];
   const [viewingEvaluation, setViewingEvaluation] =
     useState<OjtEvaluation | null>(null);
 
@@ -369,44 +374,48 @@ export function StudentDetailsPage() {
       <div className="flex border-b border-[var(--color-line)] gap-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab("overview")}
-          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition ${
-            activeTab === "overview"
-              ? "border-[var(--color-accent)] text-[var(--color-accent)]"
-              : "border-transparent text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-          }`}
+          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition whitespace-nowrap ${activeTab === "overview"
+            ? "border-[var(--color-accent)] text-[var(--color-accent)]"
+            : "border-transparent text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+            }`}
         >
-          <Building2 size={16} /> Company &amp; Schedule
+          <Building2 size={16} /> Placement
         </button>
         <button
           onClick={() => setActiveTab("timelogs")}
-          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition ${
-            activeTab === "timelogs"
-              ? "border-[var(--color-accent)] text-[var(--color-accent)]"
-              : "border-transparent text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-          }`}
+          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition whitespace-nowrap ${activeTab === "timelogs"
+            ? "border-[var(--color-accent)] text-[var(--color-accent)]"
+            : "border-transparent text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+            }`}
         >
           <Clock size={16} /> Time Logs ({timeLogs.length})
         </button>
         <button
           onClick={() => setActiveTab("reports")}
-          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition ${
-            activeTab === "reports"
-              ? "border-[var(--color-accent)] text-[var(--color-accent)]"
-              : "border-transparent text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-          }`}
+          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition whitespace-nowrap ${activeTab === "reports"
+            ? "border-[var(--color-accent)] text-[var(--color-accent)]"
+            : "border-transparent text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+            }`}
         >
-          <FileText size={16} /> Weekly Reports &amp; Documents (
-          {documents.length})
+          <FileText size={16} /> Documents ({documents.length})
         </button>
         <button
           onClick={() => setActiveTab("evaluations")}
-          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition ${
-            activeTab === "evaluations"
-              ? "border-[var(--color-accent)] text-[var(--color-accent)]"
-              : "border-transparent text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-          }`}
+          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition whitespace-nowrap ${activeTab === "evaluations"
+            ? "border-[var(--color-accent)] text-[var(--color-accent)]"
+            : "border-transparent text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+            }`}
         >
           <ClipboardCheck size={16} /> Evaluations ({evaluations.length})
+        </button>
+        <button
+          onClick={() => setActiveTab("geo_excursions")}
+          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-bold transition whitespace-nowrap ${activeTab === "geo_excursions"
+            ? "border-[var(--color-accent)] text-[var(--color-accent)]"
+            : "border-transparent text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+            }`}
+        >
+          <Map size={16} /> Excursions ({excursions.length})
         </button>
       </div>
 
@@ -710,7 +719,7 @@ export function StudentDetailsPage() {
                             <td className="px-4 py-3 font-bold text-indigo-600">
                               {durationHours}{" "}
                               {typeof durationHours === "number" ||
-                              !isNaN(Number(durationHours))
+                                !isNaN(Number(durationHours))
                                 ? "hrs"
                                 : ""}
                             </td>
@@ -719,10 +728,14 @@ export function StudentDetailsPage() {
                                 {log.verification_method || "Facial Match"}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-[var(--color-muted)] max-w-xs truncate">
-                              <a type="button">
-                                View
-                              </a>
+                            <td className="px-4 py-3">
+                              <button
+                                type="button"
+                                onClick={() => setViewingTimeLogId(log.id)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-sky-600 shadow-sm hover:bg-sky-50 transition whitespace-nowrap"
+                              >
+                                <ExternalLink size={12} /> View
+                              </button>
                             </td>
                           </tr>
                         );
@@ -739,6 +752,107 @@ export function StudentDetailsPage() {
                 </p>
                 <p className="text-xs text-[var(--color-muted)] mt-1">
                   This student has not submitted any time logs yet.
+                </p>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* TAB: Geofence Excursions */}
+        {activeTab === "geo_excursions" && (
+          <motion.div
+            key="tab-excursions"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-[var(--color-ink)]">
+                Geofence Excursions
+              </h3>
+              <span className="text-xs text-[var(--color-muted)] font-medium">
+                {excursions.length} recorded incident{excursions.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+
+            {excursions.length > 0 ? (
+              <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="border-b border-[var(--color-line)] bg-slate-50/80 font-semibold text-[var(--color-muted)] uppercase tracking-wider">
+                      <tr>
+                        <th className="px-4 py-3">Session</th>
+                        <th className="px-4 py-3">Excursion Start</th>
+                        <th className="px-4 py-3">Excursion End</th>
+                        <th className="px-4 py-3">Duration</th>
+                        <th className="px-4 py-3">Reason</th>
+                        <th className="px-4 py-3">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--color-line)]">
+                      {excursions.map((exc) => (
+                        <tr
+                          key={exc.id}
+                          className="hover:bg-slate-50/60 transition"
+                        >
+                          <td className="px-4 py-3 font-semibold text-[var(--color-ink)] capitalize">
+                            {exc.session_period || "Reg."}
+                          </td>
+                          <td className="px-4 py-3 text-[var(--color-muted)]">
+                            {new Date(exc.excursion_start).toLocaleString([], {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </td>
+                          <td className="px-4 py-3 text-[var(--color-muted)]">
+                            {exc.excursion_end ? (
+                              new Date(exc.excursion_end).toLocaleString([], {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            ) : (
+                              <span className="font-semibold text-amber-600">
+                                Active Incident
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-rose-600">
+                            {exc.duration_minutes ? `${exc.duration_minutes} mins` : '—'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-[var(--color-muted)] italic max-w-[150px] truncate block">
+                              {exc.reason || 'No reason specified'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => setViewingExcursion(exc)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--color-accent)] shadow-sm hover:bg-slate-50 transition whitespace-nowrap"
+                            >
+                              <Map size={12} /> View Map
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-[var(--color-line)] bg-white p-12 text-center shadow-[var(--shadow-soft)]">
+                <Map className="mx-auto text-slate-300 mb-2" size={32} />
+                <p className="text-sm font-medium text-[var(--color-ink)]">
+                  Clean Record (No Excursions)
+                </p>
+                <p className="text-xs text-[var(--color-muted)] mt-1">
+                  This student has never exited the geofence perimeter while timed in.
                 </p>
               </div>
             )}
@@ -785,8 +899,8 @@ export function StudentDetailsPage() {
                           doc.review_status === "approved"
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                             : doc.review_status === "rejected"
-                            ? "bg-rose-50 text-rose-700 border-rose-200"
-                            : "bg-amber-50 text-amber-700 border-amber-200";
+                              ? "bg-rose-50 text-rose-700 border-rose-200"
+                              : "bg-amber-50 text-amber-700 border-amber-200";
 
                         const remark =
                           doc.review_status === "rejected"
@@ -852,10 +966,10 @@ export function StudentDetailsPage() {
                                 onClick={() =>
                                   setPreviewDoc({
                                     id: doc.id,
-                                    title: doc.document_requirement.title,
-                                    filename: doc.original_filename,
-                                    fileSize: doc.file_size,
-                                    mimeType: doc.mime_type,
+                                    title: doc?.document_requirement?.title ?? doc.original_filename ?? "Document",
+                                    filename: doc?.original_filename,
+                                    fileSize: doc?.file_size ?? undefined,
+                                    mimeType: doc?.mime_type ?? undefined,
                                     notes: doc.notes,
                                     status: doc.review_status,
                                     rejectionReason: doc.rejection_reason,
@@ -919,11 +1033,11 @@ export function StudentDetailsPage() {
                           <p className="text-[11px] text-[var(--color-muted)]">
                             {isSubmitted
                               ? `Submitted ${formatDateReadable(
-                                  evaluation.submitted_at
-                                )}`
+                                evaluation.submitted_at
+                              )}`
                               : `Sent ${formatDateReadable(
-                                  evaluation.created_at
-                                )} · awaiting response`}
+                                evaluation.created_at
+                              )} · awaiting response`}
                           </p>
                         </div>
                       </div>
@@ -939,11 +1053,10 @@ export function StudentDetailsPage() {
                           </span>
                         )}
                         <span
-                          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                            isSubmitted
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : "border-amber-200 bg-amber-50 text-amber-700"
-                          }`}
+                          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase ${isSubmitted
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border-amber-200 bg-amber-50 text-amber-700"
+                            }`}
                         >
                           {evaluation.status}
                         </span>
@@ -1036,11 +1149,10 @@ export function StudentDetailsPage() {
                 <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-[var(--color-line)] pt-3 text-xs text-[var(--color-muted)]">
                   <span className="flex items-center gap-1.5">
                     <span
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        viewingEvaluation.status === "submitted"
-                          ? "bg-emerald-600"
-                          : "bg-amber-500"
-                      }`}
+                      className={`h-1.5 w-1.5 rounded-full ${viewingEvaluation.status === "submitted"
+                        ? "bg-emerald-600"
+                        : "bg-amber-500"
+                        }`}
                     />
                     <span className="font-medium text-[var(--color-ink)]">
                       {viewingEvaluation.status === "submitted"
@@ -1063,8 +1175,8 @@ export function StudentDetailsPage() {
                     {viewingEvaluation.status === "submitted"
                       ? formatDateReadable(viewingEvaluation.submitted_at)
                       : `Sent ${formatDateReadable(
-                          viewingEvaluation.created_at
-                        )}`}
+                        viewingEvaluation.created_at
+                      )}`}
                   </span>
                 </div>
               </div>
@@ -1082,11 +1194,10 @@ export function StudentDetailsPage() {
                     return (
                       <div
                         key={item.id}
-                        className={`flex gap-4 px-7 py-5 ${
-                          index !== 0
-                            ? "border-t border-[var(--color-line)]"
-                            : ""
-                        }`}
+                        className={`flex gap-4 px-7 py-5 ${index !== 0
+                          ? "border-t border-[var(--color-line)]"
+                          : ""
+                          }`}
                       >
                         <span
                           className="mt-0.5 shrink-0 text-xs text-[var(--color-accent)]"
@@ -1117,11 +1228,10 @@ export function StudentDetailsPage() {
                                       return (
                                         <span
                                           key={i}
-                                          className={`flex h-7 w-7 items-center justify-center rounded border text-xs font-medium ${
-                                            isFilled
-                                              ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
-                                              : "border-[var(--color-line)] text-[var(--color-muted)]"
-                                          }`}
+                                          className={`flex h-7 w-7 items-center justify-center rounded border text-xs font-medium ${isFilled
+                                            ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                                            : "border-[var(--color-line)] text-[var(--color-muted)]"
+                                            }`}
                                         >
                                           {boxValue}
                                         </span>
@@ -1201,6 +1311,18 @@ export function StudentDetailsPage() {
           />
         )}
       </AnimatePresence>
+
+      <TimeLogDetails
+        timeLogId={viewingTimeLogId}
+        visible={viewingTimeLogId !== null}
+        onClose={() => setViewingTimeLogId(null)}
+      />
+
+      <GeofenceExcursionDetailsModal
+        isOpen={viewingExcursion !== null}
+        excursion={viewingExcursion}
+        onClose={() => setViewingExcursion(null)}
+      />
     </section>
   );
 }

@@ -186,7 +186,7 @@ export default function CourseDetailsPage() {
       </motion.div>
 
       {/* Majors */}
-      {course.majors.length > 0 && (
+      {course.majors && course.majors.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}

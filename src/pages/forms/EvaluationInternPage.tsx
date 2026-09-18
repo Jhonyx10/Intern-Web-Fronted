@@ -25,7 +25,7 @@ import {
  *   <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet" />
  */
 
-type ResponseValue = string | number;
+type ResponseValue = string | number | string[];
 type AnswersByEvaluation = Record<number, Record<number, ResponseValue>>;
 
 const DISALLOWED_RATING_VALUE = 3;
@@ -34,10 +34,19 @@ const MIN_TEXTAREA_LENGTH = 20;
 
 type EvaluationItem = SupervisorInternEvaluation["template"]["items"][number];
 
+/** multiple_choice answers are stored as a real array (backend validates with the 'array' rule). */
+function multiChoiceSelections(value: ResponseValue | undefined): string[] {
+  return Array.isArray(value) ? value : [];
+}
+
 function isItemValid(
   item: EvaluationItem,
   value: ResponseValue | undefined
 ): boolean {
+  if (item.item_type === "multiple_choice") {
+    return multiChoiceSelections(value).length > 0;
+  }
+
   if (value === undefined || value === "") return false;
 
   if (item.item_type === "rating") {
@@ -53,6 +62,10 @@ function isItemValid(
     return (
       typeof value === "string" && value.trim().length >= MIN_TEXTAREA_LENGTH
     );
+  }
+
+  if (item.item_type === "single_choice") {
+    return typeof value === "string" && value.length > 0;
   }
 
   return true;
@@ -281,7 +294,7 @@ export function EvaluateInternPage() {
             const options = item.options ? JSON.parse(item.options) : null;
             const value = answers[item.id];
             const textLength =
-              typeof value === "string" ? value.trim().length : 0;
+              typeof value === "string" ? value.trim().length : 0; // arrays (multiple_choice) don't use textLength
 
             return (
               <div
@@ -350,6 +363,52 @@ export function EvaluateInternPage() {
                           A neutral middle rating is not offered; choose the
                           side that best reflects performance.
                         </p>
+                      </div>
+                    )}
+
+                    {item.item_type === "single_choice" && (
+                      <div className="mt-3 flex flex-col gap-2">
+                        {((options?.choices as string[]) ?? []).map((opt) => (
+                          <label
+                            key={opt}
+                            className="flex items-center gap-2 text-sm text-[var(--color-ink)]"
+                          >
+                            <input
+                              type="radio"
+                              name={`item-${item.id}`}
+                              checked={value === opt}
+                              onChange={() => setAnswer(item.id, opt)}
+                            />
+                            {opt}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+
+                    {item.item_type === "multiple_choice" && (
+                      <div className="mt-3 flex flex-col gap-2">
+                        {((options?.choices as string[]) ?? []).map((opt) => {
+                          const selected = multiChoiceSelections(value);
+                          const isChecked = selected.includes(opt);
+                          return (
+                            <label
+                              key={opt}
+                              className="flex items-center gap-2 text-sm text-[var(--color-ink)]"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  const next = isChecked
+                                    ? selected.filter((o) => o !== opt)
+                                    : [...selected, opt];
+                                  setAnswer(item.id, next);
+                                }}
+                              />
+                              {opt}
+                            </label>
+                          );
+                        })}
                       </div>
                     )}
 
