@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiRequest } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
 import { queryKeys } from '@/lib/query-keys'
 import type { Student } from '@/types'
 
@@ -32,8 +33,19 @@ export type ImportStudentsResult = {
   failures: ImportFailure[]
 }
 
-export async function fetchStudents(token: string, page: number = 1): Promise<PaginatedStudents> {
-  const response = await apiRequest<{ data: PaginatedStudents }>(`/students?page=${page}`, { token })
+export async function fetchStudents(
+  token: string,
+  page: number = 1,
+  filters?: { unassigned?: boolean; perPage?: number },
+): Promise<PaginatedStudents> {
+  const params = new URLSearchParams({ page: String(page) })
+  if (filters?.unassigned) {
+    params.set('unassigned', '1')
+  }
+  if (filters?.perPage != null) {
+    params.set('per_page', String(filters.perPage))
+  }
+  const response = await apiRequest<{ data: PaginatedStudents }>(`/students?${params}`, { token })
   return response.data
 }
 
@@ -46,13 +58,17 @@ export async function createStudent(token: string, body: CreateStudentInput): Pr
   return response.data
 }
 
-export function useStudents(page: number = 1) {
+export function useStudents(
+  page: number = 1,
+  filters?: { unassigned?: boolean; perPage?: number },
+  options?: { enabled?: boolean },
+) {
   const { token } = useAuth()
 
   return useQuery({
-    queryKey: queryKeys.students.list(page),
-    queryFn: () => fetchStudents(token!, page),
-    enabled: Boolean(token),
+    queryKey: queryKeys.students.list(page, filters),
+    queryFn: () => fetchStudents(token!, page, filters),
+    enabled: Boolean(token) && (options?.enabled ?? true),
   })
 }
 
@@ -80,7 +96,9 @@ export function useCreateStudent() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.students.all })
+      toastMutationSuccess('Student created')
     },
+    onError: (error) => toastMutationError(error, 'Failed to create student'),
   })
 }
 
@@ -115,7 +133,9 @@ export function useUpdateStudent() {
         }
       })
       void queryClient.invalidateQueries({ queryKey: queryKeys.students.all })
+      toastMutationSuccess('Student updated')
     },
+    onError: (error) => toastMutationError(error, 'Failed to update student'),
   })
 }
 
@@ -147,7 +167,9 @@ export function useDeleteStudent() {
         }
       })
       void queryClient.invalidateQueries({ queryKey: queryKeys.students.all })
+      toastMutationSuccess('Student deleted')
     },
+    onError: (error) => toastMutationError(error, 'Failed to delete student'),
   })
 }
 

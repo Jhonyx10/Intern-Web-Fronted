@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api'; // Adjust based on your folder structure
+import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast';
 import { queryKeys } from '@/lib/query-keys';
 import type { EvaluationNotificationPayload } from '@/lib/echo';
 
@@ -28,6 +29,8 @@ export const useClearNotificationsMutation = (token?: string | null) => {
         []
       );
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+      toastMutationSuccess('Notifications cleared');
     },
+    onError: (error) => toastMutationError(error, 'Failed to clear notifications'),
   });
 };

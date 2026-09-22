@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiRequest } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
 import { queryKeys } from '@/lib/query-keys'
 import type { User } from '@/types'
 
@@ -41,7 +42,9 @@ export function useCreateUser() {
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.users.all })
+            toastMutationSuccess('User created')
         },
+        onError: (error) => toastMutationError(error, 'Failed to create user'),
     })
 }
 
@@ -59,7 +62,9 @@ export function useUpdateUser() {
         onSuccess: (_, { id }) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.users.all })
             queryClient.invalidateQueries({ queryKey: queryKeys.users.detail(id) })
+            toastMutationSuccess('User updated')
         },
+        onError: (error) => toastMutationError(error, 'Failed to update user'),
     })
 }
 
@@ -75,6 +80,8 @@ export function useDeleteUser() {
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.users.all })
+            toastMutationSuccess('User deleted')
         },
+        onError: (error) => toastMutationError(error, 'Failed to delete user'),
     })
 }

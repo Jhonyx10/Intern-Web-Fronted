@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { queryKeys } from '@/lib/query-keys'
 import { apiRequest } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
 import AddSectionModal from '@/components/modal/AddSectionModal'
 import AddSchoolYearModal from '@/components/modal/AddSchoolYearModal'
 
@@ -94,10 +95,10 @@ const SchoolYearSectionPage = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all })
             setAddSyOpen(false)
+            toastMutationSuccess('School year created')
         },
         onError: (err) => {
-            console.error(err)
-            alert('Failed to create school year.')
+            toastMutationError(err, 'Failed to create school year')
         },
     })
 
@@ -107,10 +108,10 @@ const SchoolYearSectionPage = () => {
             apiRequest(`/school-years/${id}`, { method: 'DELETE', token }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all })
+            toastMutationSuccess('School year deleted')
         },
         onError: (err) => {
-            console.error(err)
-            alert(err instanceof Error ? err.message : 'Failed to delete school year.')
+            toastMutationError(err, 'Failed to delete school year')
         },
     })
 
@@ -132,10 +133,10 @@ const SchoolYearSectionPage = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all })
             setAddSectionTarget(null)
+            toastMutationSuccess('Section added')
         },
         onError: (err) => {
-            console.error(err)
-            alert(err instanceof Error ? err.message : 'Failed to add section.')
+            toastMutationError(err, 'Failed to add section')
         },
     })
 
@@ -145,10 +146,10 @@ const SchoolYearSectionPage = () => {
             apiRequest(`/school-years/${syId}/sections/${sectionId}`, { method: 'DELETE', token }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all })
+            toastMutationSuccess('Section deleted')
         },
         onError: (err) => {
-            console.error(err)
-            alert(err instanceof Error ? err.message : 'Failed to delete section.')
+            toastMutationError(err, 'Failed to delete section')
         },
     })
 

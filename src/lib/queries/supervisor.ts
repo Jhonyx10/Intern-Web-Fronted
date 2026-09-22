@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/lib/auth'
 import { apiRequest } from '@/lib/api'
+import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
 
 export type SupervisorIntern = {
     id: number
@@ -159,7 +160,9 @@ export function useCreateSupervisorSchedule() {
             }),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ['supervisor', 'schedules'] })
+            toastMutationSuccess('Schedule created')
         },
+        onError: (error) => toastMutationError(error, 'Failed to create schedule'),
     })
 }
 
@@ -175,7 +178,9 @@ export function useUpdateSupervisorSchedule() {
             }),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ['supervisor', 'schedules'] })
+            toastMutationSuccess('Schedule updated')
         },
+        onError: (error) => toastMutationError(error, 'Failed to update schedule'),
     })
 }
 
@@ -190,7 +195,9 @@ export function useDeleteSupervisorSchedule() {
             }),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ['supervisor', 'schedules'] })
+            toastMutationSuccess('Schedule deleted')
         },
+        onError: (error) => toastMutationError(error, 'Failed to delete schedule'),
     })
 }
 
@@ -221,7 +228,9 @@ export function useAssignInternsToBuilding() {
             }),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ['supervisor', 'interns'] })
+            toastMutationSuccess('Interns assigned')
         },
+        onError: (error) => toastMutationError(error, 'Failed to assign interns'),
     })
 }
 
@@ -237,7 +246,9 @@ export function useSubmitEvaluation() {
             }),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ['supervisor', 'interns'] })
+            toastMutationSuccess('Evaluation submitted')
         },
+        onError: (error) => toastMutationError(error, 'Failed to submit evaluation'),
     })
 }
 
@@ -253,7 +264,9 @@ export function useRemoveIntern() {
             }),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ['supervisor', 'interns'] })
+            toastMutationSuccess('Intern removed')
         },
+        onError: (error) => toastMutationError(error, 'Failed to remove intern'),
     })
 }
 

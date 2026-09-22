@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiRequest } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
 import { queryKeys } from '@/lib/query-keys'
 import type { Company } from '@/types'
 
@@ -97,7 +98,9 @@ export function useCreateCompany() {
         return [...withoutDuplicate, company].sort((a, b) => a.name.localeCompare(b.name))
       })
       void queryClient.invalidateQueries({ queryKey: queryKeys.companies.all })
+      toastMutationSuccess('Company created')
     },
+    onError: (error) => toastMutationError(error, 'Failed to create company'),
   })
 }
 
@@ -116,7 +119,9 @@ export function useApproveCompany() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.companies.all })
       void queryClient.invalidateQueries({ queryKey: queryKeys.companyRequests.all })
+      toastMutationSuccess('Company approved')
     },
+    onError: (error) => toastMutationError(error, 'Failed to approve company'),
   })
 }
 
@@ -135,7 +140,9 @@ export function useRejectCompany() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.companies.all })
       void queryClient.invalidateQueries({ queryKey: queryKeys.companyRequests.all })
+      toastMutationSuccess('Company rejected')
     },
+    onError: (error) => toastMutationError(error, 'Failed to reject company'),
   })
 }
 
@@ -144,17 +151,20 @@ export function useAssignStudentToCompany() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ companyId, studentId }: { companyId: number | string; studentId: number }) => {
+    mutationFn: ({ companyId, studentIds }: { companyId: number | string; studentIds: number[] }) => {
       if (!token) throw new Error('Not authenticated.')
       return apiRequest(`/companies/${companyId}/assign-student`, {
         method: 'POST',
         token,
-        body: { student_id: studentId },
+        body: { student_ids: studentIds },
       })
     },
     onSuccess: (_, { companyId }) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.companies.detail(Number(companyId)) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.students.all })
+      toastMutationSuccess('Student(s) assigned')
     },
+    onError: (error) => toastMutationError(error, 'Failed to assign student(s)'),
   })
 }
 
@@ -180,6 +190,8 @@ export function useCreateSupervisor() {
     },
     onSuccess: (_, { companyId }) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.companies.detail(Number(companyId)) })
+      toastMutationSuccess('Supervisor added')
     },
+    onError: (error) => toastMutationError(error, 'Failed to add supervisor'),
   })
 }

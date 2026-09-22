@@ -288,27 +288,7 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
       },
       {
         onSuccess: () => {
-          addToast(
-            "success",
-            "Template created",
-            "Evaluation template created successfully!"
-          );
           navigate("/evaluation");
-        },
-        onError: (err: any) => {
-          const validationErrors = err?.response?.data?.errors;
-          if (validationErrors) {
-            const firstErrorMessage = Object.values(
-              validationErrors
-            ).flat()[0] as string;
-            addToast("error", "Validation failed", firstErrorMessage);
-          } else {
-            addToast(
-              "error",
-              "Failed to save",
-              err?.response?.data?.message || err.message
-            );
-          }
         },
       }
     );

@@ -10,7 +10,8 @@ export const queryKeys = {
   },
   students: {
     all: ['students'] as const,
-    list: (page?: number) => ['students', 'list', page ?? 1] as const,
+    list: (page?: number, filters?: { unassigned?: boolean; perPage?: number }) =>
+      ['students', 'list', page ?? 1, filters?.unassigned ?? false, filters?.perPage ?? null] as const,
     detail: (id: number | string) => ['students', 'detail', id] as const,
   },
   courses: {

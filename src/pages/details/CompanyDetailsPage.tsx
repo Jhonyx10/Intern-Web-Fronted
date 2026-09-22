@@ -408,9 +408,8 @@ export function CompanyDetailsPage() {
                         open={isAssignModalOpen}
                         onClose={() => setIsAssignModalOpen(false)}
                         isLoading={isAssigning}
-                        assignedStudentIds={company.students?.map(s => s.id) ?? []}
-                        onAssign={(studentId) => {
-                            assignStudent({ companyId: company.id, studentId }, {
+                        onAssign={(studentIds) => {
+                            assignStudent({ companyId: company.id, studentIds }, {
                                 onSuccess: () => setIsAssignModalOpen(false),
                             })
                         }}

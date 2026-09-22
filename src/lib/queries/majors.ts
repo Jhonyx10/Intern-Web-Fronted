@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiRequest } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
 import { queryKeys } from '@/lib/query-keys'
 import type { Major } from '@/types'
 
@@ -45,7 +46,9 @@ export const useCreateMajor = () => {
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.majors.all })
+            toastMutationSuccess('Major created')
         },
+        onError: (error) => toastMutationError(error, 'Failed to create major'),
     })
 }
 
@@ -62,7 +65,9 @@ export const useUpdateMajor = () => {
         onSuccess: (_, { id }) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.majors.all })
             queryClient.invalidateQueries({ queryKey: queryKeys.majors.detail(id) })
+            toastMutationSuccess('Major updated')
         },
+        onError: (error) => toastMutationError(error, 'Failed to update major'),
     })
 }
 
@@ -77,6 +82,8 @@ export const useDeleteMajor = () => {
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.majors.all })
+            toastMutationSuccess('Major deleted')
         },
+        onError: (error) => toastMutationError(error, 'Failed to delete major'),
     })
 }

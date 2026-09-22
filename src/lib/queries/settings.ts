@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiRequest } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
 import type { Setting } from '@/types'
 
 export interface UpdateProfileInput {
@@ -47,7 +48,9 @@ export function useUpdateProfile() {
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
+            toastMutationSuccess('Profile updated')
         },
+        onError: (error) => toastMutationError(error, 'Failed to update profile'),
     })
 }
 
@@ -61,6 +64,10 @@ export function useUpdatePassword() {
                 body: input,
                 token,
             }),
+        onSuccess: () => {
+            toastMutationSuccess('Password updated')
+        },
+        onError: (error) => toastMutationError(error, 'Failed to update password'),
     })
 }
 
@@ -98,7 +105,9 @@ export function useUpdateDeanSettings() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['settings'] })
+            toastMutationSuccess('Settings updated')
         },
+        onError: (error) => toastMutationError(error, 'Failed to update settings'),
     })
 }
 
@@ -108,7 +117,11 @@ export function useSendEmailVerification() {
         mutationFn: () => apiRequest<{ message: string }>('/auth/email/verification-notification', {
             method: 'POST',
             token
-        })
+        }),
+        onSuccess: () => {
+            toastMutationSuccess('Verification email sent')
+        },
+        onError: (error) => toastMutationError(error, 'Failed to send verification email'),
     })
 }
 
@@ -123,6 +136,8 @@ export function useVerifyEmail() {
         }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
-        }
+            toastMutationSuccess('Email verified')
+        },
+        onError: (error) => toastMutationError(error, 'Failed to verify email'),
     })
 }

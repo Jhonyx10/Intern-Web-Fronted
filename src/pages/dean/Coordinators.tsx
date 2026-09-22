@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/query-keys'
 import { apiRequest } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
 import { AddCoordinatorModal } from '@/components/modal/AddCoordinatorModal'
 
 type CoordinatorStatus = 'active' | 'invited'
@@ -66,10 +67,10 @@ const CoordinatorsPage = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.coordinators.all })
             setAddOpen(false)
+            toastMutationSuccess('Coordinator added')
         },
         onError: (error) => {
-            console.error('Failed to add coordinator:', error)
-            alert('Failed to add coordinator. Please try again.')
+            toastMutationError(error, 'Failed to add coordinator')
         },
     })
 

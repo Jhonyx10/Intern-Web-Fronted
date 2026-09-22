@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/lib/auth'
 import { apiRequest } from '@/lib/api'
+import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
 
 export interface DocumentType {
   id: number
@@ -61,7 +62,9 @@ export function useCreateDocumentRequirement() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['document-requirements'] })
+      toastMutationSuccess('Document requirement created')
     },
+    onError: (error) => toastMutationError(error, 'Failed to create requirement'),
   })
 }
 
@@ -76,7 +79,9 @@ export function useCreateDocumentType() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['document-types'] })
+      toastMutationSuccess('Document type created')
     },
+    onError: (error) => toastMutationError(error, 'Failed to create document type'),
   })
 }
 
@@ -109,7 +114,9 @@ export function useSyncCourseRequirements(courseId?: number) {
       queryClient.invalidateQueries({
         queryKey: ['course-document-requirements', courseId],
       })
+      toastMutationSuccess('Requirements assigned')
     },
+    onError: (error) => toastMutationError(error, 'Failed to assign requirements'),
   })
 }
 
@@ -184,8 +191,12 @@ export function useUpdateDocumentStatus() {
         method: 'PATCH',
         body: { review_status: status, rejection_reason },
       }),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['submitted-documents'] })
+      toastMutationSuccess(
+        variables.status === 'approved' ? 'Document approved' : 'Document rejected',
+      )
     },
+    onError: (error) => toastMutationError(error, 'Failed to update document status'),
   })
 }

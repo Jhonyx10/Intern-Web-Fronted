@@ -70,6 +70,17 @@ function formatFileSize(bytes?: number) {
     }`;
 }
 
+// Resolves a submitted document's type from either its direct document_type
+// or the document_type nested under its document_requirement.
+function getDocType(doc: {
+  document_type?: { id: number; name: string } | null;
+  document_requirement?: {
+    document_type?: { id: number; name: string } | null;
+  } | null;
+}) {
+  return doc.document_type ?? doc.document_requirement?.document_type ?? null;
+}
+
 export default function DocumentPage() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role?.name === "super_admin";
@@ -80,6 +91,7 @@ export default function DocumentPage() {
   const [activeTab, setActiveTab] = useState<"requirements" | "submitted">(isAdmin ? "submitted" : "requirements");
   const [search, setSearch] = useState("");
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
+  const [selectedDocTypeId, setSelectedDocTypeId] = useState<string>("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showTypeModal, setShowTypeModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -139,8 +151,27 @@ export default function DocumentPage() {
 
   const currentDeadline = courseRequirements?.[0]?.pivot?.deadline_at;
 
-  const filteredRequirements = (requirements ?? []).filter((r) =>
-    r.title.toLowerCase().includes(search.toLowerCase())
+  // Combined, de-duped list of document types seen in whichever dataset is loaded
+  const documentTypeOptions = useMemo(() => {
+    const map = new Map<number, string>();
+    (requirements ?? []).forEach((r) => {
+      if (r.document_type) map.set(r.document_type.id, r.document_type.name);
+    });
+    (submittedDocs ?? []).forEach((d) => {
+      const t = getDocType(d);
+      if (t) map.set(t.id, t.name);
+    });
+    return Array.from(map, ([id, name]) => ({ id, name }));
+  }, [requirements, submittedDocs]);
+
+  const filteredRequirements = (requirements ?? []).filter(
+    (r) =>
+      r.title.toLowerCase().includes(search.toLowerCase()) &&
+      (!selectedDocTypeId || String(r.document_type?.id) === selectedDocTypeId)
+  );
+
+  const filteredSubmittedDocs = (submittedDocs ?? []).filter(
+    (d) => !selectedDocTypeId || String(getDocType(d)?.id) === selectedDocTypeId
   );
 
   const totalRequirements = requirements?.length ?? 0;
@@ -408,6 +439,25 @@ export default function DocumentPage() {
               </div>
             )}
 
+            {/* Document Type Filter */}
+            {documentTypeOptions.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Tag size={14} className="text-[var(--color-muted)]" />
+                <select
+                  value={selectedDocTypeId}
+                  onChange={(e) => setSelectedDocTypeId(e.target.value)}
+                  className="rounded-xl border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-accent)] transition cursor-pointer"
+                >
+                  <option value="">All Document Types</option>
+                  {documentTypeOptions.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <span className="ml-auto text-xs text-[var(--color-muted)]">
               {activeTab === "requirements"
                 ? isLoadingRequirements
@@ -415,7 +465,7 @@ export default function DocumentPage() {
                   : `${filteredRequirements.length} of ${totalRequirements}`
                 : loadingSubmitted
                   ? "Loading…"
-                  : `${submittedDocs?.length ?? 0} submitted`}
+                  : `${filteredSubmittedDocs.length} submitted`}
             </span>
           </div>
 
@@ -430,19 +480,22 @@ export default function DocumentPage() {
               <div className="flex flex-col items-center justify-center gap-3 px-6 py-20 text-center">
                 <ClipboardList size={36} className="text-[var(--color-line)]" />
                 <p className="text-sm font-medium text-[var(--color-muted)]">
-                  {search
-                    ? "No requirements match your search."
+                  {search || selectedDocTypeId
+                    ? "No requirements match your filters."
                     : isDean
                       ? "No requirements assigned yet."
                       : "No document requirements have been created yet."}
                 </p>
-                {search ? (
+                {search || selectedDocTypeId ? (
                   <button
                     type="button"
-                    onClick={() => setSearch("")}
+                    onClick={() => {
+                      setSearch("");
+                      setSelectedDocTypeId("");
+                    }}
                     className="text-xs font-semibold text-[var(--color-accent)] hover:underline"
                   >
-                    Clear search
+                    Clear filters
                   </button>
                 ) : isDean ? (
                   <button
@@ -554,21 +607,24 @@ export default function DocumentPage() {
                 <span className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
                 <p className="text-sm">Loading submitted documents…</p>
               </div>
-            ) : (submittedDocs?.length ?? 0) === 0 ? (
+            ) : filteredSubmittedDocs.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-3 px-6 py-20 text-center">
                 <UserRound size={36} className="text-[var(--color-line)]" />
                 <p className="text-sm font-medium text-[var(--color-muted)]">
-                  {search
-                    ? "No submitted documents match your search."
+                  {search || selectedDocTypeId
+                    ? "No submitted documents match your filters."
                     : "No intern document submissions found."}
                 </p>
-                {search && (
+                {(search || selectedDocTypeId) && (
                   <button
                     type="button"
-                    onClick={() => setSearch("")}
+                    onClick={() => {
+                      setSearch("");
+                      setSelectedDocTypeId("");
+                    }}
                     className="text-xs font-semibold text-[var(--color-accent)] hover:underline"
                   >
-                    Clear search
+                    Clear filters
                   </button>
                 )}
               </div>
@@ -606,7 +662,7 @@ export default function DocumentPage() {
                     animate="show"
                   >
                     <AnimatePresence>
-                      {submittedDocs?.map((doc) => {
+                      {filteredSubmittedDocs.map((doc) => {
                         const studentName = doc.student
                           ? `${doc.student.last_name}, ${doc.student.first_name}`
                           : "Unknown Student";

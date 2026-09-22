@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiRequest } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
 import { queryKeys } from '@/lib/query-keys'
 import type { Company, CompanyRequest, GeofencePolygon } from '@/types'
 
@@ -73,6 +74,8 @@ export function useAcceptCompanyRequest() {
       // Company is now pending superadmin approval; invalidate request list
       void queryClient.invalidateQueries({ queryKey: queryKeys.companyRequests.all })
       void queryClient.invalidateQueries({ queryKey: queryKeys.companies.all })
+      toastMutationSuccess('Company request accepted', 'Pending superadmin approval.')
     },
+    onError: (error) => toastMutationError(error, 'Failed to accept company request'),
   })
 }

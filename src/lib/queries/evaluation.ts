@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
+import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast';
 import { queryKeys } from '@/lib/query-keys';
 import type { EvaluationNotificationPayload } from '@/lib/echo';
 
@@ -109,7 +110,9 @@ export const useMarkNotificationsAsRead = (token?: string | null) => {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+      toastMutationSuccess('Notifications marked as read');
     },
+    onError: (error) => toastMutationError(error, 'Failed to mark notifications as read'),
   });
 };
 
@@ -126,7 +129,9 @@ export const useCreateEvaluationTemplate = (token?: string | null) => {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.evaluations.templates() });
+      toastMutationSuccess('Template created', 'Evaluation template created successfully.');
     },
+    onError: (error) => toastMutationError(error, 'Failed to save template'),
   });
 };
 
@@ -140,10 +145,14 @@ export const useBulkAssignEvaluations = (token?: string | null) => {
         body: payload,
         token,
       }),
-    onSuccess: () => {
-      // Invalidate relevant queries if needed (e.g., evaluations or dashboard counts)
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.evaluations.all });
+      toastMutationSuccess(
+        'Evaluations assigned',
+        data.assignedCount != null ? `${data.assignedCount} assigned` : undefined,
+      );
     },
+    onError: (error) => toastMutationError(error, 'Failed to assign evaluations'),
   });
 };
 

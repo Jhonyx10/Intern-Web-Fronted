@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiRequest } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
 import { queryKeys } from '@/lib/query-keys'
 import type { Course } from '@/types'
 
@@ -34,7 +35,9 @@ export const useCreateCourse = () => {
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.courses.all })
+            toastMutationSuccess('Course created')
         },
+        onError: (error) => toastMutationError(error, 'Failed to create course'),
     })
 }
 
@@ -51,7 +54,9 @@ export const useUpdateCourse = () => {
         onSuccess: (_, { id }) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.courses.all })
             queryClient.invalidateQueries({ queryKey: queryKeys.courses.detail(id) })
+            toastMutationSuccess('Course updated')
         },
+        onError: (error) => toastMutationError(error, 'Failed to update course'),
     })
 }
 
@@ -66,6 +71,8 @@ export const useDeleteCourse = () => {
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.courses.all })
+            toastMutationSuccess('Course deleted')
         },
+        onError: (error) => toastMutationError(error, 'Failed to delete course'),
     })
 }

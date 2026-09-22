@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiRequest } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
 import { queryKeys } from '@/lib/query-keys'
 import type { Role } from '@/types'
 
@@ -34,7 +35,9 @@ export const useCreateRole = () => {
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.roles.all })
+            toastMutationSuccess('Role created')
         },
+        onError: (error) => toastMutationError(error, 'Failed to create role'),
     })
 }
 
@@ -51,7 +54,9 @@ export const useUpdateRole = () => {
         onSuccess: (_, { id }) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.roles.all })
             queryClient.invalidateQueries({ queryKey: queryKeys.roles.detail(id) })
+            toastMutationSuccess('Role updated')
         },
+        onError: (error) => toastMutationError(error, 'Failed to update role'),
     })
 }
 
@@ -66,6 +71,8 @@ export const useDeleteRole = () => {
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.roles.all })
+            toastMutationSuccess('Role deleted')
         },
+        onError: (error) => toastMutationError(error, 'Failed to delete role'),
     })
 }

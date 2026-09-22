@@ -26,7 +26,6 @@ export function SettingsPage() {
     // Profile state
     const [name, setName] = useState(user?.name || '')
     const [email, setEmail] = useState(user?.email || '')
-    const [profileSuccess, setProfileSuccess] = useState<string | null>(null)
     const [profileError, setProfileError] = useState<string | null>(null)
 
     // Password state
@@ -35,7 +34,6 @@ export function SettingsPage() {
     const [confirmPassword, setConfirmPassword] = useState('')
     const [showCurrentPassword, setShowCurrentPassword] = useState(false)
     const [showNewPassword, setShowNewPassword] = useState(false)
-    const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null)
     const [passwordError, setPasswordError] = useState<string | null>(null)
 
     // General / Dean settings state
@@ -45,8 +43,6 @@ export function SettingsPage() {
     const [logoFile, setLogoFile] = useState<File | null>(null)
     const [logoPreview, setLogoPreview] = useState<string | null>(null)
     const [removeLogo, setRemoveLogo] = useState(false)
-    const [generalSuccess, setGeneralSuccess] = useState<string | null>(null)
-    const [generalError, setGeneralError] = useState<string | null>(null)
 
     const updateProfileMutation = useUpdateProfile()
     const updatePasswordMutation = useUpdatePassword()
@@ -77,7 +73,6 @@ export function SettingsPage() {
 
     const handleProfileSubmit = (e: React.FormEvent) => {
         e.preventDefault()
-        setProfileSuccess(null)
         setProfileError(null)
 
         if (!name.trim()) {
@@ -92,54 +87,35 @@ export function SettingsPage() {
 
         updateProfileMutation.mutate(
             { name: name.trim(), email: email.trim() },
-            {
-                onSuccess: (data) => {
-                    setProfileSuccess(data.message || 'Profile updated successfully.')
-                },
-                onError: (err: any) => {
-                    setProfileError(err?.response?.data?.message || 'Failed to update profile.')
-                },
-            }
         )
     }
 
     const handleSendVerification = () => {
         setProfileError(null)
-        setProfileSuccess(null)
         sendVerificationMutation.mutate(undefined, {
-            onSuccess: (data) => {
-                setProfileSuccess(data?.message || 'Verification code sent to your email.')
+            onSuccess: () => {
                 setIsAwaitingCode(true)
             },
-            onError: (err: any) => {
-                setProfileError(err?.response?.data?.message || 'Failed to send verification code.')
-            }
         })
     }
 
     const handleVerifyCode = () => {
         setProfileError(null)
-        setProfileSuccess(null)
         if (verificationCode.length !== 4) {
             setProfileError('Please enter a valid 4-digit code.')
             return
         }
 
         verifyEmailMutation.mutate(verificationCode, {
-            onSuccess: (data) => {
-                setProfileSuccess(data?.message || 'Email verified successfully.')
+            onSuccess: () => {
                 setIsAwaitingCode(false)
                 setVerificationCode('')
             },
-            onError: (err: any) => {
-                setProfileError(err?.response?.data?.message || 'Failed to verify code.')
-            }
         })
     }
 
     const handlePasswordSubmit = (e: React.FormEvent) => {
         e.preventDefault()
-        setPasswordSuccess(null)
         setPasswordError(null)
 
         if (!currentPassword) {
@@ -162,18 +138,10 @@ export function SettingsPage() {
                 password_confirmation: confirmPassword,
             },
             {
-                onSuccess: (data) => {
-                    setPasswordSuccess(data.message || 'Password changed successfully.')
+                onSuccess: () => {
                     setCurrentPassword('')
                     setNewPassword('')
                     setConfirmPassword('')
-                },
-                onError: (err: any) => {
-                    const msg =
-                        err?.response?.data?.errors?.current_password?.[0] ||
-                        err?.response?.data?.message ||
-                        'Failed to update password.'
-                    setPasswordError(msg)
                 },
             }
         )
@@ -196,8 +164,6 @@ export function SettingsPage() {
 
     const handleGeneralSubmit = (e: React.FormEvent) => {
         e.preventDefault()
-        setGeneralSuccess(null)
-        setGeneralError(null)
 
         const matchedPreset = THEME_PRESETS.find(
             (p) => p.hex.toLowerCase() === selectedColor.toLowerCase()
@@ -213,13 +179,9 @@ export function SettingsPage() {
                 theme_color_soft: matchedPreset?.soft,
             },
             {
-                onSuccess: (data) => {
-                    setGeneralSuccess(data.message || 'Department settings saved successfully.')
+                onSuccess: () => {
                     setLogoFile(null)
                     setRemoveLogo(false)
-                },
-                onError: (err: any) => {
-                    setGeneralError(err?.response?.data?.message || 'Failed to save department settings.')
                 },
             }
         )
@@ -283,13 +245,6 @@ export function SettingsPage() {
                                 <p className="text-xs text-[var(--color-muted)]">Update your display name in the system</p>
                             </div>
                         </div>
-
-                        {profileSuccess && (
-                            <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800 font-semibold border border-emerald-200">
-                                <Check size={16} className="text-emerald-600 shrink-0" />
-                                <span>{profileSuccess}</span>
-                            </div>
-                        )}
 
                         {profileError && (
                             <div className="flex items-center gap-2 rounded-xl bg-rose-50 p-3 text-xs text-rose-800 font-semibold border border-rose-200">
@@ -405,13 +360,6 @@ export function SettingsPage() {
                             </div>
                         </div>
 
-                        {passwordSuccess && (
-                            <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800 font-semibold border border-emerald-200">
-                                <Check size={16} className="text-emerald-600 shrink-0" />
-                                <span>{passwordSuccess}</span>
-                            </div>
-                        )}
-
                         {passwordError && (
                             <div className="flex items-center gap-2 rounded-xl bg-rose-50 p-3 text-xs text-rose-800 font-semibold border border-rose-200">
                                 <AlertCircle size={16} className="text-rose-600 shrink-0" />
@@ -503,20 +451,6 @@ export function SettingsPage() {
                     transition={{ duration: 0.2 }}
                     className="space-y-6"
                 >
-                    {generalSuccess && (
-                        <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-xs text-emerald-800 font-semibold border border-emerald-200">
-                            <Check size={16} className="text-emerald-600 shrink-0" />
-                            <span>{generalSuccess}</span>
-                        </div>
-                    )}
-
-                    {generalError && (
-                        <div className="flex items-center gap-2 rounded-xl bg-rose-50 p-4 text-xs text-rose-800 font-semibold border border-rose-200">
-                            <AlertCircle size={16} className="text-rose-600 shrink-0" />
-                            <span>{generalError}</span>
-                        </div>
-                    )}
-
                     <form onSubmit={handleGeneralSubmit} className="space-y-6">
                         {/* Department Name & Branding */}
                         <div className="rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-soft)] space-y-6">

@@ -99,11 +99,7 @@ const { mutate: bulkAssign, isPending } = useBulkAssignEvaluations(token);
       },
       {
         onSuccess: () => {
-          console.log(`Successfully assigned evaluations to students.`);
           setShowConfirm(false);
-        },
-        onError: (err) => {
-          console.error("Failed to bulk assign evaluation", err);
         },
       }
     );
