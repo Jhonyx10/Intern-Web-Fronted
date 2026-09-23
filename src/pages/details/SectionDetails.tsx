@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
 import { useParams, useNavigate } from "react-router-dom";
-import { Loader2, GraduationCap, User, CalendarDays, BadgeCheck, Plus, Eye } from "lucide-react";
+import { Loader2, GraduationCap, User, CalendarDays, BadgeCheck, Plus, Eye, Pencil } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { AddStudentModal } from "@/components/modal/AddStudentModal";
 import { useCreateStudent } from "@/lib/queries/students";
 import type { Section } from "@/types";
+import EditSectionModal from "@/components/modal/EditSectionModal";
+import { toastMutationError, toastMutationSuccess } from "@/lib/mutationToast";
 
 function formatDate(dateStr: string | null) {
     if (!dateStr) return "—";
@@ -23,13 +25,63 @@ export default function SectionDetailsPage() {
     const { id } = useParams();
     const navigate = useNavigate();
     const { token, user } = useAuth();
+    const queryClient = useQueryClient();
     const canAddStudent = user?.role?.name === 'dean' || user?.role?.name === 'coordinator';
+    const canEdit = user?.role?.name === 'dean';
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isEditOpen, setIsEditOpen] = useState(false);
 
     const { data: section, isLoading, isError } = useQuery({
         queryKey: queryKeys.sections.detail(id!),
         queryFn: () => apiRequest<Section>(`/sections/${id}`, { token }),
         enabled: Boolean(token) && Boolean(id),
+    });
+
+    // Fetch courses for the edit modal
+    const { data: fetchedCourses = [], isLoading: coursesLoading } = useQuery({
+        queryKey: queryKeys.courses.list(),
+        queryFn: () => apiRequest<{ id: number; code: string; name: string }[]>('/courses', { token }),
+        enabled: Boolean(token) && isEditOpen,
+        staleTime: 5 * 60 * 1000,
+    });
+
+    // Use dean's course if applicable, otherwise use all courses
+    const deanCourse = user?.course
+        ? [{ id: Number(user.course.id), code: user.course.code, name: user.course.name }]
+        : null;
+    const courses = deanCourse ?? fetchedCourses;
+
+    // Fetch coordinators for the edit modal
+    const { data: coordinators = [], isLoading: coordinatorsLoading } = useQuery({
+        queryKey: queryKeys.coordinators.list(),
+        queryFn: () => apiRequest<{ id: number; name: string; email: string }[]>('/coordinators', { token }),
+        enabled: Boolean(token) && isEditOpen,
+        staleTime: 5 * 60 * 1000,
+    });
+
+    // Edit section mutation
+    const editSectionMutation = useMutation({
+        mutationFn: (data: {
+            name: string;
+            code: string;
+            course_id: number;
+            course_major_id: number | null;
+            coordinator_user_id: number | null;
+        }) =>
+            apiRequest(`/school-years/${section?.school_year_id}/sections/${id}`, {
+                method: 'PUT',
+                body: data,
+                token,
+            }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.sections.detail(id!) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all });
+            setIsEditOpen(false);
+            toastMutationSuccess('Section updated');
+        },
+        onError: (err) => {
+            toastMutationError(err, 'Failed to update section');
+        },
     });
 
     const createStudent = useCreateStudent();
@@ -88,15 +140,26 @@ export default function SectionDetailsPage() {
                     </p>
                 </div>
 
-                {canAddStudent && (
-                    <button
-                        type="button"
-                        onClick={() => setIsModalOpen(true)}
-                        className="inline-flex w-fit items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
-                    >
-                        <Plus size={15} className="text-white" /> Add Student
-                    </button>
-                )}
+                <div className="flex items-center gap-2">
+                    {canEdit && section.is_active && (
+                        <button
+                            type="button"
+                            onClick={() => setIsEditOpen(true)}
+                            className="inline-flex w-fit items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm font-medium text-[var(--color-accent)] shadow-sm transition hover:bg-[var(--color-accent-soft)]"
+                        >
+                            <Pencil size={15} /> Edit Section
+                        </button>
+                    )}
+                    {canAddStudent && (
+                        <button
+                            type="button"
+                            onClick={() => setIsModalOpen(true)}
+                            className="inline-flex w-fit items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
+                        >
+                            <Plus size={15} className="text-white" /> Add Student
+                        </button>
+                    )}
+                </div>
             </motion.div>
 
             {/* Info cards */}
@@ -260,6 +323,28 @@ export default function SectionDetailsPage() {
                         is_active: true,
                     });
                 }}
+            />
+
+            <EditSectionModal
+                open={isEditOpen}
+                onClose={() => setIsEditOpen(false)}
+                onSave={(data) => editSectionMutation.mutate(data)}
+                isLoading={editSectionMutation.isPending}
+                section={
+                    section
+                        ? {
+                            name: section.name,
+                            code: section.code,
+                            course_id: section.course_id,
+                            course_major_id: section.course_major_id,
+                            coordinator_user_id: section.coordinator_user_id,
+                        }
+                        : null
+                }
+                courses={courses}
+                coordinators={coordinators}
+                coursesLoading={coursesLoading}
+                coordinatorsLoading={coordinatorsLoading}
             />
         </section>
     );

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { Plus, Search, Mail, Users, MoreVertical, Loader2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { queryKeys } from '@/lib/query-keys'
 import { apiRequest } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -51,6 +52,7 @@ function initialsOf(name: string) {
 const CoordinatorsPage = () => {
     const [query, setQuery] = useState('')
     const { token } = useAuth()
+    const navigate = useNavigate()
 
     const { data: coordinators = [], isLoading, isError } = useQuery({
         queryKey: queryKeys.coordinators.list(),
@@ -153,7 +155,8 @@ const CoordinatorsPage = () => {
                                 animate="show"
                                 exit="exit"
                                 whileHover={{ y: -3 }}
-                                className="group relative rounded-xl border border-[var(--color-line)] bg-white/80 p-4 shadow-sm transition-colors hover:border-[var(--color-accent)]/40"
+                                onClick={() => navigate(`/coordinators/${coordinator.id}`)}
+                                className="group relative rounded-xl border border-[var(--color-line)] bg-white/80 p-4 shadow-sm transition-colors hover:border-[var(--color-accent)]/40 hover:cursor-pointer"
                             >
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex min-w-0 items-center gap-3">
@@ -167,14 +170,6 @@ const CoordinatorsPage = () => {
                                             <p className="truncate text-xs text-[var(--color-muted)]">{coordinator.department}</p>
                                         </div>
                                     </div>
-
-                                    <button
-                                        type="button"
-                                        aria-label={`More actions for ${coordinator.name}`}
-                                        className="shrink-0 rounded-lg p-1.5 text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-slate-50 hover:text-[var(--color-ink)]"
-                                    >
-                                        <MoreVertical size={15} />
-                                    </button>
                                 </div>
 
                                 <div className="mt-4 flex flex-col gap-1.5 border-t border-[var(--color-line)] pt-3">

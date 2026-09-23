@@ -107,6 +107,36 @@ export type SubmitEvaluationInput = {
     responses: Record<number, string | number | string[]>
 }
 
+export type InternDetailTimelog = {
+    id: number
+    time_in: string | null
+    time_out: string | null
+    duration_minutes: number | null
+    task_note: string | null
+    verification_method: string | null
+}
+
+export type InternDetailSchedule = {
+    id: number
+    start_date: string
+    time_in: string
+    lunch_break: string | null
+    time_out: string
+}
+
+export type InternDetail = {
+    id: number
+    student_number: string
+    first_name: string
+    middle_name: string | null
+    last_name: string
+    is_active: boolean
+    section: { id: number; name: string } | null
+    required_hours: number | null
+    total_hours: number
+    schedules: InternDetailSchedule[]
+    time_logs: InternDetailTimelog[]
+}
 
 export function useSupervisorProfile() {
     const { token } = useAuth()
@@ -118,12 +148,23 @@ export function useSupervisorProfile() {
     })
 }
 
+
 export function useSupervisorInterns() {
     const { token } = useAuth()
     return useQuery({
         queryKey: ['supervisor', 'interns'],
         queryFn: () => apiRequest<{ data: SupervisorIntern[] }>('/supervisor/interns', { token: token! }),
         enabled: Boolean(token),
+        select: (res) => res.data,
+    })
+}
+
+export function useSupervisorInternDetail(studentId: string | undefined) {
+    const { token } = useAuth()
+    return useQuery({
+        queryKey: ['supervisor', 'interns', studentId],
+        queryFn: () => apiRequest<{ data: InternDetail }>(`/supervisor/interns/${studentId}`, { token: token! }),
+        enabled: Boolean(token) && Boolean(studentId),
         select: (res) => res.data,
     })
 }
@@ -137,6 +178,7 @@ export function useSupervisorAttendance() {
         select: (res) => res.data,
     })
 }
+
 
 export function useSupervisorSchedules() {
     const { token } = useAuth()

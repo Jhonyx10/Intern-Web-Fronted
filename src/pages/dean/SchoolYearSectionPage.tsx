@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
-import { Plus, ChevronDown, CalendarDays, X, Loader2, Trash2 } from 'lucide-react'
+import { Plus, ChevronDown, CalendarDays, X, Loader2, Trash2, Eye, Users } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { queryKeys } from '@/lib/query-keys'
@@ -14,6 +14,9 @@ type SectionData = {
     id: number
     name: string
     code: string | null
+    course_major?: { id: number; name: string } | null
+    coordinator?: { id: number; name: string } | null
+    students_count?: number
 }
 
 type SchoolYearData = {
@@ -54,6 +57,7 @@ const SchoolYearSectionPage = () => {
     const [expanded, setExpanded] = useState<number | null>(null)
     const [addSyOpen, setAddSyOpen] = useState(false)
     const [addSectionTarget, setAddSectionTarget] = useState<SchoolYearData | null>(null)
+
 
     // ── Fetch school years ──────────────────────────────────────────
     const { data: schoolYears = [], isLoading, isError } = useQuery({
@@ -275,47 +279,113 @@ const SchoolYearSectionPage = () => {
                                             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                                             className="border-t border-[var(--color-line)]"
                                         >
-                                            <div className="flex flex-wrap gap-2 px-4 py-3.5">
-                                                {year.sections.map((section) => (
-                                                    <div
-                                                        key={section.id}
-                                                        onClick={() => navigate(`/school-year-section/${section.id}`)}
-                                                        role="link"
-                                                        tabIndex={0}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter') navigate(`/school-year-section/${section.id}`)
-                                                        }}
-                                                        className="group inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-accent-soft)] hover:text-[var(--color-accent)]"
-                                                    >
-                                                        {section.name}
-                                                        {!isProgramHead && year.is_active && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation()
-                                                                    if (confirm(`Delete section "${section.name}"?`)) {
-                                                                        deleteSectionMutation.mutate({ syId: year.id, sectionId: section.id })
-                                                                    }
-                                                                }}
-                                                                aria-label={`Remove ${section.name}`}
-                                                                className="text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-500"
-                                                            >
-                                                                <X size={12} />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                ))}
-
+                                            {/* Section header row: label left, Add Section right */}
+                                            <div className="flex items-center justify-between gap-3 px-4 py-3">
+                                                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
+                                                    Sections
+                                                </p>
                                                 {!isProgramHead && year.is_active && (
                                                     <button
                                                         type="button"
                                                         onClick={() => setAddSectionTarget(year)}
-                                                        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--color-line)] px-2.5 py-1 text-xs font-medium text-[var(--color-muted)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                                                        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--color-line)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
                                                     >
                                                         <Plus size={12} /> Add Section
                                                     </button>
                                                 )}
                                             </div>
+
+                                            {year.sections.length === 0 ? (
+                                                <p className="px-4 pb-4 text-xs text-[var(--color-muted)]">
+                                                    No sections added for this school year yet.
+                                                </p>
+                                            ) : (
+                                                <div className="overflow-x-auto px-4 pb-4">
+                                                    <table className="w-full min-w-[560px] border-collapse text-left">
+                                                        <thead>
+                                                            <tr className="border-b border-[var(--color-line)]">
+                                                                <th className="py-2 pr-3 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]">
+                                                                    Section
+                                                                </th>
+                                                                <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]">
+                                                                    Course Major
+                                                                </th>
+                                                                <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]">
+                                                                    Coordinator
+                                                                </th>
+                                                                <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]">
+                                                                    Students
+                                                                </th>
+                                                                <th className="py-2 pl-3 text-right text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]">
+                                                                    Actions
+                                                                </th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {year.sections.map((section) => (
+                                                                <tr
+                                                                    key={section.id}
+                                                                    className="group border-b border-[var(--color-line)] last:border-0 hover:bg-slate-50/60"
+                                                                >
+                                                                    <td className="py-2.5 pr-3">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-sm font-medium text-[var(--color-ink)]">
+                                                                                {section.name}
+                                                                            </span>
+                                                                            {section.code && (
+                                                                                <span className="text-[10px] text-[var(--color-muted)]">
+                                                                                    ({section.code})
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-3 py-2.5 text-xs text-[var(--color-ink)]">
+                                                                        {section.course_major?.name ?? '—'}
+                                                                    </td>
+                                                                    <td className="px-3 py-2.5 text-xs text-[var(--color-ink)]">
+                                                                        {section.coordinator?.name ?? '—'}
+                                                                    </td>
+                                                                    <td className="px-3 py-2.5">
+                                                                        <span className="inline-flex items-center gap-1 text-xs text-[var(--color-ink)]">
+                                                                            <Users size={12} className="text-[var(--color-muted)]" />
+                                                                            {section.students_count ?? '—'}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="py-2.5 pl-3">
+                                                                        <div className="flex items-center justify-end gap-1.5">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => navigate(`/school-year-section/${section.id}`)}
+                                                                                aria-label={`View ${section.name}`}
+                                                                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2 py-1 text-[11px] font-semibold text-sky-600 shadow-sm transition hover:bg-sky-50"
+                                                                            >
+                                                                                <Eye size={12} /> View
+                                                                            </button>
+
+
+
+                                                                            {!isProgramHead && year.is_active && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        if (confirm(`Delete section "${section.name}"?`)) {
+                                                                                            deleteSectionMutation.mutate({ syId: year.id, sectionId: section.id })
+                                                                                        }
+                                                                                    }}
+                                                                                    aria-label={`Remove ${section.name}`}
+                                                                                    className="rounded-lg p-1.5 text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-50 hover:text-red-500"
+                                                                                >
+                                                                                    <X size={12} />
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
                                         </motion.div>
                                     ) : null}
                                 </AnimatePresence>
@@ -370,6 +440,8 @@ const SchoolYearSectionPage = () => {
                 coursesLoading={coursesLoading}
                 coordinatorsLoading={coordinatorsLoading}
             />
+
+
         </section>
     )
 }

@@ -13,6 +13,7 @@ import { CourseFormPage } from "@/pages/forms/CourseFormPage";
 import { CompanyDetailsPage } from "@/pages/details/CompanyDetailsPage";
 import AdministratorPage from "./pages/AdministratorPage";
 import CoordinatorsPage from "./pages/dean/Coordinators";
+import CoordinatorDetailsPage from "./pages/details/CoordinatorDetails";
 import StudentsPage from "./pages/dean/Students";
 import { StudentDetailsPage } from "./pages/details/StudentDetailsPage";
 import SchoolYearSectionPage from "./pages/dean/SchoolYearSectionPage";
@@ -21,6 +22,7 @@ import Companies from "./pages/Companies";
 import { CoordinatorSectionPage } from "./pages/coordinator/CoordinatorSectionPage";
 import { SupervisorInternsPage } from "./pages/supervisor/SupervisorInternsPage";
 import { SupervisorAttendancePage } from "./pages/supervisor/SupervisorAttendancePage";
+import SupervisorInternDetailsPage from "./pages/supervisor/SupervisorInternDetailsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import StudentLiveTracker from "./pages/coordinator/StudentLiveTracker";
 import CompanyInfo from "./pages/supervisor/CompanyInfo";
@@ -47,7 +49,7 @@ function AppContent() {
               <Route index element={<DashboardPage />} />
               <Route path="/companies/map" element={<CompaniesMapPage />} />
               <Route path="/companies/map/add" element={<AddCompanyPage />} />
-               <Route path="/add/organization" element={<AddOrganization />} />
+              <Route path="/add/organization" element={<AddOrganization />} />
               <Route path="/companies/:id" element={<CompanyDetailsPage />} />
               <Route path="/companies" element={<Companies />} />
               <Route path="/courses" element={<CoursePage />} />
@@ -59,6 +61,7 @@ function AppContent() {
               />
               <Route path="/administrator" element={<AdministratorPage />} />
               <Route path="/coordinators" element={<CoordinatorsPage />} />
+              <Route path="/coordinators/:id" element={<CoordinatorDetailsPage />} />
               <Route path="/students" element={<StudentsPage />} />
               <Route path="/students/:id" element={<StudentDetailsPage />} />
               <Route path="/evaluation" element={<EvaluationPage />} />
@@ -83,6 +86,7 @@ function AppContent() {
                 element={<SectionDetailsPage />}
               />
               <Route path="/dean/coordinators" element={<CoordinatorsPage />} />
+              <Route path="/dean/coordinators/:id" element={<CoordinatorDetailsPage />} />
               <Route path="/dean/students" element={<StudentsPage />} />
               <Route
                 path="/dean/students/:id"
@@ -103,6 +107,10 @@ function AppContent() {
               <Route
                 path="/supervisor/interns"
                 element={<SupervisorInternsPage />}
+              />
+              <Route
+                path="/supervisor/interns/:id"
+                element={<SupervisorInternDetailsPage />}
               />
               <Route
                 path="student/live/location"

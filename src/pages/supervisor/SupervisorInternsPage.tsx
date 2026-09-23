@@ -1,4 +1,4 @@
-import { AlertCircle, Clock, Building2, ArrowUpRight, UserX } from "lucide-react";
+import { AlertCircle, Clock, Building2, ArrowUpRight, UserX, Eye } from "lucide-react";
 import {
   useSupervisorInterns,
   useSupervisorProfile,
@@ -96,13 +96,13 @@ export function SupervisorInternsPage() {
   const withTarget = list.filter((i) => i.required_hours);
   const avgCompletion = withTarget.length
     ? Math.round(
-        (withTarget.reduce(
-          (sum, i) => sum + Math.min(1, i.total_hours / i.required_hours!),
-          0
-        ) /
-          withTarget.length) *
-          100
-      )
+      (withTarget.reduce(
+        (sum, i) => sum + Math.min(1, i.total_hours / i.required_hours!),
+        0
+      ) /
+        withTarget.length) *
+      100
+    )
     : null;
 
   return (
@@ -177,11 +177,11 @@ export function SupervisorInternsPage() {
                   {list.map((intern) => {
                     const pct = intern.required_hours
                       ? Math.min(
-                          100,
-                          Math.round(
-                            (intern.total_hours / intern.required_hours) * 100
-                          )
+                        100,
+                        Math.round(
+                          (intern.total_hours / intern.required_hours) * 100
                         )
+                      )
                       : null;
                     const pending = pendingEvaluationOf(intern);
 
@@ -243,8 +243,15 @@ export function SupervisorInternsPage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-6 py-4 text-right w-px whitespace-nowrap">
                           <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/supervisor/interns/${intern.id}`)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-xs font-medium text-sky-600 transition-colors hover:border-sky-300 hover:bg-sky-50"
+                            >
+                              <Eye size={13} /> View
+                            </button>
                             <button
                               onClick={() =>
                                 pending &&
@@ -284,11 +291,11 @@ export function SupervisorInternsPage() {
               {list.map((intern) => {
                 const pct = intern.required_hours
                   ? Math.min(
-                      100,
-                      Math.round(
-                        (intern.total_hours / intern.required_hours) * 100
-                      )
+                    100,
+                    Math.round(
+                      (intern.total_hours / intern.required_hours) * 100
                     )
+                  )
                   : null;
                 const pending = pendingEvaluationOf(intern);
 
@@ -342,30 +349,39 @@ export function SupervisorInternsPage() {
                       )}
                     </div>
 
-                    <button
-                      onClick={() =>
-                        pending &&
-                        navigate(
-                          `/supervisor/interns/${intern.id}/evaluations/${pending.id}`
-                        )
-                      }
-                      disabled={!pending}
-                      className="relative mt-3 w-full rounded-lg border border-[var(--color-line)] py-1.5 text-xs font-medium text-[var(--color-ink)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Evaluate
-                      {pending && (
-                        <span className="absolute -top-1.5 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white ring-2 ring-white">
-                          !
-                        </span>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRemoveTarget(intern)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-xs font-medium text-rose-600 transition-colors hover:border-rose-300 hover:bg-rose-50"
-                    >
-                      <UserX size={13} /> Remove
-                    </button>
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/supervisor/interns/${intern.id}`)}
+                        className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg border border-[var(--color-line)] py-1.5 text-xs font-medium text-sky-600 transition-colors hover:border-sky-300 hover:bg-sky-50"
+                      >
+                        <Eye size={13} /> View Details
+                      </button>
+                      <button
+                        onClick={() =>
+                          pending &&
+                          navigate(
+                            `/supervisor/interns/${intern.id}/evaluations/${pending.id}`
+                          )
+                        }
+                        disabled={!pending}
+                        className="relative flex-1 rounded-lg border border-[var(--color-line)] py-1.5 text-xs font-medium text-[var(--color-ink)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Evaluate
+                        {pending && (
+                          <span className="absolute -top-1.5 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white ring-2 ring-white">
+                            !
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRemoveTarget(intern)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-xs font-medium text-rose-600 transition-colors hover:border-rose-300 hover:bg-rose-50"
+                      >
+                        <UserX size={13} /> Remove
+                      </button>
+                    </div>
                   </div>
                 );
               })}
