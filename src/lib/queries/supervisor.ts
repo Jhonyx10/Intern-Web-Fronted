@@ -15,6 +15,11 @@ export type SupervisorIntern = {
     total_hours: number
     building_id: number | null
     ojt_evaluations: SupervisorInternEvaluation[]
+    approved_schedule: {
+        start_date: string | null
+        time_in: string | null
+        time_out: string | null
+    } | null
 }
 
 export interface SupervisorInternEvaluation {
@@ -110,6 +115,8 @@ export type SubmitEvaluationInput = {
 export type InternDetailTimelog = {
     id: number
     time_in: string | null
+    break_out: string | null
+    break_in: string | null
     time_out: string | null
     duration_minutes: number | null
     task_note: string | null
@@ -136,6 +143,7 @@ export type InternDetail = {
     total_hours: number
     schedules: InternDetailSchedule[]
     time_logs: InternDetailTimelog[]
+    ojt_evaluations?: SupervisorInternEvaluation[]
 }
 
 export function useSupervisorProfile() {

@@ -371,6 +371,8 @@ export function SupervisorAttendancePage() {
                   <th className="px-6 py-3 font-medium">Student</th>
                   <th className="px-6 py-3 font-medium">Date</th>
                   <th className="px-6 py-3 font-medium">Time In</th>
+                  <th className="px-6 py-3 font-medium">Break Out</th>
+                  <th className="px-6 py-3 font-medium">Break In</th>
                   <th className="px-6 py-3 font-medium">Time Out</th>
                   <th className="px-6 py-3 font-medium">Duration</th>
                   <th className="px-6 py-3 font-medium">Task Note</th>
@@ -393,6 +395,12 @@ export function SupervisorAttendancePage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {fmtTime(log.time_in)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {fmtTime(log.break_out)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {fmtTime(log.break_in)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {log.time_out ? (

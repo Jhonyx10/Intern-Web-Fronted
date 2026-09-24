@@ -1,14 +1,12 @@
-import { AlertCircle, Clock, Building2, ArrowUpRight, UserX, Eye } from "lucide-react";
+import { AlertCircle, Clock, Building2, Eye } from "lucide-react";
 import {
   useSupervisorInterns,
   useSupervisorProfile,
-  useRemoveIntern,
+  useSupervisorSchedules,
   type SupervisorIntern,
 } from "@/lib/queries/supervisor";
 import { useAuth } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
-import { RemoveInternModal } from "@/components/modal/RemoveInternModal";
 
 const AVATAR_STYLES = [
   "bg-emerald-50 text-emerald-700",
@@ -29,8 +27,25 @@ function avatarStyle(seed: string) {
   return AVATAR_STYLES[hash];
 }
 
-function pendingEvaluationOf(intern: SupervisorIntern) {
-  return intern.ojt_evaluations?.find((e) => e.status === "pending") ?? null;
+function fmtScheduleTime(raw: string | null | undefined) {
+  if (!raw) return "—";
+  const match = raw.match(/^(\d{1,2}):(\d{2})/);
+  if (match) {
+    const h = parseInt(match[1], 10);
+    const m = match[2];
+    const ampm = h >= 12 ? "PM" : "AM";
+    return `${h % 12 || 12}:${m} ${ampm}`;
+  }
+  return raw;
+}
+
+function fmtScheduleDate(raw: string | null | undefined) {
+  if (!raw) return "—";
+  return new Date(raw).toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export function SupervisorInternsPage() {
@@ -38,16 +53,16 @@ export function SupervisorInternsPage() {
   const { user } = useAuth();
   const { data: profile } = useSupervisorProfile();
   const { data: interns, isLoading, error } = useSupervisorInterns();
-  const removeIntern = useRemoveIntern()
-  const [removeTarget, setRemoveTarget] = useState<SupervisorIntern | null>(null)
+  const { data: companySchedules } = useSupervisorSchedules();
 
-  const handleConfirmRemove = (reason: string) => {
-    if (!removeTarget) return;
-    removeIntern.mutate(
-      { studentId: removeTarget.id, reason },
-      { onSuccess: () => setRemoveTarget(null) }
-    );
-  };
+  // Company-wide fallback schedule when an intern has no approved
+  // individual request — most recent by start_date.
+  const fallbackSchedule = companySchedules?.length
+    ? [...companySchedules].sort(
+        (a, b) =>
+          new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+      )[0]
+    : null;
 
   if (!user || user.role?.name !== "supervisor") {
     return (
@@ -96,13 +111,13 @@ export function SupervisorInternsPage() {
   const withTarget = list.filter((i) => i.required_hours);
   const avgCompletion = withTarget.length
     ? Math.round(
-      (withTarget.reduce(
-        (sum, i) => sum + Math.min(1, i.total_hours / i.required_hours!),
-        0
-      ) /
-        withTarget.length) *
-      100
-    )
+        (withTarget.reduce(
+          (sum, i) => sum + Math.min(1, i.total_hours / i.required_hours!),
+          0
+        ) /
+          withTarget.length) *
+          100
+      )
     : null;
 
   return (
@@ -169,6 +184,9 @@ export function SupervisorInternsPage() {
                     <th className="px-6 py-3 font-medium">Student</th>
                     <th className="px-6 py-3 font-medium">Section</th>
                     <th className="px-6 py-3 font-medium">Hours progress</th>
+                    <th className="px-6 py-3 font-medium">Start Date</th>
+                    <th className="px-6 py-3 font-medium">Time In</th>
+                    <th className="px-6 py-3 font-medium">Time Out</th>
                     <th className="px-6 py-3 font-medium">Status</th>
                     <th className="px-6 py-3 font-medium text-right">Action</th>
                   </tr>
@@ -177,13 +195,17 @@ export function SupervisorInternsPage() {
                   {list.map((intern) => {
                     const pct = intern.required_hours
                       ? Math.min(
-                        100,
-                        Math.round(
-                          (intern.total_hours / intern.required_hours) * 100
+                          100,
+                          Math.round(
+                            (intern.total_hours / intern.required_hours) * 100
+                          )
                         )
-                      )
                       : null;
-                    const pending = pendingEvaluationOf(intern);
+                    // Prefer the intern's own approved request; fall back
+                    // to the company-wide schedule if they don't have one.
+                    const sched = intern.approved_schedule ?? fallbackSchedule;
+                    const isFallback =
+                      !intern.approved_schedule && !!fallbackSchedule;
 
                     return (
                       <tr
@@ -232,6 +254,39 @@ export function SupervisorInternsPage() {
                             </span>
                           )}
                         </td>
+                        <td className="px-6 py-4 text-xs">
+                          <span
+                            className={
+                              isFallback
+                                ? "text-[var(--color-muted)]"
+                                : "text-[var(--color-ink)]"
+                            }
+                          >
+                            {fmtScheduleDate(sched?.start_date)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-xs">
+                          <span
+                            className={
+                              isFallback
+                                ? "text-[var(--color-muted)]"
+                                : "text-[var(--color-ink)]"
+                            }
+                          >
+                            {fmtScheduleTime(sched?.time_in)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-xs">
+                          <span
+                            className={
+                              isFallback
+                                ? "text-[var(--color-muted)]"
+                                : "text-[var(--color-ink)]"
+                            }
+                          >
+                            {fmtScheduleTime(sched?.time_out)}
+                          </span>
+                        </td>
                         <td className="px-6 py-4">
                           {intern.is_active ? (
                             <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
@@ -244,40 +299,15 @@ export function SupervisorInternsPage() {
                           )}
                         </td>
                         <td className="px-6 py-4 text-right w-px whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/supervisor/interns/${intern.id}`)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-xs font-medium text-sky-600 transition-colors hover:border-sky-300 hover:bg-sky-50"
-                            >
-                              <Eye size={13} /> View
-                            </button>
-                            <button
-                              onClick={() =>
-                                pending &&
-                                navigate(
-                                  `/supervisor/interns/${intern.id}/evaluations/${pending.id}`
-                                )
-                              }
-                              disabled={!pending}
-                              className="relative inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-[var(--color-line)] disabled:hover:text-[var(--color-ink)]"
-                            >
-                              Evaluate
-                              <ArrowUpRight size={13} />
-                              {pending && (
-                                <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white ring-2 ring-white">
-                                  !
-                                </span>
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setRemoveTarget(intern)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-xs font-medium text-rose-600 transition-colors hover:border-rose-300 hover:bg-rose-50"
-                            >
-                              <UserX size={13} /> Remove
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              navigate(`/supervisor/interns/${intern.id}`)
+                            }
+                            className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-xs font-medium text-sky-600 transition-colors hover:border-sky-300 hover:bg-sky-50"
+                          >
+                            <Eye size={13} /> View
+                          </button>
                         </td>
                       </tr>
                     );
@@ -291,13 +321,13 @@ export function SupervisorInternsPage() {
               {list.map((intern) => {
                 const pct = intern.required_hours
                   ? Math.min(
-                    100,
-                    Math.round(
-                      (intern.total_hours / intern.required_hours) * 100
+                      100,
+                      Math.round(
+                        (intern.total_hours / intern.required_hours) * 100
+                      )
                     )
-                  )
                   : null;
-                const pending = pendingEvaluationOf(intern);
+                const sched = intern.approved_schedule ?? fallbackSchedule;
 
                 return (
                   <div key={intern.id} className="p-4">
@@ -349,37 +379,22 @@ export function SupervisorInternsPage() {
                       )}
                     </div>
 
-                    <div className="mt-3 flex items-center gap-2">
+                    <div className="mt-2 flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
+                      <Clock size={12} />
+                      {fmtScheduleDate(sched?.start_date)} ·{" "}
+                      {fmtScheduleTime(sched?.time_in)} –{" "}
+                      {fmtScheduleTime(sched?.time_out)}
+                    </div>
+
+                    <div className="mt-3">
                       <button
                         type="button"
-                        onClick={() => navigate(`/supervisor/interns/${intern.id}`)}
-                        className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg border border-[var(--color-line)] py-1.5 text-xs font-medium text-sky-600 transition-colors hover:border-sky-300 hover:bg-sky-50"
+                        onClick={() =>
+                          navigate(`/supervisor/interns/${intern.id}`)
+                        }
+                        className="w-full inline-flex items-center justify-center gap-1 rounded-lg border border-[var(--color-line)] py-1.5 text-xs font-medium text-sky-600 transition-colors hover:border-sky-300 hover:bg-sky-50"
                       >
                         <Eye size={13} /> View Details
-                      </button>
-                      <button
-                        onClick={() =>
-                          pending &&
-                          navigate(
-                            `/supervisor/interns/${intern.id}/evaluations/${pending.id}`
-                          )
-                        }
-                        disabled={!pending}
-                        className="relative flex-1 rounded-lg border border-[var(--color-line)] py-1.5 text-xs font-medium text-[var(--color-ink)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Evaluate
-                        {pending && (
-                          <span className="absolute -top-1.5 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white ring-2 ring-white">
-                            !
-                          </span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRemoveTarget(intern)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] px-3 py-1.5 text-xs font-medium text-rose-600 transition-colors hover:border-rose-300 hover:bg-rose-50"
-                      >
-                        <UserX size={13} /> Remove
                       </button>
                     </div>
                   </div>
@@ -401,17 +416,6 @@ export function SupervisorInternsPage() {
           </div>
         )}
       </div>
-      <RemoveInternModal
-        isOpen={!!removeTarget}
-        isSubmitting={removeIntern.isPending}
-        internName={
-          removeTarget
-            ? `${removeTarget.first_name} ${removeTarget.last_name}`
-            : ""
-        }
-        onConfirm={handleConfirmRemove}
-        onClose={() => setRemoveTarget(null)}
-      />
     </section>
   );
 }

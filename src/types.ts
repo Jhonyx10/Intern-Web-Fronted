@@ -166,6 +166,8 @@ export type TimeLog = {
   session_period: string
   task_note: string | null
   time_in: string
+  break_out: string | null
+  break_in: string  | null
   time_out: string | null
   duration_minutes: number | null
   verification_method: string | null

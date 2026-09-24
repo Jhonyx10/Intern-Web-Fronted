@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect } from "react";
+import React, { createContext, useContext, useEffect, useMemo } from "react";
 import { useSettings } from "@/lib/queries/settings";
 
 export interface ThemePreset {
@@ -21,6 +21,8 @@ export const THEME_PRESETS: ThemePreset[] = [
 
 interface ThemeContextType {
   themeColor: string;
+  hoverColor: string;
+  softColor: string;
   logoUrl?: string | null;
   departmentName?: string | null;
   isLoading: boolean;
@@ -28,6 +30,8 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType>({
   themeColor: "#16305C",
+  hoverColor: "#0F2245",
+  softColor: "#dde4ee",
   logoUrl: null,
   departmentName: null,
   isLoading: false,
@@ -38,11 +42,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const { data: settings, isLoading } = useSettings();
 
-  useEffect(() => {
-    const root = document.documentElement;
+  const { activeColor, hoverColor, softColor } = useMemo(() => {
     const activeColor = settings?.theme_color || "#16305C";
 
-    // Check if color matches a known preset
     const matchedPreset = THEME_PRESETS.find(
       (p) => p.hex.toLowerCase() === activeColor.toLowerCase()
     );
@@ -52,15 +54,22 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     const softColor =
       settings?.theme_color_soft || matchedPreset?.soft || `${activeColor}1e`;
 
+    return { activeColor, hoverColor, softColor };
+  }, [settings]);
+
+  useEffect(() => {
+    const root = document.documentElement;
     root.style.setProperty("--color-accent", activeColor);
     root.style.setProperty("--color-accent-hover", hoverColor);
     root.style.setProperty("--color-accent-soft", softColor);
-  }, [settings]);
+  }, [activeColor, hoverColor, softColor]);
 
   return (
     <ThemeContext.Provider
       value={{
-        themeColor: settings?.theme_color || "#16305C",
+        themeColor: activeColor,
+        hoverColor,
+        softColor,
         logoUrl: settings?.logo_url || null,
         departmentName: settings?.department_name || null,
         isLoading,
