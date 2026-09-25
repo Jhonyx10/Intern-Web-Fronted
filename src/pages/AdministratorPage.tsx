@@ -51,261 +51,258 @@ function roleBadgeClass(roleName?: string) {
 // ─── UserFormModal ────────────────────────────────────────────────────────────
 
 type FormState = {
-    name: string
-    email: string
-    password: string
-    role_id: string
-    is_active: boolean
-}
+  name: string;
+  email: string;
+  role_id: string;
+  is_active: boolean;
+};
 
 function UserFormModal({
-    user,
-    onClose,
+  user,
+  onClose,
 }: {
-    user: User | null
-    onClose: () => void
+  user: User | null;
+  onClose: () => void;
 }) {
-    const createMutation = useCreateUser()
-    const updateMutation = useUpdateUser()
-    const { data: roles, isLoading: rolesLoading } = useRoles()
-    const isBusy = createMutation.isPending || updateMutation.isPending
-    const administrators = roles?.filter((role) => role.id === 2 || role.id === 3)
-    const [form, setForm] = useState<FormState>({
-        name: user?.name ?? '',
-        email: user?.email ?? '',
-        password: '',
-        role_id: user?.role?.id != null ? String(user.role.id) : '',
-        is_active: user?.is_active ?? true,
-    })
-    const [showPassword, setShowPassword] = useState(false)
-    const [errors, setErrors] = useState<Partial<FormState & { root: string }>>({})
+  const createMutation = useCreateUser();
+  const updateMutation = useUpdateUser();
+  const { data: roles, isLoading: rolesLoading } = useRoles();
+  const isBusy = createMutation.isPending || updateMutation.isPending;
+  const administrators = roles?.filter(
+    (role) => role.id === 2 || role.id === 3
+  );
+  const [form, setForm] = useState<FormState>({
+    name: user?.name ?? "",
+    email: user?.email ?? "",
+    role_id: user?.role?.id != null ? String(user.role.id) : "",
+    is_active: user?.is_active ?? true,
+  });
+  const [errors, setErrors] = useState<Partial<FormState & { root: string }>>(
+    {}
+  );
 
-    const overlayRef = useRef<HTMLDivElement>(null)
+  const overlayRef = useRef<HTMLDivElement>(null);
 
-    // close on overlay click
-    useEffect(() => {
-        function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
-        document.addEventListener('keydown', onKey)
-        return () => document.removeEventListener('keydown', onKey)
-    }, [onClose])
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
-    function validate() {
-        const errs: typeof errors = {}
-        if (!form.name.trim()) errs.name = 'Name is required.'
-        if (!form.email.trim()) errs.email = 'Email is required.'
-        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = 'Invalid email.'
-        if (!user && !form.password.trim()) errs.password = 'Password is required.'
-        else if (!user && form.password.length < 8) errs.password = 'Password must be at least 8 characters.'
-        if (!form.role_id) errs.role_id = 'Role is required.'
-        return errs
+  function validate() {
+    const errs: typeof errors = {};
+    if (!form.name.trim()) errs.name = "Name is required.";
+    if (!form.email.trim()) errs.email = "Email is required.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+      errs.email = "Invalid email.";
+    if (!form.role_id) errs.role_id = "Role is required.";
+    return errs;
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const errs = validate();
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      return;
     }
 
-    async function handleSubmit(e: React.FormEvent) {
-        e.preventDefault()
-        const errs = validate()
-        if (Object.keys(errs).length) { setErrors(errs); return }
+    const payload = { ...form, role_id: Number(form.role_id) };
 
-        const { password, ...rest } = form
-        const payload = user
-            ? { ...rest, role_id: Number(rest.role_id) }
-            : { ...form, role_id: Number(form.role_id), password }
-
-        try {
-            if (user) {
-                await updateMutation.mutateAsync({ id: user.id, data: payload })
-            } else {
-                await createMutation.mutateAsync(payload)
-            }
-            onClose()
-        } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : 'Something went wrong.'
-            setErrors({ root: msg })
-        }
+    try {
+      if (user) {
+        await updateMutation.mutateAsync({ id: user.id, data: payload });
+      } else {
+        await createMutation.mutateAsync(payload);
+      }
+      onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Something went wrong.";
+      setErrors({ root: msg });
     }
+  }
 
-    return (
-        <motion.div
-            ref={overlayRef}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-ink)]/30 p-4 backdrop-blur-sm"
-            onMouseDown={(e) => { if (e.target === overlayRef.current) onClose() }}
+  return (
+    <motion.div
+      ref={overlayRef}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-ink)]/30 p-4 backdrop-blur-sm"
+      onMouseDown={(e) => {
+        if (e.target === overlayRef.current) onClose();
+      }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 16 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 16 }}
+        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+        className="w-full max-w-md rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-[var(--color-line)] px-6 py-4">
+          <h2 className="text-base font-semibold tracking-tight">
+            {user ? "Edit user" : "Add new user"}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="grid h-8 w-8 place-items-center rounded-lg text-[var(--color-muted)] transition hover:bg-slate-100 hover:text-[var(--color-ink)]"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="space-y-4 px-6 py-5"
         >
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 16 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 16 }}
-                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                className="w-full max-w-md rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]"
+          {errors.root && (
+            <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {errors.root}
+            </p>
+          )}
+
+          {/* Name */}
+          <div className="space-y-1.5">
+            <label htmlFor="user-name" className="block text-sm font-medium">
+              Full name
+            </label>
+            <input
+              id="user-name"
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. Maria Santos"
+              className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-[var(--color-accent)]/30 ${
+                errors.name
+                  ? "border-red-400 bg-red-50"
+                  : "border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]"
+              }`}
+            />
+            {errors.name && (
+              <p className="text-xs text-red-600">{errors.name}</p>
+            )}
+          </div>
+
+          {/* Email */}
+          <div className="space-y-1.5">
+            <label htmlFor="user-email" className="block text-sm font-medium">
+              Email address
+            </label>
+            <input
+              id="user-email"
+              type="email"
+              value={form.email}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, email: e.target.value }))
+              }
+              placeholder="e.g. m.santos@occ.edu.ph"
+              className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-[var(--color-accent)]/30 ${
+                errors.email
+                  ? "border-red-400 bg-red-50"
+                  : "border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]"
+              }`}
+            />
+            {errors.email && (
+              <p className="text-xs text-red-600">{errors.email}</p>
+            )}
+          </div>
+
+          {/* Password — create only */}
+          <p className="text-xs text-[var(--color-muted)]">
+            A temporary password will be generated and emailed to this address.
+          </p>
+
+          {/* Role */}
+          <div className="space-y-1.5">
+            <label htmlFor="user-role" className="block text-sm font-medium">
+              Role
+            </label>
+            <select
+              id="user-role"
+              value={form.role_id}
+              disabled={rolesLoading}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, role_id: e.target.value }))
+              }
+              className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-[var(--color-accent)]/30 ${
+                errors.role_id
+                  ? "border-red-400 bg-red-50"
+                  : "border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]"
+              }`}
             >
-                {/* Header */}
-                <div className="flex items-center justify-between border-b border-[var(--color-line)] px-6 py-4">
-                    <h2 className="text-base font-semibold tracking-tight">
-                        {user ? 'Edit user' : 'Add new user'}
-                    </h2>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        aria-label="Close"
-                        className="grid h-8 w-8 place-items-center rounded-lg text-[var(--color-muted)] transition hover:bg-slate-100 hover:text-[var(--color-ink)]"
-                    >
-                        <X size={16} />
-                    </button>
-                </div>
+              <option value="">
+                {rolesLoading ? "Loading roles…" : "Select a role…"}
+              </option>
+              {administrators?.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+            {errors.role_id && (
+              <p className="text-xs text-red-600">{errors.role_id}</p>
+            )}
+          </div>
+          {/* Status toggle */}
+          <div className="flex items-center justify-between rounded-xl border border-[var(--color-line)] bg-slate-50/80 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">Account status</p>
+              <p className="text-xs text-[var(--color-muted)]">
+                {form.is_active ? "User can sign in" : "User is disabled"}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={form.is_active}
+              onClick={() =>
+                setForm((f) => ({ ...f, is_active: !f.is_active }))
+              }
+              className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${
+                form.is_active ? "bg-[var(--color-accent)]" : "bg-slate-300"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all duration-200 ${
+                  form.is_active ? "left-5.5 translate-x-0.5" : "left-0.5"
+                }`}
+              />
+            </button>
+          </div>
 
-                {/* Form */}
-                <form onSubmit={handleSubmit} noValidate className="space-y-4 px-6 py-5">
-                    {errors.root && (
-                        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                            {errors.root}
-                        </p>
-                    )}
-
-                    {/* Name */}
-                    <div className="space-y-1.5">
-                        <label htmlFor="user-name" className="block text-sm font-medium">
-                            Full name
-                        </label>
-                        <input
-                            id="user-name"
-                            type="text"
-                            value={form.name}
-                            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                            placeholder="e.g. Maria Santos"
-                            className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-[var(--color-accent)]/30 ${errors.name
-                                ? 'border-red-400 bg-red-50'
-                                : 'border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]'
-                                }`}
-                        />
-                        {errors.name && <p className="text-xs text-red-600">{errors.name}</p>}
-                    </div>
-
-                    {/* Email */}
-                    <div className="space-y-1.5">
-                        <label htmlFor="user-email" className="block text-sm font-medium">
-                            Email address
-                        </label>
-                        <input
-                            id="user-email"
-                            type="email"
-                            value={form.email}
-                            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                            placeholder="e.g. m.santos@occ.edu.ph"
-                            className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-[var(--color-accent)]/30 ${errors.email
-                                ? 'border-red-400 bg-red-50'
-                                : 'border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]'
-                                }`}
-                        />
-                        {errors.email && <p className="text-xs text-red-600">{errors.email}</p>}
-                    </div>
-
-                    {/* Password — create only */}
-                    {!user && (
-                        <div className="space-y-1.5">
-                            <label htmlFor="user-password" className="block text-sm font-medium">
-                                Password
-                            </label>
-                            <div className="relative">
-                                <input
-                                    id="user-password"
-                                    type={showPassword ? 'text' : 'password'}
-                                    value={form.password}
-                                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                                    placeholder="Min. 8 characters"
-                                    className={`w-full rounded-xl border px-3.5 py-2.5 pr-10 text-sm outline-none transition focus:ring-2 focus:ring-[var(--color-accent)]/30 ${errors.password
-                                        ? 'border-red-400 bg-red-50'
-                                        : 'border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]'
-                                        }`}
-                                />
-                                <button
-                                    type="button"
-                                    tabIndex={-1}
-                                    onClick={() => setShowPassword((v) => !v)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)] hover:text-[var(--color-ink)] transition"
-                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                                >
-                                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                                </button>
-                            </div>
-                            {errors.password && <p className="text-xs text-red-600">{errors.password}</p>}
-                        </div>
-                    )}
-
-                    {/* Role */}
-                    <div className="space-y-1.5">
-                        <label htmlFor="user-role" className="block text-sm font-medium">
-                            Role
-                        </label>
-                        <select
-                            id="user-role"
-                            value={form.role_id}
-                            disabled={rolesLoading}
-                            onChange={(e) => setForm((f) => ({ ...f, role_id: e.target.value }))}
-                            className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-[var(--color-accent)]/30 ${errors.role_id
-                                ? 'border-red-400 bg-red-50'
-                                : 'border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]'
-                                }`}
-                        >
-                            <option value="">
-                                {rolesLoading ? 'Loading roles…' : 'Select a role…'}
-                            </option>
-                            {administrators?.map((r) => (
-                                <option key={r.id} value={r.id}>
-                                    {r.label}
-                                </option>
-                            ))}
-                        </select>
-                        {errors.role_id && <p className="text-xs text-red-600">{errors.role_id}</p>}
-                    </div>
-                    {/* Status toggle */}
-                    <div className="flex items-center justify-between rounded-xl border border-[var(--color-line)] bg-slate-50/80 px-4 py-3">
-                        <div>
-                            <p className="text-sm font-medium">Account status</p>
-                            <p className="text-xs text-[var(--color-muted)]">
-                                {form.is_active ? 'User can sign in' : 'User is disabled'}
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            role="switch"
-                            aria-checked={form.is_active}
-                            onClick={() => setForm((f) => ({ ...f, is_active: !f.is_active }))}
-                            className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${form.is_active ? 'bg-[var(--color-accent)]' : 'bg-slate-300'
-                                }`}
-                        >
-                            <span
-                                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all duration-200 ${form.is_active ? 'left-5.5 translate-x-0.5' : 'left-0.5'
-                                    }`}
-                            />
-                        </button>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex justify-end gap-3 pt-1">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="rounded-xl border border-[var(--color-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-muted)] transition hover:bg-slate-50 hover:text-[var(--color-ink)]"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isBusy}
-                            className="flex items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
-                        >
-                            {isBusy ? (
-                                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                            ) : null}
-                            {user ? 'Save changes' : 'Create user'}
-                        </button>
-                    </div>
-                </form>
-            </motion.div>
-        </motion.div>
-    )
+          {/* Actions */}
+          <div className="flex justify-end gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-[var(--color-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-muted)] transition hover:bg-slate-50 hover:text-[var(--color-ink)]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isBusy}
+              className="flex items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
+            >
+              {isBusy ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : null}
+              {user ? "Save changes" : "Create user"}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>
+  );
 }
 
 // ─── DeleteConfirmModal ───────────────────────────────────────────────────────

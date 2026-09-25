@@ -8,8 +8,8 @@ import occLogo from "@/assets/OCC logo.webp";
 export function LoginPage() {
   const { user, loading, login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("superadmin@gmail.com");
-  const [password, setPassword] = useState("sadmin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
