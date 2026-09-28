@@ -55,6 +55,8 @@ export type SupervisorAttendanceLog = {
     student_name: string
     student_number: string | null
     time_in: string | null
+    break_out: string | null
+    break_in: string | null
     time_out: string | null
     duration_minutes: number | null
     task_note: string | null

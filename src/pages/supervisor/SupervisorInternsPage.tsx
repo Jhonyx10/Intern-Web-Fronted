@@ -3,7 +3,6 @@ import {
   useSupervisorInterns,
   useSupervisorProfile,
   useSupervisorSchedules,
-  type SupervisorIntern,
 } from "@/lib/queries/supervisor";
 import { useAuth } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
@@ -59,9 +58,9 @@ export function SupervisorInternsPage() {
   // individual request — most recent by start_date.
   const fallbackSchedule = companySchedules?.length
     ? [...companySchedules].sort(
-        (a, b) =>
-          new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
-      )[0]
+      (a, b) =>
+        new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+    )[0]
     : null;
 
   if (!user || user.role?.name !== "supervisor") {
@@ -111,13 +110,13 @@ export function SupervisorInternsPage() {
   const withTarget = list.filter((i) => i.required_hours);
   const avgCompletion = withTarget.length
     ? Math.round(
-        (withTarget.reduce(
-          (sum, i) => sum + Math.min(1, i.total_hours / i.required_hours!),
-          0
-        ) /
-          withTarget.length) *
-          100
-      )
+      (withTarget.reduce(
+        (sum, i) => sum + Math.min(1, i.total_hours / i.required_hours!),
+        0
+      ) /
+        withTarget.length) *
+      100
+    )
     : null;
 
   return (
@@ -195,11 +194,11 @@ export function SupervisorInternsPage() {
                   {list.map((intern) => {
                     const pct = intern.required_hours
                       ? Math.min(
-                          100,
-                          Math.round(
-                            (intern.total_hours / intern.required_hours) * 100
-                          )
+                        100,
+                        Math.round(
+                          (intern.total_hours / intern.required_hours) * 100
                         )
+                      )
                       : null;
                     // Prefer the intern's own approved request; fall back
                     // to the company-wide schedule if they don't have one.
@@ -321,11 +320,11 @@ export function SupervisorInternsPage() {
               {list.map((intern) => {
                 const pct = intern.required_hours
                   ? Math.min(
-                      100,
-                      Math.round(
-                        (intern.total_hours / intern.required_hours) * 100
-                      )
+                    100,
+                    Math.round(
+                      (intern.total_hours / intern.required_hours) * 100
                     )
+                  )
                   : null;
                 const sched = intern.approved_schedule ?? fallbackSchedule;
 

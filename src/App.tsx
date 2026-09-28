@@ -7,6 +7,7 @@ import { NotificationProvider } from "@/context/NotificationContext";
 import { CompaniesMapPage } from "@/pages/coordinator/CompaniesMapPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { LoginPage } from "@/pages/LoginPage";
+import { LandingPage } from "@/pages/LandingPage";
 import { AddCompanyPage } from "@/pages/forms/AddCompanyPage";
 import CoursePage from "@/pages/CoursePage";
 import { CourseFormPage } from "@/pages/forms/CourseFormPage";
@@ -41,12 +42,13 @@ function AppContent() {
 
   return (
     <NotificationProvider userId={user?.id}>
-      <BrowserRouter>
+      <BrowserRouter basename="/app">
         <Routes>
+          <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
-              <Route index element={<DashboardPage />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/companies/map" element={<CompaniesMapPage />} />
               <Route path="/companies/map/add" element={<AddCompanyPage />} />
               <Route path="/add/organization" element={<AddOrganization />} />

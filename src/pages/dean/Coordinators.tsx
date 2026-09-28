@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
-import { Plus, Search, Mail, Users, MoreVertical, Loader2 } from 'lucide-react'
+import { Plus, Search, Mail, Users, Loader2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { queryKeys } from '@/lib/query-keys'
@@ -64,7 +64,7 @@ const CoordinatorsPage = () => {
     const queryClient = useQueryClient()
 
     const addMutation = useMutation({
-        mutationFn: (data: { name: string; email: string; password: string; course_id?: number }) =>
+        mutationFn: (data: { name: string; email: string; course_id?: number }) =>
             apiRequest('/coordinators', { method: 'POST', body: data, token }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.coordinators.all })

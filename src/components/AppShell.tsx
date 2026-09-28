@@ -19,7 +19,7 @@ type NavItem = {
 }
 
 const navItems: NavItem[] = [
-  { to: "/", label: "Dashboard", end: true, icon: DashboardIcon },
+  { to: "/dashboard", label: "Dashboard", end: true, icon: DashboardIcon },
   {
     to: "/administrator",
     label: "Administrators",
@@ -121,7 +121,7 @@ const navItems: NavItem[] = [
 ];
 
 const pageTitles: Array<{ path: string; title: string; end?: boolean }> = [
-  { path: "/", title: "Dashboard", end: true },
+  { path: "/dashboard", title: "Dashboard", end: true },
   { path: "/companies/map/add", title: "Add Companies" },
   { path: "/companies/map", title: "Organizations" },
   { path: "/courses", title: "Departments" },
