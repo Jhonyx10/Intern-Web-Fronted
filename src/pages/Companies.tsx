@@ -16,6 +16,7 @@ import {
     Ban,
     AlertTriangle,
     Filter,
+    Plus,
 } from 'lucide-react'
 import {
     useCompanies,
@@ -260,7 +261,8 @@ function CompanyCard({
 type Tab = 'all' | 'pending' | 'approved' | 'rejected'
 
 export default function Companies() {
-    const [activeTab, setActiveTab] = useState<Tab>('pending')
+    const navigate = useNavigate()
+    const [activeTab, setActiveTab] = useState<Tab>('all')
     const [search, setSearch] = useState('')
     const [confirmTarget, setConfirmTarget] = useState<{ company: Company; action: 'approve' | 'reject' } | null>(null)
     const [actionError, setActionError] = useState<string | null>(null)
@@ -337,6 +339,14 @@ export default function Companies() {
                             Review pending companies from coordinators and manage approval.
                         </p>
                     </div>
+
+                    <button
+                        type="button"
+                        onClick={() => navigate('/add/organization')}
+                        className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
+                    >
+                        <Plus size={15} /> Add Company
+                    </button>
                 </motion.div>
 
                 {/* ── Stat cards ────────────────────────────────────── */}

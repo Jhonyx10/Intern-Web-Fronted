@@ -180,8 +180,8 @@ function UserFormModal({
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               placeholder="e.g. Maria Santos"
               className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-[var(--color-accent)]/30 ${errors.name
-                  ? "border-red-400 bg-red-50"
-                  : "border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]"
+                ? "border-red-400 bg-red-50"
+                : "border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]"
                 }`}
             />
             {errors.name && (
@@ -203,8 +203,8 @@ function UserFormModal({
               }
               placeholder="e.g. m.santos@occ.edu.ph"
               className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-[var(--color-accent)]/30 ${errors.email
-                  ? "border-red-400 bg-red-50"
-                  : "border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]"
+                ? "border-red-400 bg-red-50"
+                : "border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]"
                 }`}
             />
             {errors.email && (
@@ -230,8 +230,8 @@ function UserFormModal({
                 setForm((f) => ({ ...f, role_id: e.target.value }))
               }
               className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-[var(--color-accent)]/30 ${errors.role_id
-                  ? "border-red-400 bg-red-50"
-                  : "border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]"
+                ? "border-red-400 bg-red-50"
+                : "border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]"
                 }`}
             >
               <option value="">
@@ -376,11 +376,9 @@ function DeleteConfirmModal({
 function UserRow({
   user,
   onEdit,
-  onDelete,
 }: {
   user: User
   onEdit: (u: User) => void
-  onDelete: (u: User) => void
 }) {
   const initials = user.name
     .split(' ')
@@ -437,7 +435,7 @@ function UserRow({
 
       {/* Actions */}
       <td className="py-3.5 pl-4 pr-5 text-right">
-        <div className="flex items-center justify-end gap-2 opacity-0 transition group-hover:opacity-100">
+        <div className="flex items-center justify-end gap-2">
           <button
             type="button"
             onClick={() => onEdit(user)}
@@ -445,14 +443,6 @@ function UserRow({
             className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
           >
             <Edit2 size={11} /> Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(user)}
-            aria-label={`Delete ${user.name}`}
-            className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-red-300 hover:text-red-600"
-          >
-            <Trash2 size={11} /> Delete
           </button>
         </div>
       </td>
@@ -705,7 +695,6 @@ export default function AdministratorPage() {
                         key={user.id}
                         user={user}
                         onEdit={setEditTarget}
-                        onDelete={setDeleteTarget}
                       />
                     ))}
                   </AnimatePresence>

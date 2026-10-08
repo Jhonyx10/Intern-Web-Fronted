@@ -20,8 +20,10 @@ import {
   ClipboardCheck,
   Star,
   Map,
+  Download,
 } from "lucide-react";
 import { useStudent } from "@/lib/queries/students";
+import { exportDTRAsCSV, exportDTRAsPDF } from "@/lib/exportDtr";
 import type {
   CompanySchedule,
   TimeLog,
@@ -29,10 +31,23 @@ import type {
   ItemType,
   GeofenceExcursion,
 } from "@/types";
+import { exportWeeklyReportPdf } from "@/lib/weeklyReportPdf";
+import {
+  buildWeeklyReportRows,
+  getFirstLogDate,
+  getLatestLogDate,
+} from "@/lib/WeeklyReportRows";
+import ExportWeeklyReportModal, {
+  type WeeklyReportExportInput,
+} from "@/components/modal/ExportWeeklyReportModal";
+import { useTheme } from "@/context/ThemeContext";
+import OCCLOGO from "@/assets/OCC logo.webp";
 import { DocumentPreviewModal } from "@/components/modal/DocumentPreviewModal";
 import { TimeLogDetails } from "@/components/modal/TimeLogDetails";
 import { GeofenceExcursionDetailsModal } from "@/components/modal/GeofenceExcursionDetailsModal";
+import { ExportDTRModal } from "@/components/modal/ExportDtrModal";
 import { useUpdateDocumentStatus } from "@/lib/queries/documents";
+import { toastMutationError, toastMutationSuccess } from "@/lib/mutationToast";
 // --- Shapes matching the actual /students/{id} payload ---
 // Note: `options` comes back as a raw JSON string, not a parsed object —
 // same field name as EvaluationItemOption in your types.ts, different
@@ -174,7 +189,10 @@ export function StudentDetailsPage() {
     null
   );
   const [viewingExcursion, setViewingExcursion] = useState<GeofenceExcursion | null>(null);
-
+  const [exportOpen, setExportOpen] = useState(false);
+  const [weeklyOpen, setWeeklyOpen] = useState(false);
+  const [weeklyExporting, setWeeklyExporting] = useState(false);
+  const { logoUrl } = useTheme();
   const fullName = useMemo(() => {
     if (!student) return "";
     return [student.first_name, student.middle_name, student.last_name]
@@ -216,6 +234,33 @@ export function StudentDetailsPage() {
       0
     ) / submittedEvaluations.length
     : null;
+
+  const supervisor = companySchedules[0]?.creator;
+
+  async function handleExportWeekly(input: WeeklyReportExportInput) {
+    setWeeklyExporting(true);
+    try {
+      const middle = student!.middle_name
+        ? ` ${student!.middle_name[0].toUpperCase()}.`
+        : "";
+      await exportWeeklyReportPdf({
+        studentName: `${student!.last_name}, ${student!.first_name}${middle}`,
+        weekNo: input.weekNo,
+        rows: buildWeeklyReportRows(timeLogs, input.weekDate),
+        verifiedBy: { name: fullName, organization: assignedCompany?.name },
+        notedBy: { name: input.notedByName, position: input.notedByPosition },
+        school: { college: student!.section?.course?.name },
+        logos: { left: OCCLOGO, right: logoUrl },
+        fileName: `weekly-report-week-${input.weekNo}-${student!.last_name}.pdf`,
+      });
+      setWeeklyOpen(false);
+      toastMutationSuccess("Weekly report exported");
+    } catch (err) {
+      toastMutationError(err, "Failed to export weekly report");
+    } finally {
+      setWeeklyExporting(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -286,10 +331,19 @@ export function StudentDetailsPage() {
                   {student.student_number}
                 </span>
               </p>
+              {student.email && (
+                <a
+                  href={`mailto:${student.email}`}
+                  className="mt-0.5 inline-flex items-center gap-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-accent)] transition-colors"
+                >
+                  <Mail size={12} />
+                  {student.email}
+                </a>
+              )}
             </div>
           </div>
 
-          {/* Section & Course Badges */}
+          {/* Section & Program Badges */}
           <div className="flex flex-wrap gap-2.5">
             {student.section && (
               <div className="rounded-xl border border-[var(--color-line)] bg-slate-50 px-3.5 py-2">
@@ -304,9 +358,7 @@ export function StudentDetailsPage() {
 
             {student.section?.course && (
               <div className="rounded-xl border border-[var(--color-line)] bg-indigo-50/50 px-3.5 py-2">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-indigo-500">
-                  Course
-                </p>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-indigo-500">Program</p>
                 <p className="text-xs font-bold text-indigo-900">
                   {student.section.course.code}
                 </p>
@@ -657,13 +709,31 @@ export function StudentDetailsPage() {
             className="space-y-4"
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-[var(--color-ink)]">
-                Student Time Logs
-              </h3>
-              <span className="text-xs text-[var(--color-muted)] font-medium">
-                Total: {timeLogs.length} entries · {totalHoursRendered} hrs
-                rendered
-              </span>
+              <div>
+                <h3 className="text-base font-bold text-[var(--color-ink)]">
+                  Student Time Logs
+                </h3>
+                <span className="text-xs text-[var(--color-muted)] font-medium">
+                  Total: {timeLogs.length} entries · {totalHoursRendered} hrs
+                  rendered
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setWeeklyOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--color-ink)] shadow-sm hover:bg-slate-50 transition whitespace-nowrap"
+                >
+                  <FileText size={14} /> Export Weekly Report
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExportOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--color-ink)] shadow-sm hover:bg-slate-50 transition whitespace-nowrap"
+                >
+                  <Download size={14} /> Export DTR
+                </button>
+              </div>
             </div>
 
             {timeLogs.length > 0 ? (
@@ -1322,6 +1392,23 @@ export function StudentDetailsPage() {
         isOpen={viewingExcursion !== null}
         excursion={viewingExcursion}
         onClose={() => setViewingExcursion(null)}
+      />
+
+      <ExportDTRModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        onCSV={(range) => exportDTRAsCSV(student, timeLogs, range)}
+        onPDF={(range) => exportDTRAsPDF(student, timeLogs, range)}
+      />
+      <ExportWeeklyReportModal
+        open={weeklyOpen}
+        onClose={() => setWeeklyOpen(false)}
+        onExport={(input) => void handleExportWeekly(input)}
+        isExporting={weeklyExporting}
+        defaultWeekDate={getLatestLogDate(timeLogs) ?? new Date()}
+        firstLogDate={getFirstLogDate(timeLogs)}
+        defaultNotedByName={supervisor?.user?.name ?? ""}
+        defaultNotedByPosition={supervisor?.position_title ?? ""}
       />
     </section>
   );

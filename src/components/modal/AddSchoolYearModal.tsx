@@ -5,10 +5,13 @@ import { backdropVariants, panelVariants } from "./ModalVariant";
 
 type SchoolYearInitialData = {
   name: string;
+  semester?: string | null;
   start_date: string | null;
   end_date: string | null;
   is_active: boolean;
 };
+
+const SEMESTERS = ["First Semester", "Second Semester", "Summer Semester"];
 
 export default function AddSchoolYearModal({
   open,
@@ -21,6 +24,7 @@ export default function AddSchoolYearModal({
   onClose: () => void;
   onAdd: (data: {
     name: string;
+    semester: string;
     start_date: string;
     end_date: string;
     is_active: boolean;
@@ -29,6 +33,7 @@ export default function AddSchoolYearModal({
   initialData?: SchoolYearInitialData;
 }) {
   const [name, setName] = useState("");
+  const [semester, setSemester] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [isActive, setIsActive] = useState(true);
@@ -38,6 +43,7 @@ export default function AddSchoolYearModal({
     if (!open) return;
     if (initialData) {
       setName(initialData.name ?? "");
+      setSemester(initialData.semester ?? "");
       setStartDate(initialData.start_date ?? "");
       setEndDate(initialData.end_date ?? "");
       setIsActive(initialData.is_active ?? true);
@@ -51,6 +57,7 @@ export default function AddSchoolYearModal({
 
   function reset() {
     setName("");
+    setSemester("");
     setStartDate("");
     setEndDate("");
     setIsActive(true);
@@ -61,6 +68,7 @@ export default function AddSchoolYearModal({
     if (!name.trim()) return;
     onAdd({
       name: name.trim(),
+      semester,
       start_date: startDate,
       end_date: endDate,
       is_active: isActive,
@@ -115,7 +123,7 @@ export default function AddSchoolYearModal({
               <form onSubmit={submit} className="flex flex-col gap-3.5">
                 <label className="flex flex-col gap-1.5 text-sm">
                   <span className="font-medium text-[var(--color-ink)]">
-                    Name
+                    Label
                   </span>
                   <input
                     value={name}
@@ -125,7 +133,22 @@ export default function AddSchoolYearModal({
                     className="rounded-xl border border-[var(--color-line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
                   />
                 </label>
-
+                <label className="flex flex-col gap-1.5 text-sm">
+                  <span className="font-medium text-[var(--color-ink)]">Semester</span>
+                  <select
+                    value={semester}
+                    onChange={(e) => setSemester(e.target.value)}
+                    required
+                    className="rounded-xl border border-[var(--color-line)] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                  >
+                    <option value="">Select semester</option>
+                    {SEMESTERS.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="flex flex-col gap-1.5 text-sm">
                     <span className="font-medium text-[var(--color-ink)]">

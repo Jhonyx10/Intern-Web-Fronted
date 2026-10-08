@@ -151,7 +151,7 @@ export default function EditSectionModal({
                                 </div>
 
                                 <label className="flex flex-col gap-1.5 text-sm">
-                                    <span className="font-medium text-[var(--color-ink)]">Course</span>
+                                    <span className="font-medium text-[var(--color-ink)]">Program</span>
                                     <select
                                         value={courseId}
                                         onChange={(e) => {

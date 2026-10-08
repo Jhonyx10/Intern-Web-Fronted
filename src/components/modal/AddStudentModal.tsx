@@ -12,6 +12,9 @@ type NewStudent = {
   last_name: string
   student_number: string
   section: string
+  email?: string | null
+  contact_number?: string | null
+  gender?: 'Male' | 'Female' | null
 }
 
 type ParsedRow = NewStudent & { rowIndex: number; error?: string }
@@ -45,36 +48,80 @@ const panelVariants: Variants = {
   },
 }
 
+function splitName(raw: string): { first: string; middle: string | null; last: string } | null {
+  const comma = raw.indexOf(',')
+  if (comma === -1) return null
+  const last = raw.slice(0, comma).trim()
+  const parts = raw.slice(comma + 1).trim().split(/\s+/).filter(Boolean)
+  if (!last || parts.length === 0) return null
+  let middle: string | null = null
+  if (parts.length > 1 && /^\p{Lu}\.?$/u.test(parts[parts.length - 1])) {
+    middle = parts.pop() ?? null
+  }
+  return { first: parts.join(' '), middle, last }
+}
+
 function parseRows(json: Record<string, unknown>[], sectionId: number | string): ParsedRow[] {
+  const seenNumbers = new Set<string>()
+  const seenEmails = new Set<string>()
+
   return json.map((row, index) => {
-    const firstName = String(row['First Name'] ?? row['first_name'] ?? '').trim()
-    const middleName = String(row['Middle Name'] ?? row['middle_name'] ?? '').trim() || null
-    const lastName = String(row['Last Name'] ?? row['last_name'] ?? '').trim()
-
-    // Fallback if they only provided Name
-    const fullNameRaw = String(row['Name'] ?? row['name'] ?? '').trim()
-    let parsedFirst = firstName
-    let parsedMiddle = middleName
-    let parsedLast = lastName
-
-    if (!firstName && !lastName && fullNameRaw) {
-      const [f, ...rest] = fullNameRaw.split(' ')
-      parsedFirst = f
-      parsedLast = rest.length > 0 ? (rest.pop() ?? '') : f
-      parsedMiddle = rest.join(' ') || null
+    const cell = (...keys: string[]) => {
+      for (const k of keys) {
+        const v = row[k]
+        if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim()
+      }
+      return ''
     }
 
-    const student_number = String(row['Student Number'] ?? row['student_number'] ?? row['Student ID'] ?? row['studentId'] ?? row['ID'] ?? '').trim()
+    const student_number = cell('ID Number', 'Student Number', 'student_number', 'Student ID', 'ID')
+    const email = cell('Email', 'email').toLowerCase()
+    let contact = cell('Contact Number', 'contact_number')
+    if (/^9\d{9}$/.test(contact)) contact = '0' + contact
+    const genderRaw = cell('Gender', 'gender')
+    const gender = genderRaw
+      ? ((genderRaw.charAt(0).toUpperCase() + genderRaw.slice(1).toLowerCase()) as 'Male' | 'Female')
+      : null
+
+    let first = cell('First Name', 'first_name')
+    let middle: string | null = cell('Middle Name', 'middle_name') || null
+    let last = cell('Last Name', 'last_name')
+    let nameInvalid = false
+
+    if (!first && !last) {
+      const parsed = splitName(cell('Name', 'name'))
+      if (parsed) {
+        first = parsed.first
+        middle = parsed.middle
+        last = parsed.last
+      } else {
+        nameInvalid = true
+      }
+    }
 
     let error: string | undefined
-    if (!parsedFirst || !parsedLast) error = 'Missing name details'
-    else if (!student_number) error = 'Missing student number'
+    if (nameInvalid) error = 'Name must be "Last Name, First Name M."'
+    else if (!first || !last) error = 'Missing name details'
+    else if (!student_number) error = 'Missing ID number'
+    else if (!email) error = 'Missing email'
+    else if (!/^\S+@\S+\.\S+$/.test(email)) error = 'Invalid email'
+    else if (gender && gender !== 'Male' && gender !== 'Female') error = 'Gender must be Male or Female'
+    else if (seenNumbers.has(student_number)) error = 'Duplicate ID number in file'
+    else if (seenEmails.has(email)) error = 'Duplicate email in file'
+
+    if (!error) {
+      seenNumbers.add(student_number)
+      seenEmails.add(email)
+    }
 
     return {
-      first_name: parsedFirst,
-      middle_name: parsedMiddle,
-      last_name: parsedLast,
+      first_name: first,
+      middle_name: middle,
+      last_name: last,
       student_number,
+      email,
+      contact_number: contact || null,
+      gender,
       section: String(sectionId),
       rowIndex: index + 2,
       error,
@@ -89,6 +136,9 @@ export function AddStudentModal({ open, sectionId, onClose, onAddSingle }: AddSt
   const [middleName, setMiddleName] = useState('')
   const [lastName, setLastName] = useState('')
   const [studentNumber, setStudentNumber] = useState('')
+  const [email, setEmail] = useState('')
+  const [contactNumber, setContactNumber] = useState('')
+  const [gender, setGender] = useState('')
 
   const [fileName, setFileName] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -99,7 +149,7 @@ export function AddStudentModal({ open, sectionId, onClose, onAddSingle }: AddSt
   const importMutation = useImportStudents()
   const downloadTemplateMutation = useDownloadTemplate()
 
- async function handleDownloadTemplate() {
+  async function handleDownloadTemplate() {
     try {
       await downloadTemplateMutation.mutateAsync()
       addToast('success', 'Template downloaded successfully.')
@@ -125,6 +175,9 @@ export function AddStudentModal({ open, sectionId, onClose, onAddSingle }: AddSt
       setMiddleName('')
       setLastName('')
       setStudentNumber('')
+      setEmail('')
+      setContactNumber('')
+      setGender('')
       setFileName(null)
       setSelectedFile(null)
       setRows([])
@@ -190,6 +243,9 @@ export function AddStudentModal({ open, sectionId, onClose, onAddSingle }: AddSt
       last_name: lastName.trim(),
       student_number: studentNumber.trim(),
       section: String(sectionId),
+      email: email.trim() || null,
+      contact_number: contactNumber.trim() || null,
+      gender: (gender || null) as 'Male' | 'Female' | null,
     })
     onClose()
   }
@@ -208,8 +264,8 @@ export function AddStudentModal({ open, sectionId, onClose, onAddSingle }: AddSt
           }
         },
         onError: (error) => {
-        addToast('error', 'Import failed', error instanceof Error ? error.message : undefined)
-      },
+          addToast('error', 'Import failed', error instanceof Error ? error.message : undefined)
+        },
       }
     )
   }
@@ -327,7 +383,49 @@ export function AddStudentModal({ open, sectionId, onClose, onAddSingle }: AddSt
                         className="rounded-xl border border-[var(--color-line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
                       />
                     </label>
+                    <label className="flex flex-col gap-1.5 text-sm">
+                      <span className="font-medium text-[var(--color-ink)]">Email</span>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        placeholder="e.g. kyla@gmail.com"
+                        required
+                        className="rounded-xl border border-[var(--color-line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                      />
+                    </label>
 
+                    <div className="grid grid-cols-2 gap-3.5">
+                      <label className="flex flex-col gap-1.5 text-sm">
+                        <span className="font-medium text-[var(--color-ink)]">
+                          Contact Number <span className="text-[var(--color-muted)] font-normal">(Optional)</span>
+                        </span>
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          value={contactNumber}
+                          onChange={(event) => setContactNumber(event.target.value)}
+                          placeholder="e.g. 09123456789"
+                          maxLength={20}
+                          className="rounded-xl border border-[var(--color-line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                        />
+                      </label>
+
+                      <label className="flex flex-col gap-1.5 text-sm">
+                        <span className="font-medium text-[var(--color-ink)]">
+                          Gender <span className="text-[var(--color-muted)] font-normal">(Optional)</span>
+                        </span>
+                        <select
+                          value={gender}
+                          onChange={(event) => setGender(event.target.value)}
+                          className="rounded-xl border border-[var(--color-line)] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                        >
+                          <option value="">Select…</option>
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                        </select>
+                      </label>
+                    </div>
                     <button
                       type="submit"
                       className="mt-2 rounded-xl bg-[var(--color-accent)] py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
@@ -344,14 +442,14 @@ export function AddStudentModal({ open, sectionId, onClose, onAddSingle }: AddSt
                     transition={{ duration: 0.18 }}
                     className="flex flex-col gap-3.5"
                   >
-                 <button
-                    type="button"
-                    onClick={handleDownloadTemplate}
-                    disabled={downloadTemplateMutation.isPending}
-                    className="inline-flex w-fit items-center gap-1.5 text-xs font-medium text-[var(--color-accent)] hover:underline disabled:opacity-50"
-                  >
-                    <Download size={13} /> {downloadTemplateMutation.isPending ? 'Preparing…' : 'Download import template'}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadTemplate}
+                      disabled={downloadTemplateMutation.isPending}
+                      className="inline-flex w-fit items-center gap-1.5 text-xs font-medium text-[var(--color-accent)] hover:underline disabled:opacity-50"
+                    >
+                      <Download size={13} /> {downloadTemplateMutation.isPending ? 'Preparing…' : 'Download import template'}
+                    </button>
                     <div
                       onDragOver={(event) => {
                         event.preventDefault()
@@ -425,7 +523,7 @@ export function AddStudentModal({ open, sectionId, onClose, onAddSingle }: AddSt
                                   {row.first_name ? `${row.first_name} ${row.last_name}` : `Row ${row.rowIndex}`}
                                 </span>
                                 <span className={row.error ? 'text-red-500' : 'text-[var(--color-muted)]'}>
-                                  {row.error ?? row.student_number}
+                                  {row.error ?? `${row.student_number} · ${row.email}`}
                                 </span>
                               </div>
                             ))}

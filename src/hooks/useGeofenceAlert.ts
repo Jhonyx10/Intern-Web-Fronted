@@ -12,7 +12,7 @@ export function useGeofenceAlerts() {
     const courseId = u?.dean_portal_course_id ?? u?.coordinator_course_id ?? null;
 
     useEffect(() => {
-        const isSupervisor = role === 'dean' || role === 'coordinator' || role === 'program_head';
+        const isSupervisor = role === 'dean' || role === 'coordinator';
         if (!isSupervisor || !courseId) return;
 
         const channel = echo.private(`course.${courseId}.supervisors`);

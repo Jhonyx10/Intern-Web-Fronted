@@ -198,7 +198,7 @@ export const EvaluationTemplateDetails: React.FC = () => {
         </div>
 
         <button
-          onClick={() => navigate(`/evaluations/${id}/edit`)}
+          onClick={() => navigate(`/evaluation/edit/${id}`)}
           className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors shrink-0"
         >
           <Pencil className="w-3.5 h-3.5" />

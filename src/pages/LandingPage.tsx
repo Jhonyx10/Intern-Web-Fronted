@@ -63,7 +63,7 @@ export function LandingPage() {
                                 Get started
                             </Link>
                             <a
-                                href="/app/app-release.apk"
+                                href="/app/app/app-release.apk"
                                 download="InternApp.apk"
                                 className="inline-flex items-center gap-2 rounded-xl border-2 border-[#16305C] px-6 py-3 text-sm font-semibold text-[#16305C] hover:bg-[#16305C] hover:text-white transition-all hover:scale-105 active:scale-95"
                             >

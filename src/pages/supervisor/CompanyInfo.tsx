@@ -1,10 +1,17 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { useMemo, useState } from "react";
-import { MapboxMap, type MapMarker, type MapPolygonFeature } from "@/components/MapboxMap";
+import { useMemo, useState, useRef, useEffect } from "react";
+import { MapboxMap, type MapboxMapHandle, type MapMarker, type MapPolygonFeature } from "@/components/MapboxMap";
 import { useMyCompany } from "@/lib/queries/companies";
 import { Building2, MapPin, Phone, Mail, User2, Shield, ShieldOff, ChevronDown, Users } from "lucide-react";
-import { useSupervisorInterns, useAssignInternsToBuilding } from "@/lib/queries/supervisor";
+import {
+  useSupervisorInterns,
+  useAssignInternsToBuilding,
+  useUpdateBuilding,
+  useUpdateCompanyGeofence,
+  useCreateBuilding,
+} from "@/lib/queries/supervisor";
 import { AssignInternsModal } from "@/components/modal/AssignInternsModal";
+import type { GeofencePolygon } from "@/types";
 
 const BUILDING_COLORS = ['#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#6366f1'];
 
@@ -12,8 +19,42 @@ const CompanyInfo = () => {
   const { data: company, isLoading, error } = useMyCompany();
   const { data: interns } = useSupervisorInterns();
   const { mutateAsync: assignToBuilding, isPending: isAssigning } = useAssignInternsToBuilding();
+  const { mutateAsync: updateBuilding, isPending: isUpdatingBuilding } = useUpdateBuilding();
+  const { mutateAsync: updateCompanyGeofence, isPending: isUpdatingMain } = useUpdateCompanyGeofence();
+  const { mutateAsync: createBuilding, isPending: isCreating } = useCreateBuilding();
+
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [expandedBuildingIds, setExpandedBuildingIds] = useState<Set<number>>(new Set());
+  const [editingBuildingId, setEditingBuildingId] = useState<number | null>(null);
+  const [isEditingMainGeofence, setIsEditingMainGeofence] = useState(false);
+  const [isCreatingBuilding, setIsCreatingBuilding] = useState(false);
+  const [newBuildingName, setNewBuildingName] = useState('');
+  const [newBuildingCode, setNewBuildingCode] = useState('');
+  const [draftPolygon, setDraftPolygon] = useState<GeofencePolygon | null>(null);
+  const mapRef = useRef<MapboxMapHandle>(null);
+
+  useEffect(() => {
+    if (editingBuildingId) {
+      const activeBuilding = company?.buildings?.find(b => b.id === editingBuildingId);
+      if (activeBuilding?.geofence_polygon && activeBuilding.geofence_polygon.type === 'Polygon') {
+        const poly = activeBuilding.geofence_polygon as GeofencePolygon;
+        setDraftPolygon(poly);
+        const timer = setTimeout(() => {
+          mapRef.current?.loadPolygon(poly);
+        }, 800);
+        return () => clearTimeout(timer);
+      }
+    } else if (isEditingMainGeofence && company) {
+      if (company.geofence_polygon && company.geofence_polygon.type === 'Polygon') {
+        const poly = company.geofence_polygon as GeofencePolygon;
+        setDraftPolygon(poly);
+        const timer = setTimeout(() => {
+          mapRef.current?.loadPolygon(poly);
+        }, 800);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [editingBuildingId, isEditingMainGeofence, company]);
 
   const markers = useMemo<MapMarker[]>(() => {
     const marks: MapMarker[] = [];
@@ -50,7 +91,8 @@ const CompanyInfo = () => {
   const polygons = useMemo<MapPolygonFeature[]>(() => {
     const features: MapPolygonFeature[] = [];
 
-    if (company?.geofence_enabled && company?.geofence_polygon) {
+    // Exclude polygon from display if we are currently editing it
+    if (!isEditingMainGeofence && company?.geofence_enabled && company?.geofence_polygon) {
       features.push({
         id: `company-${company.id}`,
         name: company.name,
@@ -60,7 +102,8 @@ const CompanyInfo = () => {
     }
 
     company?.buildings?.forEach((b, index) => {
-      if (b.geofence_enabled && b.geofence_polygon?.type === 'Polygon') {
+      // Exclude polygon from display if we are currently editing it (MapboxDraw will show the active one)
+      if (b.id !== editingBuildingId && b.geofence_enabled && b.geofence_polygon?.type === 'Polygon') {
         features.push({
           id: `building-${b.id}`,
           name: b.name || 'Unnamed Building',
@@ -71,7 +114,7 @@ const CompanyInfo = () => {
     });
 
     return features;
-  }, [company]);
+  }, [company, editingBuildingId, isEditingMainGeofence]);
 
   if (isLoading) return <div>Loading company...</div>;
   if (error) return <div>Failed to load company.</div>;
@@ -97,6 +140,32 @@ const CompanyInfo = () => {
       }
       return next;
     });
+  };
+
+  const mapCenter = hasCoords ? [company.longitude!, company.latitude!] as [number, number] : undefined;
+
+  const handleSaveMainGeofence = async () => {
+    if (!company) return;
+    await updateCompanyGeofence({
+      geofence_polygon: draftPolygon,
+      geofence_enabled: !!draftPolygon,
+    });
+    setIsEditingMainGeofence(false);
+    setDraftPolygon(null);
+  };
+
+  const handleSaveGeofence = async (buildingId: number) => {
+    if (!company) return;
+    await updateBuilding({
+      companyId: company.id,
+      buildingId,
+      input: {
+        geofence_polygon: draftPolygon,
+        geofence_enabled: !!draftPolygon,
+      },
+    });
+    setEditingBuildingId(null);
+    setDraftPolygon(null);
   };
 
   return (
@@ -160,9 +229,8 @@ const CompanyInfo = () => {
             <div className="mb-2 flex items-center justify-between">
               <h3 className="font-semibold text-sm text-[var(--color-ink)]">Main Geofence</h3>
               <div
-                className={`flex items-center gap-1.5 text-xs font-medium ${
-                  company.geofence_enabled ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]'
-                }`}
+                className={`flex items-center gap-1.5 text-xs font-medium ${company.geofence_enabled ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]'
+                  }`}
               >
                 {company.geofence_enabled ? (
                   <>
@@ -185,38 +253,152 @@ const CompanyInfo = () => {
                 Polygon: {company.geofence_polygon ? <strong className="text-green-600">Defined</strong> : 'None'}
               </p>
             </div>
+
+            {isEditingMainGeofence ? (
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => void handleSaveMainGeofence()}
+                  disabled={isUpdatingMain}
+                  className="flex-1 rounded-md bg-[var(--color-accent)] py-1.5 text-xs font-medium text-white shadow-sm hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
+                >
+                  {isUpdatingMain ? 'Saving...' : 'Save Geofence'}
+                </button>
+                <button
+                  onClick={() => {
+                    setIsEditingMainGeofence(false)
+                    setDraftPolygon(null)
+                  }}
+                  disabled={isUpdatingMain}
+                  className="flex-1 rounded-md border border-[var(--color-line)] bg-white py-1.5 text-xs font-medium text-[var(--color-ink)] hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setEditingBuildingId(null);
+                  setIsEditingMainGeofence(true);
+                }}
+                className="mt-3 w-full rounded-md border border-[var(--color-accent)] bg-white py-1.5 text-xs font-medium text-[var(--color-accent)] hover:bg-green-50"
+              >
+                {company.geofence_polygon ? 'Edit Main Geofence' : 'Add Main Geofence'}
+              </button>
+            )}
           </div>
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white/80 shadow-[var(--shadow-soft)] backdrop-blur">
           <MapboxMap
+            ref={mapRef}
             heightClassName="h-[360px]"
-            center={hasCoords ? [company.longitude!, company.latitude!] : undefined}
+            center={mapCenter}
+            defaultFlyTo={mapCenter}
             zoom={17}
             fitMarkers={false}
             showCampusMarker={false}
             markers={markers}
             polygons={polygons}
+            drawEnabled={editingBuildingId !== null || isEditingMainGeofence || isCreatingBuilding}
+            onDrawChange={setDraftPolygon}
           />
         </div>
       </div>
 
       {/* Bottom row — buildings, full width */}
-      {company.buildings && company.buildings.length > 0 && (
+      {company.buildings && (
         <div className="rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
           <div className="border-b border-[var(--color-line)] px-6 py-4 flex items-center justify-between">
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <MapPin size={18} className="text-[var(--color-muted)]" />
               Buildings <span className="text-sm font-normal text-[var(--color-muted)]">({company.buildings.length})</span>
             </h3>
-            <button
-              onClick={() => setIsAssignModalOpen(true)}
-              className="rounded-xl bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--color-accent-hover)]"
-            >
-              Assign interns
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setIsCreatingBuilding(true);
+                  setDraftPolygon(null);
+                }}
+                disabled={isCreatingBuilding}
+                className="rounded-xl border border-[var(--color-accent)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-accent)] transition hover:bg-green-50 disabled:opacity-50"
+              >
+                Add Building
+              </button>
+              <button
+                onClick={() => setIsAssignModalOpen(true)}
+                className="rounded-xl bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--color-accent-hover)]"
+              >
+                Assign interns
+              </button>
+            </div>
           </div>
           <div className="grid gap-4 p-6 md:grid-cols-2 lg:grid-cols-3">
+
+            {/* Create Building Form */}
+            {isCreatingBuilding && (
+              <div className="rounded-xl border border-[var(--color-accent)] bg-green-50/20 p-4 border-l-4">
+                <div className="mb-2">
+                  <h4 className="text-sm font-semibold text-[var(--color-ink)]">New Building</h4>
+                  <p className="text-xs text-[var(--color-muted)]">Draw a geofence on the map and enter details below.</p>
+                </div>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Building Name"
+                    value={newBuildingName}
+                    onChange={(e) => setNewBuildingName(e.target.value)}
+                    className="w-full rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs text-[var(--color-ink)] focus:border-[var(--color-accent)] focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Building Code (e.g. BLD1)"
+                    value={newBuildingCode}
+                    onChange={(e) => setNewBuildingCode(e.target.value)}
+                    className="w-full rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs text-[var(--color-ink)] focus:border-[var(--color-accent)] focus:outline-none"
+                  />
+                  <p className="text-xs">
+                    Polygon: {draftPolygon ? <strong className="text-green-600">Drawn</strong> : <span className="text-[var(--color-muted)]">None</span>}
+                  </p>
+
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={async () => {
+                        if (!company) return;
+                        await createBuilding({
+                          companyId: company.id,
+                          input: {
+                            name: newBuildingName,
+                            code: newBuildingCode,
+                            geofence_polygon: draftPolygon,
+                            geofence_enabled: !!draftPolygon
+                          }
+                        });
+                        setIsCreatingBuilding(false);
+                        setNewBuildingName('');
+                        setNewBuildingCode('');
+                        setDraftPolygon(null);
+                      }}
+                      disabled={isCreating || !newBuildingName || !newBuildingCode}
+                      className="flex-1 rounded-md bg-[var(--color-accent)] py-1.5 text-xs font-medium text-white shadow-sm hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
+                    >
+                      {isCreating ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsCreatingBuilding(false);
+                        setNewBuildingName('');
+                        setNewBuildingCode('');
+                        setDraftPolygon(null);
+                      }}
+                      disabled={isCreating}
+                      className="flex-1 rounded-md border border-[var(--color-line)] bg-white py-1.5 text-xs font-medium text-[var(--color-ink)] hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             {company.buildings.map((b, index) => {
               const assignedInterns = getInternsForBuilding(b.id);
               const isExpanded = expandedBuildingIds.has(b.id);
@@ -232,9 +414,8 @@ const CompanyInfo = () => {
                       {b.name || 'Unnamed Building'}
                     </h4>
                     <div
-                      className={`flex items-center gap-1.5 text-xs font-medium ${
-                        b.geofence_enabled ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]'
-                      }`}
+                      className={`flex items-center gap-1.5 text-xs font-medium ${b.geofence_enabled ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]'
+                        }`}
                     >
                       {b.geofence_enabled ? (
                         <>
@@ -258,6 +439,38 @@ const CompanyInfo = () => {
                       Polygon: {b.geofence_polygon ? <strong className="text-green-600">Defined</strong> : 'None'}
                     </p>
                   </div>
+
+                  {editingBuildingId === b.id ? (
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => void handleSaveGeofence(b.id)}
+                        disabled={isUpdatingBuilding}
+                        className="flex-1 rounded-md bg-[var(--color-accent)] py-1.5 text-xs font-medium text-white shadow-sm hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
+                      >
+                        {isUpdatingBuilding ? 'Saving...' : 'Save Geofence'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingBuildingId(null)
+                          setDraftPolygon(null)
+                        }}
+                        disabled={isUpdatingBuilding}
+                        className="flex-1 rounded-md border border-[var(--color-line)] bg-white py-1.5 text-xs font-medium text-[var(--color-ink)] hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setIsEditingMainGeofence(false);
+                        setEditingBuildingId(b.id);
+                      }}
+                      className="mt-3 w-full rounded-md border border-[var(--color-accent)] bg-white py-1.5 text-xs font-medium text-[var(--color-accent)] hover:bg-green-50"
+                    >
+                      {b.geofence_polygon ? 'Edit Geofence' : 'Add Geofence'}
+                    </button>
+                  )}
 
                   {/* Interns toggle */}
                   <button

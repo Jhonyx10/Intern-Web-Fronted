@@ -64,7 +64,7 @@ export function LoginPage() {
               Intern Portal
             </p>
             <h1 className="text-2xl font-semibold tracking-tight text-[#16305C]">
-              Staff sign in
+              Login
             </h1>
           </div>
         </div>
@@ -94,6 +94,14 @@ export function LoginPage() {
               required
             />
           </label>
+          <div className="flex justify-end">
+            <Link
+              to="/forgot-password"
+              className="text-xs font-medium text-slate-500 hover:text-[#16305C] transition-colors"
+            >
+              Forgot password?
+            </Link>
+          </div>
         </div>
 
         {error ? (

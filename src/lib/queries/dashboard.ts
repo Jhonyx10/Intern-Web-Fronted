@@ -141,7 +141,7 @@ export function useDeanDashboard() {
 export function useAdminDashboard() {
     const { token } = useAuth()
     return useQuery({
-        queryKey: ['dashboard', 'program-head'],
+        queryKey: ['dashboard', 'admin'],
         queryFn: () => apiRequest<{ data: AdminDashboardData }>('/dashboard/program-head', { token: token! }),
         enabled: Boolean(token),
         select: (res) => res.data,

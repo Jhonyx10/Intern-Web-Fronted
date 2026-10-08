@@ -37,7 +37,9 @@ export default function AssignStudentModal({
         onClose()
     }
 
-    const students = studentsData?.data ?? []
+    const rawStudents = studentsData?.data ?? []
+    const students = rawStudents.filter(s => s.is_ready_for_assignment)
+    const hiddenCount = rawStudents.length - students.length
 
     const filteredStudents = students.filter(student =>
         student.is_active &&
@@ -98,6 +100,13 @@ export default function AssignStudentModal({
                                     className="w-full rounded-xl border border-[var(--color-line)] py-2 pl-9 pr-3 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-1 focus:ring-[var(--color-accent)]"
                                 />
                             </div>
+                            {hiddenCount > 0 && !isLoadingStudents && (
+                                <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 border border-amber-200 flex items-center justify-between">
+                                    <p>
+                                        <strong>{hiddenCount}</strong> unassigned intern(s) are hidden because they haven't completely submitted all approved requirement documents.
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex-1 overflow-y-auto px-5 py-4 min-h-[300px]">
@@ -116,11 +125,10 @@ export default function AssignStudentModal({
                                         return (
                                             <li key={student.id}>
                                                 <label
-                                                    className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${
-                                                        checked
+                                                    className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${checked
                                                             ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/5'
                                                             : 'border-[var(--color-line)] hover:bg-slate-50'
-                                                    }`}
+                                                        }`}
                                                 >
                                                     <input
                                                         type="checkbox"

@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { Search, Building2, Loader2, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 import { useStudents } from '@/lib/queries/students'
+import { useCompanies } from '@/lib/queries/companies'
+import { useCourses } from '@/lib/queries/courses'
 import { useAuth } from '@/lib/auth'
 import type { Student } from '@/types'
 
 type InternshipStatus = 'pending' | 'ongoing' | 'completed'
 
 type StudentListItem = Student & {
-    section?: { id: number; name: string } | null
+    section?: { id: number; name: string; course_id?: number; course?: { id: number; name: string } } | null
     course?: { id: number; name: string } | null
     company?: { id: number; name: string } | null
     status?: InternshipStatus
@@ -70,12 +72,15 @@ const StudentsPage = () => {
     const [page, setPage] = useState(1)
     const [query, setQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState<InternshipStatus | 'all'>('all')
-    const [courseFilter, setCourseFilter] = useState<string>('all')
+    const [companyFilter, setCompanyFilter] = useState<string>('all')
+    const [departmentFilter, setDepartmentFilter] = useState<string>('all')
 
     const isAdmin = user?.role?.name === 'super_admin' || user?.role?.name === 'admin'
 
     // Pass page to your query hook
     const { data: paginatedData, isLoading, isError } = useStudents(page)
+    const { data: companiesData } = useCompanies()
+    const { data: coursesData } = useCourses()
 
     // Safely extract the array and metadata
     const rawStudents = useMemo(() => {
@@ -88,17 +93,22 @@ const StudentsPage = () => {
     const currentPage = paginatedData && 'current_page' in paginatedData ? paginatedData.current_page : page
     const lastPage = paginatedData && 'last_page' in paginatedData ? paginatedData.last_page : 1
 
-    // NOTE: derived only from the current page of results, since the list is
-    // paginated server-side. A course that only has students on another page
-    // won't show up here until that page loads. Swap this for a dedicated
-    // /courses fetch if a complete, stable list is needed.
-    const courseOptions = useMemo(() => {
-        const seen = new Map<string, string>()
-        for (const student of rawStudents as StudentListItem[]) {
-            if (student.course) seen.set(String(student.course.id), student.course.name)
-        }
-        return [{ key: 'all', label: 'All courses' }, ...Array.from(seen, ([key, label]) => ({ key, label }))]
-    }, [rawStudents])
+    const companyOptions = useMemo(() => {
+        if (!companiesData) return [{ key: 'all', label: 'All companies' }]
+        return [
+            { key: 'all', label: 'All companies' },
+            ...companiesData.map((c: any) => ({ key: String(c.id), label: c.name }))
+        ]
+    }, [companiesData])
+
+    const departmentOptions = useMemo(() => {
+        const arr = Array.isArray(coursesData) ? coursesData : (coursesData as any)?.data
+        if (!arr) return [{ key: 'all', label: 'All departments' }]
+        return [
+            { key: 'all', label: 'All departments' },
+            ...arr.map((c: any) => ({ key: String(c.id), label: c.name }))
+        ]
+    }, [coursesData])
 
     // TODO: real scoping for non-admins (e.g. by course for dean/program_head,
     // by section for coordinator) hasn't been defined yet. For now everyone
@@ -113,7 +123,11 @@ const StudentsPage = () => {
         return scopedStudents.filter((student) => {
             const status = student.status ?? 'pending'
             const matchesStatus = statusFilter === 'all' || status === statusFilter
-            const matchesCourse = courseFilter === 'all' || String(student.course?.id) === courseFilter
+            const matchesCompany = companyFilter === 'all' || String(student.company?.id) === companyFilter
+
+            const studentCourseId = student.course?.id ?? student.section?.course_id ?? student.section?.course?.id
+            const matchesDepartment = departmentFilter === 'all' || String(studentCourseId) === departmentFilter
+
             const matchesQuery =
                 !q ||
                 [
@@ -121,11 +135,11 @@ const StudentsPage = () => {
                     student.student_number ?? '',
                     student.section?.name ?? '',
                     student.company?.name ?? '',
-                    student.course?.name ?? '',
+                    student.course?.name ?? student.section?.course?.name ?? '',
                 ].some((field) => field.toLowerCase().includes(q))
-            return matchesStatus && matchesCourse && matchesQuery
+            return matchesStatus && matchesCompany && matchesDepartment && matchesQuery
         })
-    }, [scopedStudents, query, statusFilter, courseFilter])
+    }, [scopedStudents, query, statusFilter, companyFilter, departmentFilter])
 
     return (
         <section>
@@ -167,19 +181,29 @@ const StudentsPage = () => {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                    {courseOptions.length > 1 && (
-                        <select
-                            value={courseFilter}
-                            onChange={(event) => setCourseFilter(event.target.value)}
-                            className="rounded-lg border border-[var(--color-line)] bg-white/80 px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
-                        >
-                            {courseOptions.map((course) => (
-                                <option key={course.key} value={course.key}>
-                                    {course.label}
-                                </option>
-                            ))}
-                        </select>
-                    )}
+                    <select
+                        value={departmentFilter}
+                        onChange={(event) => setDepartmentFilter(event.target.value)}
+                        className="rounded-lg border border-[var(--color-line)] bg-white/80 px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                    >
+                        {departmentOptions.map((dept: any) => (
+                            <option key={dept.key} value={dept.key}>
+                                {dept.label}
+                            </option>
+                        ))}
+                    </select>
+
+                    <select
+                        value={companyFilter}
+                        onChange={(event) => setCompanyFilter(event.target.value)}
+                        className="rounded-lg border border-[var(--color-line)] bg-white/80 px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                    >
+                        {companyOptions.map((company) => (
+                            <option key={company.key} value={company.key}>
+                                {company.label}
+                            </option>
+                        ))}
+                    </select>
 
                     <select
                         value={statusFilter}

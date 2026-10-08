@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import {
   useCreateEvaluationTemplate,
+  useEvaluationTemplate,
   type FormItem,
 } from "@/lib/queries/evaluation";
 import { useAuth } from "@/lib/auth";
@@ -79,8 +80,14 @@ const defaultOptionsFor = (type: ItemType) => {
 
 const STEPS = ["Details", "Questions", "Review"] as const;
 
+const LIST_PATH = "/evaluation";
+
 export const CreateEvaluationTemplatePage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const duplicateId = searchParams.get("duplicate") || undefined;
+  const { data: duplicateData, isSuccess: duplicateSuccess } = useEvaluationTemplate(duplicateId);
+
   const { addToast } = useToast();
   const { user } = useAuth();
   const { themeColor } = useTheme();
@@ -89,7 +96,6 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
   const [step, setStep] = useState<0 | 1 | 2>(0);
 
   // Template meta
-  const [courseIds, setCourseIds] = useState<number[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [isActive, setIsActive] = useState(true);
@@ -104,13 +110,14 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
     },
   ]);
 
-  // Auto-assign the course from the logged-in Dean's profile
+  // Handle duplicating
   useEffect(() => {
-    if (user?.course?.id !== undefined && user?.course?.id !== null) {
-      const numericCourseId = Number(user.course.id);
-      if (!isNaN(numericCourseId)) setCourseIds([numericCourseId]);
+    if (duplicateSuccess && duplicateData) {
+      setTitle(duplicateData.title + " (Copy)");
+      setDescription(duplicateData.description || "");
+      if (duplicateData.items) setItems(duplicateData.items as FormItem[]);
     }
-  }, [user]);
+  }, [duplicateSuccess, duplicateData]);
 
   // -------------------------------------------------------------------
   // Item helpers
@@ -235,7 +242,9 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
       ? "Add at least one question."
       : itemErrors.find((e) => e) ?? null;
 
-  const canGoToQuestions = !detailsError && courseIds.length > 0;
+  // Templates are global (available to every department), so no course
+  // selection is required.
+  const canGoToQuestions = !detailsError;
   const canReview = canGoToQuestions && !questionsError;
 
   const goToStep = (target: 0 | 1 | 2) => {
@@ -249,14 +258,6 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
   // -------------------------------------------------------------------
 
   const handleSubmit = () => {
-    if (courseIds.length === 0) {
-      addToast(
-        "error",
-        "Unauthorized assignment",
-        "Your account does not have an assigned department/course."
-      );
-      return;
-    }
     if (!canReview) {
       addToast(
         "warning",
@@ -280,7 +281,6 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
 
     createMutation.mutate(
       {
-        course_ids: courseIds,
         title: title.trim(),
         description: description.trim() || undefined,
         is_active: isActive,
@@ -288,18 +288,27 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
       },
       {
         onSuccess: () => {
-          navigate("/evaluation");
+          navigate(LIST_PATH);
         },
       }
     );
   };
+
+  // Role guard — kept after every hook so the hook order never changes
+  if (user && user.role?.name !== "super_admin") {
+    return (
+      <div className="p-12 text-center text-sm font-medium text-rose-600">
+        Unauthorized: Only Super Admins can create evaluation templates.
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
         <button
-          onClick={() => navigate("/evaluations")}
+          onClick={() => navigate(LIST_PATH)}
           className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
           aria-label="Back to evaluations"
         >
@@ -329,10 +338,10 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
                 onClick={() => goToStep(i as 0 | 1 | 2)}
                 disabled={disabled}
                 className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-medium transition-colors ${isActiveStep
-                    ? "text-white"
-                    : isDone
-                      ? "hover:opacity-80"
-                      : "bg-gray-50 text-gray-400"
+                  ? "text-white"
+                  : isDone
+                    ? "hover:opacity-80"
+                    : "bg-gray-50 text-gray-400"
                   } ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
                   }`}
                 style={
@@ -348,10 +357,10 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
               >
                 <span
                   className={`flex items-center justify-center w-4 h-4 rounded-full text-[10px] shrink-0 ${isActiveStep
-                      ? "bg-white"
-                      : isDone
-                        ? "text-white"
-                        : "bg-gray-200 text-gray-500"
+                    ? "bg-white"
+                    : isDone
+                      ? "text-white"
+                      : "bg-gray-200 text-gray-500"
                     }`}
                   style={
                     isActiveStep
@@ -389,43 +398,28 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
                   className="w-3.5 h-3.5"
                   style={{ color: "var(--color-accent)" }}
                 />
-                Target course / department
+                Availability
               </label>
-              {user?.course ? (
-                <div
-                  className="p-3 rounded-lg flex items-center justify-between border"
-                  style={{
-                    backgroundColor: "var(--color-accent-soft)",
-                    borderColor: "var(--color-accent-soft)",
-                  }}
+              <div
+                className="p-3 rounded-lg flex items-center justify-between border"
+                style={{
+                  backgroundColor: "var(--color-accent-soft)",
+                  borderColor: "var(--color-accent-soft)",
+                }}
+              >
+                <span
+                  className="text-xs"
+                  style={{ color: "var(--color-accent)" }}
                 >
-                  <div>
-                    <span
-                      className="text-xs font-bold mr-2"
-                      style={{ color: "var(--color-accent)" }}
-                    >
-                      [{user.course.code}]
-                    </span>
-                    <span
-                      className="text-xs"
-                      style={{ color: "var(--color-accent)" }}
-                    >
-                      {user.course.name}
-                    </span>
-                  </div>
-                  <span
-                    className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-white"
-                    style={{ backgroundColor: "var(--color-accent)" }}
-                  >
-                    Auto-assigned to your course
-                  </span>
-                </div>
-              ) : (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700">
-                  No course assigned to your Dean profile. Contact the
-                  administrator before creating a template.
-                </div>
-              )}
+                  All departments
+                </span>
+                <span
+                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-white"
+                  style={{ backgroundColor: "var(--color-accent)" }}
+                >
+                  Global template
+                </span>
+              </div>
             </div>
 
             <div>
@@ -717,10 +711,7 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
           >
             <div>
               <p className="text-[11px] font-medium text-gray-400 mb-1">
-                {user?.course
-                  ? `[${user.course.code}] ${user.course.name}`
-                  : "No course"}{" "}
-                · {isActive ? "Active" : "Inactive"}
+                All departments · {isActive ? "Active" : "Inactive"}
               </p>
               <h2 className="text-lg font-bold text-gray-900">
                 {title || "Untitled template"}
@@ -791,7 +782,7 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
           type="button"
           onClick={() =>
             step === 0
-              ? navigate("/evaluations")
+              ? navigate(LIST_PATH)
               : setStep((s) => (s - 1) as 0 | 1)
           }
           className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"

@@ -129,7 +129,7 @@ export function AdminDashboard() {
             <div className="rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-soft)] space-y-4">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h3 className="text-base font-semibold text-[var(--color-ink)]">Course Breakdown</h3>
+                        <h3 className="text-base font-semibold text-[var(--color-ink)]">Program Breakdown</h3>
                         <p className="text-xs text-[var(--color-muted)]">Placement and internship progress per course</p>
                     </div>
                     <GraduationCap size={18} className="text-indigo-500" />
@@ -139,7 +139,7 @@ export function AdminDashboard() {
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-[var(--color-line)] text-left text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-                                <th className="py-2 pr-4">Course</th>
+                                <th className="py-2 pr-4">Program</th>
                                 <th className="py-2 pr-4 text-right">Sections</th>
                                 <th className="py-2 pr-4 text-right">Enrolled</th>
                                 <th className="py-2 pr-4 text-right">Assigned</th>
@@ -186,7 +186,7 @@ export function AdminDashboard() {
                 <div className="rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-soft)] space-y-4">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h3 className="text-base font-semibold text-[var(--color-ink)]">Enrollment by Course</h3>
+                            <h3 className="text-base font-semibold text-[var(--color-ink)]">Enrollment by Program</h3>
                             <p className="text-xs text-[var(--color-muted)]">Total students enrolled per course</p>
                         </div>
                         <Layers size={18} className="text-indigo-500" />
@@ -208,7 +208,7 @@ export function AdminDashboard() {
                 <div className="rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-soft)] space-y-4">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h3 className="text-base font-semibold text-[var(--color-ink)]">Placement by Course</h3>
+                            <h3 className="text-base font-semibold text-[var(--color-ink)]">Placement by Program</h3>
                             <p className="text-xs text-[var(--color-muted)]">Assigned vs unassigned students per course</p>
                         </div>
                         <CheckCircle2 size={18} className="text-emerald-500" />
@@ -232,7 +232,7 @@ export function AdminDashboard() {
                 <div className="rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-soft)] space-y-4">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h3 className="text-base font-semibold text-[var(--color-ink)]">Internship Progress by Course</h3>
+                            <h3 className="text-base font-semibold text-[var(--color-ink)]">Internship Progress by Program</h3>
                             <p className="text-xs text-[var(--color-muted)]">Rendered hours as % of required hours</p>
                         </div>
                         <TrendingUp size={18} className="text-amber-500" />
@@ -254,7 +254,7 @@ export function AdminDashboard() {
                 <div className="rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-soft)] space-y-4">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h3 className="text-base font-semibold text-[var(--color-ink)]">Status by Course</h3>
+                            <h3 className="text-base font-semibold text-[var(--color-ink)]">Status by Program</h3>
                             <p className="text-xs text-[var(--color-muted)]">Completed vs in progress vs not started</p>
                         </div>
                         <CircleDashed size={18} className="text-gray-500" />

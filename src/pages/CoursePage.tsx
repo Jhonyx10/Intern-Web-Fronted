@@ -1,25 +1,24 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
     Search,
     Plus,
-    Edit2,
+    Pencil,
     Trash2,
     X,
-    Clock,
-    UserRound,
-    CheckCircle2,
-    XCircle,
+    UserPlus,
+    PlusCircle,
     BookOpen,
-    GraduationCap,
-    EyeIcon,
 } from 'lucide-react'
-import { useCourses, useDeleteCourse } from '@/lib/queries/courses'
+import {
+    useCourses,
+    useDeleteCourse,
+    useToggleCourseActive,
+} from '@/lib/queries/courses'
 import { useMajors, useCreateMajor, useDeleteMajor, useUpdateMajor } from '@/lib/queries/majors'
-import { useUsers } from '@/lib/queries/users'
 import { useAuth } from '@/lib/auth'
-import type { Course, Major } from '@/types'
+import type { Program, Major } from '@/types'
 
 // ─── animation variants ───────────────────────────────────────────────────────
 
@@ -27,7 +26,7 @@ const container = {
     hidden: { opacity: 0 },
     show: { opacity: 1, transition: { staggerChildren: 0.06, delayChildren: 0.04 } },
 }
-const row = {
+const item = {
     hidden: { opacity: 0, y: 10 },
     show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] as const } },
 }
@@ -38,13 +37,23 @@ function isSuperAdmin(userRole: any): boolean {
     return userRole?.name?.toLowerCase() === 'super_admin' || userRole?.label?.toLowerCase() === 'super_admin'
 }
 
-// ─── DeleteConfirmModal ───────────────────────────────────────────────────────
+// ─── Helper to safely convert API values (true/false, 1/0, "1"/"0", "true"/"false") to boolean ───
+
+function toBool(value: unknown): boolean {
+    if (typeof value === 'string') {
+        const v = value.trim().toLowerCase()
+        return v === '1' || v === 'true'
+    }
+    return value === true || value === 1
+}
+
+// ─── DeleteConfirmModal (department) ──────────────────────────────────────────
 
 function DeleteConfirmModal({
     course,
     onClose,
 }: {
-    course: Course
+    course: Program
     onClose: () => void
 }) {
     const deleteMutation = useDeleteCourse()
@@ -111,7 +120,7 @@ function DeleteConfirmModal({
     )
 }
 
-// ─── DeleteMajorConfirmModal ──────────────────────────────────────────────────
+// ─── DeleteMajorConfirmModal (program) ────────────────────────────────────────
 
 function DeleteMajorConfirmModal({
     major,
@@ -154,7 +163,7 @@ function DeleteMajorConfirmModal({
                 <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-50">
                     <Trash2 size={20} className="text-red-500" />
                 </div>
-                <h2 className="text-base font-semibold">Delete major?</h2>
+                <h2 className="text-base font-semibold">Delete program?</h2>
                 <p className="mt-1.5 text-sm text-[var(--color-muted)]">
                     <strong className="font-medium text-[var(--color-ink)]">{major.name}</strong> will be
                     permanently removed. This action cannot be undone.
@@ -184,13 +193,12 @@ function DeleteMajorConfirmModal({
     )
 }
 
-// ─── MajorModal ───────────────────────────────────────────────────────────────
+// ─── MajorModal (add / edit program) ──────────────────────────────────────────
 
 type MajorFormState = {
     course_id: string
     name: string
     code: string
-    program_head_user_id: string
     sort_order: string
 }
 
@@ -199,13 +207,12 @@ function MajorModal({
     major,
     onClose,
 }: {
-    course?: Course
+    course?: Program
     major?: Major
     onClose: () => void
 }) {
     const createMutation = useCreateMajor()
     const updateMutation = useUpdateMajor()
-    const { data: users, isLoading: usersLoading } = useUsers()
     const { data: courses, isLoading: coursesLoading } = useCourses()
     const overlayRef = useRef<HTMLDivElement>(null)
 
@@ -213,7 +220,6 @@ function MajorModal({
         course_id: String(major?.course_id || (course ? course.id : '')),
         name: major?.name || '',
         code: major?.code || '',
-        program_head_user_id: major?.program_head_user_id ? String(major.program_head_user_id) : '',
         sort_order: major?.sort_order ? String(major.sort_order) : '',
     })
     const [errors, setErrors] = useState<Partial<MajorFormState & { root: string }>>({})
@@ -242,7 +248,6 @@ function MajorModal({
                 course_id: Number(form.course_id),
                 name: form.name.trim(),
                 code: form.code.trim(),
-                program_head_user_id: form.program_head_user_id ? Number(form.program_head_user_id) : null,
                 sort_order: form.sort_order ? Number(form.sort_order) : null,
             }
             if (major) {
@@ -279,9 +284,9 @@ function MajorModal({
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-[var(--color-line)] px-6 py-4">
                     <div>
-                        <h2 className="text-base font-semibold tracking-tight">{major ? 'Edit Major' : 'Add Major'}</h2>
+                        <h2 className="text-base font-semibold tracking-tight">{major ? 'Edit Program' : 'Add Program'}</h2>
                         {course && (
-                            <p className="mt-0.5 text-xs text-[var(--color-muted)] truncate max-w-[280px]">
+                            <p className="mt-0.5 max-w-[280px] truncate text-xs text-[var(--color-muted)]">
                                 {course.code} — {course.name}
                             </p>
                         )}
@@ -335,14 +340,14 @@ function MajorModal({
                     {/* Name */}
                     <div className="space-y-1.5">
                         <label htmlFor="major-name" className="block text-sm font-medium">
-                            Major name <span className="text-red-500">*</span>
+                            Program name <span className="text-red-500">*</span>
                         </label>
                         <input
                             id="major-name"
                             type="text"
                             value={form.name}
                             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                            placeholder="e.g. Computer Science"
+                            placeholder="e.g. Bachelor of Science in Information Technology"
                             className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-[var(--color-accent)]/30 ${errors.name
                                 ? 'border-red-400 bg-red-50'
                                 : 'border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]'
@@ -361,39 +366,13 @@ function MajorModal({
                             type="text"
                             value={form.code}
                             onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-                            placeholder="e.g. BSCS"
+                            placeholder="e.g. BSIT"
                             className={`w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-[var(--color-accent)]/30 ${errors.code
                                 ? 'border-red-400 bg-red-50'
                                 : 'border-[var(--color-line)] bg-white focus:border-[var(--color-accent)]'
                                 }`}
                         />
                         {errors.code && <p className="text-xs text-red-600">{errors.code}</p>}
-                    </div>
-
-                    {/* Program Head */}
-                    <div className="space-y-1.5">
-                        <label htmlFor="major-program-head" className="block text-sm font-medium">
-                            Program Head
-                            <span className="ml-1 text-[11px] font-normal text-[var(--color-muted)]">(optional)</span>
-                        </label>
-                        <select
-                            id="major-program-head"
-                            value={form.program_head_user_id}
-                            disabled={usersLoading}
-                            onChange={(e) => setForm((f) => ({ ...f, program_head_user_id: e.target.value }))}
-                            className="w-full rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/30"
-                        >
-                            <option value="">
-                                {usersLoading ? 'Loading users…' : 'None'}
-                            </option>
-                            {(users ?? [])
-                                .filter((u) => u.role?.id === 3)
-                                .map((u) => (
-                                    <option key={u.id} value={u.id}>
-                                        {u.name}
-                                    </option>
-                                ))}
-                        </select>
                     </div>
 
                     {/* Sort Order */}
@@ -430,7 +409,7 @@ function MajorModal({
                             {isBusy ? (
                                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                             ) : null}
-                            {major ? 'Save changes' : 'Create major'}
+                            {major ? 'Save changes' : 'Create program'}
                         </button>
                     </div>
                 </form>
@@ -439,201 +418,191 @@ function MajorModal({
     )
 }
 
-// ─── CourseRow ────────────────────────────────────────────────────────────────
+// ─── ActiveToggle ─────────────────────────────────────────────────────────────
 
-function CourseRow({
-    course,
-    onEdit,
-    onDelete,
-    canManage,
+function ActiveToggle({
+    active,
+    busy,
+    label,
+    onToggle,
 }: {
-    course: Course
-    onEdit: (c: Course) => void
-    onDelete: (c: Course) => void
-    canManage: boolean
+    active: boolean
+    busy: boolean
+    label: string
+    onToggle: () => void
 }) {
-     const navigate = useNavigate();
-     
     return (
-      <motion.tr
-        variants={row}
-        className="group border-b border-[var(--color-line)] last:border-0"
-      >
-        {/* Code + Name */}
-        <td className="py-3.5 pl-5 pr-4">
-          <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--color-accent-soft)] text-xs font-bold text-[var(--color-accent)]">
-              <BookOpen size={15} />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-[var(--color-ink)]">
-                {course.name}
-              </p>
-              <p className="font-mono text-xs text-[var(--color-muted)]">
-                {course.code}
-              </p>
-            </div>
-          </div>
-        </td>
-
-        {/* Dean */}
-        <td className="px-4 py-3.5">
-          <div className="flex items-center gap-1.5 text-sm text-[var(--color-ink)]">
-            <UserRound
-              size={13}
-              className="shrink-0 text-[var(--color-muted)]"
-            />
-            <span className="truncate">
-              {course.dean?.name ?? (
-                <span className="text-[var(--color-muted)]">—</span>
-              )}
-            </span>
-          </div>
-        </td>
-        {/* Required Hours */}
-        <td className="px-4 py-3.5">
-          <div className="flex items-center gap-1.5 text-sm text-[var(--color-ink)]">
-            <Clock size={13} className="shrink-0 text-[var(--color-muted)]" />
-            <span>{course.required_hours} hrs</span>
-          </div>
-        </td>
-
-        {/* Status */}
-        <td className="px-4 py-3.5">
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold ${
-              course.is_active
-                ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
-                : "bg-red-50 text-red-600"
-            }`}
-          >
-            {course.is_active ? (
-              <CheckCircle2 size={10} />
-            ) : (
-              <XCircle size={10} />
-            )}
-            {course.is_active ? "Active" : "Inactive"}
-          </span>
-        </td>
-
-        {/* Actions */}
-        <td className="py-3.5 pl-4 pr-5 text-right">
-          <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => navigate(`/course/details/${course.id}`)}
-              aria-label={`View ${course.name}`}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+        <button
+            type="button"
+            role="switch"
+            aria-checked={active}
+            aria-label={label}
+            disabled={busy}
+            onClick={onToggle}
+            className="inline-flex items-center gap-2 rounded-lg py-1 text-xs font-medium text-[var(--color-muted)] transition hover:text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+            <span
+                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${active ? 'bg-[var(--color-accent)]' : 'bg-slate-300'
+                    }`}
             >
-              <EyeIcon size={14} />
-            </button>
-            
-            {canManage && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => onEdit(course)}
-                  aria-label={`Edit ${course.name}`}
-                  className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-                >
-                  <Edit2 size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDelete(course)}
-                  aria-label={`Delete ${course.name}`}
-                  className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-red-300 hover:text-red-600"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </>
+                <span
+                    className={`ml-0.5 inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${active ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                />
+            </span>
+            {busy ? (
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--color-muted)] border-t-transparent" />
+            ) : (
+                <span>{active ? 'Active' : 'Inactive'}</span>
             )}
-          </div>
-        </td>
-      </motion.tr>
-    );
+        </button>
+    )
 }
 
-// ─── MajorsTable ──────────────────────────────────────────────────────────────
+// ─── DepartmentCard ───────────────────────────────────────────────────────────
 
-function MajorsTable({
-    onEdit,
-    onDelete,
+function DepartmentCard({
+    course,
+    programs,
     canManage,
+    isToggling,
+    onAssignHead,
+    onToggleActive,
+    onDeleteDepartment,
+    onAddProgram,
+    onEditProgram,
+    onDeleteProgram,
 }: {
-    onEdit: (m: Major) => void
-    onDelete: (m: Major) => void
+    course: Program
+    programs: Major[]
     canManage: boolean
+    isToggling: boolean
+    onAssignHead: (c: Program) => void
+    onToggleActive: (c: Program) => void
+    onDeleteDepartment: (c: Program) => void
+    onAddProgram: (c: Program) => void
+    onEditProgram: (m: Major, c: Program) => void
+    onDeleteProgram: (m: Major) => void
 }) {
-    const { data: majors, isLoading } = useMajors()
+    // Safely parse is_active (handles true/false, 1/0, "1"/"0", "true"/"false")
+    const isActive = toBool(course.is_active)
 
     return (
-        <motion.div variants={row} className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white/80 shadow-[var(--shadow-soft)] backdrop-blur">
-            <div className="border-b border-[var(--color-line)] px-5 py-3.5 flex items-center justify-between bg-slate-50/50">
-                <h3 className="text-sm font-semibold text-[var(--color-ink)]">All Majors</h3>
-                <span className="text-xs text-[var(--color-muted)]">{isLoading ? 'Loading…' : `${majors?.length ?? 0} majors`}</span>
+        <motion.article
+            variants={item}
+            className={`overflow-hidden rounded-2xl border border-[var(--color-line)] shadow-sm ${isActive ? 'bg-white' : 'bg-slate-50'
+                }`}
+        >
+            {/* Header: title + code + status, Assign Head */}
+            <div className="flex items-start justify-between gap-3 border-b border-[var(--color-line)] px-5 py-4">
+                <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h3
+                            className={`text-base font-semibold tracking-tight ${isActive ? 'text-[var(--color-ink)]' : 'text-[var(--color-muted)]'
+                                }`}
+                        >
+                            {course.name}
+                        </h3>
+                        <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isActive
+                                ? 'bg-emerald-50 text-emerald-600'
+                                : 'bg-slate-200 text-[var(--color-muted)]'
+                                }`}
+                        >
+                            {isActive ? 'Active' : 'Inactive'}
+                        </span>
+                    </div>
+                    <p className="text-xs text-[var(--color-muted)]">({course.code})</p>
+                </div>
+
+                {canManage && (
+                    <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                            type="button"
+                            onClick={() => onAssignHead(course)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                        >
+                            <UserPlus size={13} /> Assign Head
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onDeleteDepartment(course)}
+                            aria-label={`Delete ${course.name}`}
+                            className="grid h-7 w-7 place-items-center rounded-lg border border-[var(--color-line)] bg-white text-[var(--color-muted)] shadow-sm transition hover:border-red-300 hover:text-red-600"
+                        >
+                            <Trash2 size={13} />
+                        </button>
+                    </div>
+                )}
             </div>
 
-            {isLoading ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-10 text-[var(--color-muted)]">
-                    <span className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
-                </div>
-            ) : majors?.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
-                    <p className="text-sm font-medium text-[var(--color-muted)]">No majors found.</p>
-                </div>
-            ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full min-w-[600px] border-collapse text-left">
-                        <thead>
-                            <tr className="border-b border-[var(--color-line)] bg-slate-50/70">
-                                <th className="py-3 pl-5 pr-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">Code</th>
-                                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">Name</th>
-                                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">Department</th>
+            {/* Body: head + programs offered */}
+            <div className="px-5 py-4">
+                <p className="text-sm text-[var(--color-muted)]">
+                    Head:{' '}
+                    <span className="font-medium text-[var(--color-ink)]">
+                        {course.dean?.name ?? '—'}
+                    </span>
+                </p>
+
+                <p className="mt-4 text-sm text-[var(--color-muted)]">Programs Offered:</p>
+
+                {programs.length === 0 ? (
+                    <p className="mt-2 rounded-lg border border-dashed border-[var(--color-line)] px-3 py-3 text-xs text-[var(--color-muted)]">
+                        No programs yet.
+                    </p>
+                ) : (
+                    <ul className="mt-2 space-y-2">
+                        {programs.map((m) => (
+                            <li key={m.id} className="flex items-center gap-2">
+                                <div className="min-w-0 flex-1 rounded-lg border border-[var(--color-line)] bg-slate-50/60 px-3 py-2 text-xs font-medium uppercase text-[var(--color-ink)]">
+                                    {m.name}
+                                </div>
                                 {canManage && (
-                                    <th className="py-3 pl-4 pr-5 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">Actions</th>
+                                    <div className="flex shrink-0 items-center gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => onEditProgram(m, course)}
+                                            aria-label={`Edit ${m.name}`}
+                                            className="grid h-7 w-7 place-items-center rounded-md text-emerald-600 transition hover:bg-emerald-50"
+                                        >
+                                            <Pencil size={14} />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => onDeleteProgram(m)}
+                                            aria-label={`Delete ${m.name}`}
+                                            className="grid h-7 w-7 place-items-center rounded-md text-[var(--color-muted)] transition hover:bg-red-50 hover:text-red-600"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
                                 )}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {(majors ?? []).map((m) => (
-                                <tr key={m.id} className="border-b border-[var(--color-line)] last:border-0 hover:bg-slate-50/50 transition">
-                                    <td className="py-3 pl-5 pr-4 text-sm font-medium text-[var(--color-ink)]">{m.code}</td>
-                                    <td className="px-4 py-3 text-sm text-[var(--color-ink)]">{m.name}</td>
-                                    <td className="px-4 py-3 text-sm text-[var(--color-muted)]">
-                                        {m.course ? (
-                                            <span className="inline-flex items-center rounded-md bg-[var(--color-accent-soft)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-accent)]">
-                                                {m.course.code}
-                                            </span>
-                                        ) : '—'}
-                                    </td>
-                                    {canManage && (
-                                        <td className="py-3.5 pl-4 pr-5 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => onEdit(m)}
-                                                    className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-                                                >
-                                                    <Edit2 size={11} /> Edit
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => onDelete(m)}
-                                                    className="flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-red-300 hover:text-red-600"
-                                                >
-                                                    <Trash2 size={11} /> Delete
-                                                </button>
-                                            </div>
-                                        </td>
-                                    )}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+
+            {/* Footer: Active toggle + Add Program */}
+            {canManage && (
+                <div className="flex items-center justify-between gap-3 border-t border-[var(--color-line)] px-5 py-3">
+                    <ActiveToggle
+                        active={isActive}
+                        busy={isToggling}
+                        label={isActive ? `Deactivate ${course.name}` : `Activate ${course.name}`}
+                        onToggle={() => onToggleActive(course)}
+                    />
+                    <button
+                        type="button"
+                        onClick={() => onAddProgram(course)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                    >
+                        <PlusCircle size={13} /> Add Program
+                    </button>
                 </div>
             )}
-        </motion.div>
+        </motion.article>
     )
 }
 
@@ -643,24 +612,34 @@ export default function CoursePage() {
     const navigate = useNavigate()
     const { user } = useAuth()
     const { data: courses, isLoading, error } = useCourses()
+    const { data: majors } = useMajors()
+    const toggleActive = useToggleCourseActive()
 
     const [search, setSearch] = useState('')
-    const [deleteTarget, setDeleteTarget] = useState<Course | null>(null)
-    const [showAddMajor, setShowAddMajor] = useState(false)
-    const [editMajorTarget, setEditMajorTarget] = useState<Major | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<Program | null>(null)
+    const [addProgramFor, setAddProgramFor] = useState<Program | null>(null)
+    const [editProgram, setEditProgram] = useState<{ major: Major; course: Program } | null>(null)
     const [deleteMajorTarget, setDeleteMajorTarget] = useState<Major | null>(null)
 
-    // Check if the current user can manage courses and majors
     const canManage = !!user && isSuperAdmin(user.role)
 
-    const filtered = (courses ?? []).filter((c) =>
-        c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.code.toLowerCase().includes(search.toLowerCase())
-    )
+    const filtered = useMemo(() => {
+        const q = search.trim().toLowerCase()
+        return (courses ?? []).filter(
+            (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)
+        )
+    }, [courses, search])
 
-    const total = courses?.length ?? 0
-    const active = courses?.filter((c) => c.is_active).length ?? 0
-    const inactive = total - active
+    // Group programs (majors) by their department (course)
+    const programsByCourse = useMemo(() => {
+        const map = new Map<number, Major[]>()
+        for (const m of majors ?? []) {
+            const list = map.get(Number(m.course_id)) ?? []
+            list.push(m)
+            map.set(Number(m.course_id), list)
+        }
+        return map
+    }, [majors])
 
     return (
         <>
@@ -671,167 +650,100 @@ export default function CoursePage() {
                 className="space-y-6"
             >
                 {/* ── Page header ──────────────────────────────────── */}
-                <motion.div variants={row} className="flex flex-wrap items-start justify-between gap-4">
+                <motion.div variants={item} className="flex flex-wrap items-end justify-between gap-4">
                     <div>
-                        <p className="text-[11px] font-semibold tracking-[0.2em] text-[var(--color-accent)] uppercase">
-                            Office of the Registrar
-                        </p>
-                        <h2 className="mt-2 text-3xl font-semibold tracking-tight">Departments</h2>
+                        <h2 className="text-3xl font-semibold tracking-tight">Departments</h2>
                         <p className="mt-1.5 text-sm text-[var(--color-muted)]">
-                            Manage course records, required hours, and assigned deans.
+                            Manage departments, their heads, and the programs they offer.
                         </p>
                     </div>
-                    
-                    {canManage && (
-                        <div className="flex items-center gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setShowAddMajor(true)}
-                                className="flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm font-medium text-[var(--color-muted)] shadow-sm transition hover:border-violet-300 hover:text-violet-600"
-                            >
-                                <GraduationCap size={15} /> Add Major
-                            </button>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                        <label className="flex min-w-56 items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-muted)] transition focus-within:border-[var(--color-accent)] focus-within:ring-2 focus-within:ring-[var(--color-accent)]/20">
+                            <Search size={14} />
+                            <input
+                                id="course-search"
+                                type="search"
+                                placeholder="Search departments…"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="flex-1 bg-transparent text-[var(--color-ink)] outline-none placeholder:text-[var(--color-muted)]"
+                            />
+                        </label>
+
+                        {canManage && (
                             <Link
                                 to="/courses/add"
-                                className="flex items-center !text-white gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
+                                className="flex items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium !text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
                             >
-                                <Plus size={15} /> Add Course
+                                <Plus size={15} /> Add Department
                             </Link>
-                        </div>
-                    )}
-                </motion.div>
-
-                {/* ── Stat cards ───────────────────────────────────── */}
-                <motion.div variants={row} className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                    {[
-                        { label: 'Total courses', value: total, icon: BookOpen, color: 'text-[var(--color-accent)] bg-[var(--color-accent-soft)]' },
-                        { label: 'Active', value: active, icon: CheckCircle2, color: 'text-emerald-600 bg-emerald-50' },
-                        { label: 'Inactive', value: inactive, icon: XCircle, color: 'text-red-500 bg-red-50' },
-                    ].map(({ label, value, icon: Icon, color }) => (
-                        <article
-                            key={label}
-                            className="flex items-center gap-4 rounded-2xl border border-[var(--color-line)] bg-white/80 px-5 py-4 shadow-[var(--shadow-soft)] backdrop-blur"
-                        >
-                            <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl text-sm ${color}`}>
-                                <Icon size={18} />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold tracking-tight">{value}</p>
-                                <p className="text-xs font-medium text-[var(--color-muted)]">{label}</p>
-                            </div>
-                        </article>
-                    ))}
+                        )}
+                    </div>
                 </motion.div>
 
                 {/* ── Error banner ─────────────────────────────────── */}
                 {error ? (
                     <motion.div
-                        variants={row}
+                        variants={item}
                         className="rounded-xl border border-red-200 bg-red-50 px-4 py-3"
                     >
-                        <p className="text-sm font-medium text-red-700">Failed to load courses from the API.</p>
+                        <p className="text-sm font-medium text-red-700">Failed to load departments from the API.</p>
                     </motion.div>
                 ) : null}
 
-                {/* ── Table card ───────────────────────────────────── */}
-                <motion.div
-                    variants={row}
-                    className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white/80 shadow-[var(--shadow-soft)] backdrop-blur"
-                >
-                    {/* Toolbar */}
-                    <div className="flex flex-wrap items-center gap-3 border-b border-[var(--color-line)] px-5 py-3.5">
-                        {/* Search */}
-                        <label className="flex flex-1 min-w-48 items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-muted)] focus-within:border-[var(--color-accent)] focus-within:ring-2 focus-within:ring-[var(--color-accent)]/20 transition">
-                            <Search size={14} />
-                            <input
-                                id="course-search"
-                                type="search"
-                                placeholder="Search courses…"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="flex-1 bg-transparent outline-none placeholder:text-[var(--color-muted)] text-[var(--color-ink)]"
-                            />
-                            {search && (
-                                <button
-                                    type="button"
-                                    onClick={() => setSearch('')}
-                                    className="text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-                                >
-                                    <X size={12} />
-                                </button>
-                            )}
-                        </label>
-
-                        {/* Count */}
-                        <span className="ml-auto text-xs text-[var(--color-muted)]">
-                            {isLoading ? 'Loading…' : `${filtered.length} of ${total} courses`}
-                        </span>
+                {/* ── Department cards ─────────────────────────────── */}
+                {isLoading ? (
+                    <div className="flex flex-col items-center justify-center gap-3 py-20 text-[var(--color-muted)]">
+                        <span className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
+                        <p className="text-sm">Loading departments…</p>
                     </div>
-
-                    {/* Table */}
-                    {isLoading ? (
-                        <div className="flex flex-col items-center justify-center gap-3 py-20 text-[var(--color-muted)]">
-                            <span className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
-                            <p className="text-sm">Loading courses…</p>
-                        </div>
-                    ) : filtered.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
-                            <BookOpen size={36} className="text-[var(--color-line)]" />
-                            <p className="text-sm font-medium text-[var(--color-muted)]">
-                                {search ? 'No courses match your search.' : 'No courses found.'}
-                            </p>
-                            {search && (
-                                <button
-                                    type="button"
-                                    onClick={() => setSearch('')}
-                                    className="mt-1 text-xs font-semibold text-[var(--color-accent)] hover:underline"
-                                >
-                                    Clear search
-                                </button>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full min-w-[600px] border-collapse text-left">
-                                <thead>
-                                    <tr className="border-b border-[var(--color-line)] bg-slate-50/70">
-                                        <th className="py-3 pl-5 pr-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                                            Course
-                                        </th>
-                                        <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                                            Dean
-                                        </th>
-                                        <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                                            Req. Hours
-                                        </th>
-                                        <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                                            Status
-                                        </th>
-                                        <th className="py-3 pl-4 pr-5 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                                            Actions
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <motion.tbody variants={container} initial="hidden" animate="show">
-                                    <AnimatePresence>
-                                        {filtered.map((course) => (
-                                            <CourseRow
-                                                key={course.id}
-                                                course={course}
-                                                onEdit={(c) => navigate(`/courses/${c.id}`)}
-                                                onDelete={setDeleteTarget}
-                                                canManage={canManage}
-                                            />
-                                        ))}
-                                    </AnimatePresence>
-                                </motion.tbody>
-                            </table>
-                        </div>
-                    )}
-                </motion.div>
-
-                {/* ── Majors Table ─────────────────────────────────── */}
-                <MajorsTable onEdit={setEditMajorTarget} onDelete={setDeleteMajorTarget} canManage={canManage} />
+                ) : filtered.length === 0 ? (
+                    <motion.div
+                        variants={item}
+                        className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--color-line)] py-20 text-center"
+                    >
+                        <BookOpen size={36} className="text-[var(--color-line)]" />
+                        <p className="text-sm font-medium text-[var(--color-muted)]">
+                            {search ? 'No departments match your search.' : 'No departments found.'}
+                        </p>
+                        {search && (
+                            <button
+                                type="button"
+                                onClick={() => setSearch('')}
+                                className="mt-1 text-xs font-semibold text-[var(--color-accent)] hover:underline"
+                            >
+                                Clear search
+                            </button>
+                        )}
+                    </motion.div>
+                ) : (
+                    <motion.div
+                        variants={container}
+                        initial="hidden"
+                        animate="show"
+                        className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2"
+                    >
+                        {filtered.map((course) => (
+                            <DepartmentCard
+                                key={course.id}
+                                course={course}
+                                programs={programsByCourse.get(Number(course.id)) ?? []}
+                                canManage={canManage}
+                                isToggling={
+                                    toggleActive.isPending &&
+                                    String(toggleActive.variables) === String(course.id)
+                                }
+                                onAssignHead={(c) => navigate(`/courses/${c.id}`)}
+                                onToggleActive={(c) => toggleActive.mutate(c.id)}
+                                onDeleteDepartment={setDeleteTarget}
+                                onAddProgram={setAddProgramFor}
+                                onEditProgram={(major, c) => setEditProgram({ major, course: c })}
+                                onDeleteProgram={setDeleteMajorTarget}
+                            />
+                        ))}
+                    </motion.div>
+                )}
             </motion.section>
 
             {/* ── Modals ─────────────────────────────────────────── */}
@@ -843,22 +755,24 @@ export default function CoursePage() {
                         onClose={() => setDeleteTarget(null)}
                     />
                 )}
-                {canManage && showAddMajor && (
+                {canManage && addProgramFor !== null && (
                     <MajorModal
-                        key="add-major"
-                        onClose={() => setShowAddMajor(false)}
+                        key="add-program"
+                        course={addProgramFor}
+                        onClose={() => setAddProgramFor(null)}
                     />
                 )}
-                {canManage && editMajorTarget !== null && (
+                {canManage && editProgram !== null && (
                     <MajorModal
-                        key="edit-major"
-                        major={editMajorTarget}
-                        onClose={() => setEditMajorTarget(null)}
+                        key="edit-program"
+                        course={editProgram.course}
+                        major={editProgram.major}
+                        onClose={() => setEditProgram(null)}
                     />
                 )}
                 {canManage && deleteMajorTarget !== null && (
                     <DeleteMajorConfirmModal
-                        key="delete-major-confirm"
+                        key="delete-program-confirm"
                         major={deleteMajorTarget}
                         onClose={() => setDeleteMajorTarget(null)}
                     />

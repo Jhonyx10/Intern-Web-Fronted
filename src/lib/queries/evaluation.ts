@@ -15,7 +15,7 @@ export interface FormItem {
   };
 }
 
-export interface Course {
+export interface Program {
   id: number;
   code: string;
   title: string;
@@ -25,7 +25,6 @@ export interface CreateEvaluationTemplatePayload {
   title: string;
   description?: string;
   is_active: boolean;
-  course_ids: number[]; 
   items: FormItem[];
 }
 
@@ -35,7 +34,7 @@ export interface EvaluationTemplateItem {
   sort_order: number;
   item_type: FormItem['item_type'];
   label: string;
-  options: string | null; 
+  options: string | null;
   is_required: boolean | number;
   created_at: string;
   updated_at: string;
@@ -61,15 +60,18 @@ export interface EvaluationTemplateDetail {
   is_active: boolean | number;
   created_at: string;
   updated_at: string;
+  items_count?: number;
   items?: EvaluationTemplateItem[];
   creator?: EvaluationTemplateCreator;
+  is_used?: boolean;
+  used_in_school_years?: string[];
 }
 
 // Hook to fetch active courses for multi-selection
 export const useCourses = (token?: string | null) => {
   return useQuery({
     queryKey: queryKeys.courses?.all ?? ['courses'],
-    queryFn: () => apiRequest<Course[]>('/courses', { token }),
+    queryFn: () => apiRequest<Program[]>('/courses', { token }),
   });
 };
 
@@ -135,6 +137,27 @@ export const useCreateEvaluationTemplate = (token?: string | null) => {
   });
 };
 
+export const useUpdateEvaluationTemplate = (id?: number | string, token?: string | null) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: CreateEvaluationTemplatePayload) =>
+      apiRequest<{ id: number; message: string }>(`/evaluation-templates/${id}`, {
+        method: 'PUT',
+        body: payload,
+        token,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.evaluations.templates() });
+      if (id) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.evaluations.templateDetail(id) });
+      }
+      toastMutationSuccess('Template updated', 'Evaluation template updated successfully.');
+    },
+    onError: (error) => toastMutationError(error, 'Failed to update template'),
+  });
+};
+
 export const useBulkAssignEvaluations = (token?: string | null) => {
   const queryClient = useQueryClient();
 
@@ -156,3 +179,19 @@ export const useBulkAssignEvaluations = (token?: string | null) => {
   });
 };
 
+export const useDuplicateEvaluationTemplate = (token?: string | null) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: number | string) =>
+      apiRequest<{ id: number; message: string }>(`/evaluation-templates/${id}/duplicate`, {
+        method: 'POST',
+        token,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.evaluations.templates() });
+      toastMutationSuccess('Template duplicated', 'A copy of the evaluation template has been created.');
+    },
+    onError: (error) => toastMutationError(error, 'Failed to duplicate template'),
+  });
+};

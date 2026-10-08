@@ -1,93 +1,140 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { NavLink, Outlet, useLocation, matchPath } from "react-router-dom";
 import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/context/ThemeContext'
 import OCCLOGO from '@/assets/OCC logo.webp'
-import { Calendar1Icon, UserIcon, Settings, BuildingIcon, FolderIcon, FolderCheckIcon, Building2Icon } from 'lucide-react'
+import { Calendar1Icon, UserIcon, Settings, BuildingIcon, FolderIcon, FolderCheckIcon, Building2Icon, History, CalendarDays, Loader2 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { apiRequest } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 import StudentLiveTracker from '@/pages/coordinator/StudentLiveTracker'
+import CourseDetailsPage from '@/pages/details/CourseDetails';
 
 type Role = 'super_admin' | 'supervisor' | 'dean' | 'admin' | 'coordinator' | 'student'
+
+type SectionKey = 'overview' | 'academic' | 'people' | 'internship'
 
 type NavItem = {
   to: string
   label: string
   end: boolean
   icon: React.ElementType
+  section: SectionKey
   // If omitted, the item is visible to every role.
   roles?: Role[]
 }
 
+// Sidebar groups, in display order. A null label shows no heading.
+const SECTIONS: { key: SectionKey; label: string | null }[] = [
+  { key: 'overview', label: null },
+  { key: 'academic', label: 'Academic' },
+  { key: 'people', label: 'People' },
+  { key: 'internship', label: 'Internship' },
+]
+
 const navItems: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard", end: true, icon: DashboardIcon },
+  { to: "/dashboard", label: "Dashboard", end: true, icon: DashboardIcon, section: 'overview' },
+
+  // Academic
   {
-    to: "/administrator",
-    label: "Administrators",
+    to: "/school-year-section",
+    label: "School Year",
     end: false,
-    icon: AdministratorIcon,
-    roles: ["super_admin"],
+    icon: Calendar1Icon,
+    section: 'academic',
+    roles: ["dean", "super_admin"],
   },
   {
     to: "/documents",
     label: "Documents",
     end: false,
     icon: FolderCheckIcon,
-    roles: ["super_admin", "dean", "coordinator", "admin"],
+    section: 'academic',
+    roles: ["super_admin", "dean", "coordinator"],
   },
   {
     to: "/courses",
     label: "Departments",
     end: false,
     icon: CoursesIcon,
-    roles: ["super_admin", "admin"],
-  },
-  {
-    to: "/companies/map",
-    label: "Organizations",
-    end: false,
-    icon: Building2Icon,
-    roles: ["coordinator", "dean", "admin"],
-  },
-  {
-    to: "/coordinator/my-section",
-    label: "My Section",
-    end: true,
-    icon: UserIcon,
-    roles: ["coordinator"],
-  },
-  {
-    to: "/coordinators",
-    label: "Coordinators",
-    end: false,
-    icon: AdministratorIcon,
-    roles: ["dean"],
+    section: 'academic',
+    roles: ["super_admin"],
   },
   {
     to: "/evaluation",
     label: "Evaluation",
     end: false,
     icon: FolderIcon,
+    section: 'academic',
+    roles: ["dean", "super_admin"],
+  },
+  {
+    to: "/history",
+    label: "History",
+    end: false,
+    icon: History,
+    section: 'academic',
+    roles:["dean", "coordinator"],
+  },
+
+  // People
+  {
+    to: "/administrator",
+    label: "Administrators",
+    end: false,
+    icon: AdministratorIcon,
+    section: 'people',
+    roles: ["super_admin"],
+  },
+  {
+    to: "/coordinators",
+    label: "Coordinators",
+    end: false,
+    icon: AdministratorIcon,
+    section: 'people',
     roles: ["dean"],
   },
   {
-    to: "/school-year-section",
-    label: "Year & Section",
-    end: false,
-    icon: Calendar1Icon,
-    roles: ["dean"],
+    to: "/coordinator/my-section",
+    label: "My Section",
+    end: true,
+    icon: UserIcon,
+    section: 'people',
+    roles: ["coordinator"],
   },
   {
     to: "/students",
     label: "Students",
     end: false,
     icon: UserIcon,
-    roles: ["dean", "admin"],
+    section: 'people',
+    roles: ["dean", "super_admin"],
+  },
+  {
+    to: "/supervisor/interns",
+    label: "Interns",
+    end: true,
+    icon: UserIcon,
+    section: 'people',
+    roles: ["supervisor"],
+  },
+
+  // Internship
+  {
+    to: "/companies/map",
+    label: "Organizations",
+    end: false,
+    icon: Building2Icon,
+    section: 'internship',
+    roles: ["coordinator", "dean"],
   },
   {
     to: "/companies",
     label: "Organizations",
     end: false,
     icon: Building2Icon,
+    section: 'internship',
     roles: ["super_admin"],
   },
   {
@@ -95,13 +142,7 @@ const navItems: NavItem[] = [
     label: "Organizations Info",
     end: true,
     icon: BuildingIcon,
-    roles: ["supervisor"],
-  },
-  {
-    to: "/supervisor/interns",
-    label: "Interns",
-    end: true,
-    icon: UserIcon,
+    section: 'internship',
     roles: ["supervisor"],
   },
   {
@@ -109,6 +150,7 @@ const navItems: NavItem[] = [
     label: "Attendance",
     end: true,
     icon: Calendar1Icon,
+    section: 'internship',
     roles: ["supervisor"],
   },
   {
@@ -116,6 +158,7 @@ const navItems: NavItem[] = [
     label: "Interns Logs",
     end: true,
     icon: MapIcon,
+    section: 'internship',
     roles: ["coordinator"],
   },
 ];
@@ -131,6 +174,8 @@ const pageTitles: Array<{ path: string; title: string; end?: boolean }> = [
   { path: "/school-year-section", title: "Year & Section" },
   { path: "/coordinators", title: "Coordinators" },
   { path: "/students", title: "Students" },
+  { path: "/history", title: "History Archive" },
+  { path: "/school-year/:id", title: "School Year Details" },
   { path: "/supervisor/company-info", title: "Company Info", end: true },
   { path: "/supervisor/interns", title: "Interns", end: true },
   { path: "/supervisor/attendance", title: "Attendance", end: true },
@@ -170,6 +215,7 @@ const SIDEBAR_KEY = 'occ-sidenav-open'
 const SIDEBAR_EXPANDED = 256
 const SIDEBAR_COLLAPSED = 76
 const LIVE_TRACKER_PATH = "/student/live/location";
+const SCHOOL_YEAR_PATH = "/school-year-section";
 
 export function AppShell() {
   const { user, logout } = useAuth()
@@ -234,11 +280,28 @@ export function AppShell() {
   // Add a `roles` array to a nav item to restrict it; omit `roles` to show it to everyone.
   const userRole = user?.role?.name as Role | undefined
 
-  const visibleNavItems = navItems.filter(
-    (item) => !item.roles || (userRole !== undefined && item.roles.includes(userRole))
-  )
+  // Visible items grouped into their sidebar sections (empty sections are dropped)
+  const groupedNav = useMemo(() => {
+    const visible = navItems.filter(
+      (item) => !item.roles || (userRole !== undefined && item.roles.includes(userRole))
+    )
+    return SECTIONS.map((section) => ({
+      ...section,
+      items: visible.filter((item) => item.section === section.key),
+    })).filter((section) => section.items.length > 0)
+  }, [userRole])
 
-  const pageTitle = resolvePageTitle(location.pathname)
+  // Super admin manages the list of school years; everyone else (e.g. dean)
+  // goes straight to their own department, filtered to the current school year.
+  const isSuperAdmin =
+    userRole === 'super_admin' || (userRole as string | undefined) === 'superadmin'
+
+  const showCurrentSchoolYear =
+    location.pathname.replace(/\/$/, '') === SCHOOL_YEAR_PATH && !isSuperAdmin
+
+  const pageTitle = showCurrentSchoolYear
+    ? 'School Year'
+    : resolvePageTitle(location.pathname)
 
   useEffect(() => {
     if (isOnLiveTracker) {
@@ -256,7 +319,7 @@ export function AppShell() {
         className="sticky top-0 z-40 flex h-screen shrink-0 flex-col border-r border-[var(--color-line)] backdrop-blur-xl text-white"
       >
         <div className={`flex items-center pt-6 pb-5 ${sidebarOpen ? 'px-4' : 'justify-center px-2'}`}>
-          <div className={`flex min-w-0 items-center ${sidebarOpen ? 'gap-3' : 'justify-center'}`}>
+          <div className={`flex min-w-0 items-center w-full ${sidebarOpen ? 'gap-3' : 'justify-center'}`}>
             <div
               className="grid h-10 w-10 shrink-0 place-items-center rounded-xl overflow-hidden text-sm font-bold tracking-wide text-white shadow-[0_10px_24px_-12px_rgba(11,110,79,0.9)] bg-white p-1"
               title="OCC Intern"
@@ -278,7 +341,7 @@ export function AppShell() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -6 }}
                   transition={{ duration: 0.2 }}
-                  className="min-w-0"
+                  className="min-w-0 flex-1"
                 >
                   <p className="truncate text-[11px] font-semibold tracking-[0.22em] text-white/70 uppercase">
                     Internship
@@ -292,113 +355,113 @@ export function AppShell() {
           </div>
         </div>
 
-        <nav className={`flex flex-1 flex-col gap-1 ${sidebarOpen ? 'px-3' : 'items-center px-2'}`}>
-          <AnimatePresence initial={false}>
-            {sidebarOpen ? (
-              <motion.p
-                key="nav-label"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="px-3 pb-2 text-[11px] font-semibold tracking-[0.16em] text-white/70 uppercase"
+        <nav className={`flex flex-1 flex-col min-h-0 ${sidebarOpen ? 'px-3' : 'items-center px-2'}`}>
+          <div className={`flex flex-col flex-1 overflow-y-auto min-h-0 pb-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent ${!sidebarOpen ? 'items-center w-full' : ''}`}>
+            {groupedNav.map((group, groupIndex) => (
+              <div
+                key={group.key}
+                className={`${groupIndex === 0 ? '' : 'mt-4'} ${!sidebarOpen ? 'flex w-full flex-col items-center' : ''}`}
               >
-                Navigate
-              </motion.p>
-            ) : null}
-          </AnimatePresence>
+                {/* Section heading, or a thin divider when the sidebar is collapsed */}
+                {sidebarOpen ? (
+                  group.label ? (
+                    <p className="px-3 pb-1.5 text-[11px] font-semibold tracking-[0.16em] text-white/60 uppercase">
+                      {group.label}
+                    </p>
+                  ) : null
+                ) : groupIndex > 0 ? (
+                  <div className="mb-3 h-px w-8 bg-white/20" />
+                ) : null}
 
-          {visibleNavItems.map(({ to, label, end, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) =>
-                [
-                  'group relative flex items-center rounded-xl text-sm font-medium transition-colors',
-                  sidebarOpen ? 'gap-3 px-3 py-2.5' : 'justify-center p-2',
-                  isActive
-                    ? 'text-white'
-                    : 'text-white/70 hover:text-white',
-                ].join(' ')
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  {isActive ? (
-                    <motion.span
-                      layoutId="nav-active"
-                      className="absolute inset-0 rounded-xl bg-white/10"
-                      transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                    />
-                  ) : null}
-                  <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white shadow-sm ring-1 ring-white/10">
-                    <Icon />
-                  </span>
-                  <AnimatePresence initial={false}>
-                    {sidebarOpen ? (
-                      <motion.span
-                        key="label"
-                        initial={{ opacity: 0, width: 0 }}
-                        animate={{ opacity: 1, width: 'auto' }}
-                        exit={{ opacity: 0, width: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="relative z-10 overflow-hidden whitespace-nowrap"
-                      >
-                        {label}
-                      </motion.span>
-                    ) : (
-                      <div
-                        className="absolute left-full ml-3 hidden items-center whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold tracking-wide text-white opacity-0 shadow-lg transition-all delay-75 duration-200 group-hover:flex group-hover:opacity-100 z-50"
-                        style={{ backgroundColor: themeColor || 'var(--color-accent)' }}
-                      >
-                        {label}
-                      </div>
-                    )}
-                  </AnimatePresence>
-                </>
-              )}
-            </NavLink>
-          ))}
+                <div className={`flex flex-col gap-1 ${!sidebarOpen ? 'items-center w-full' : ''}`}>
+                  {group.items.map(({ to, label, end, icon: Icon }) => (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      end={end}
+                      className={({ isActive }) =>
+                        [
+                          'group relative flex items-center rounded-xl text-sm font-medium transition-colors shrink-0',
+                          sidebarOpen ? 'gap-3 px-3 py-2.5' : 'justify-center p-2',
+                          isActive
+                            ? 'text-white'
+                            : 'text-white/70 hover:text-white',
+                        ].join(' ')
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          {isActive ? (
+                            <motion.span
+                              layoutId="nav-active"
+                              className="absolute inset-0 rounded-xl bg-white/10"
+                              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                            />
+                          ) : null}
+                          <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white shadow-sm ring-1 ring-white/10">
+                            <Icon />
+                          </span>
+                          <AnimatePresence initial={false}>
+                            {sidebarOpen ? (
+                              <motion.span
+                                key="label"
+                                initial={{ opacity: 0, width: 0 }}
+                                animate={{ opacity: 1, width: 'auto' }}
+                                exit={{ opacity: 0, width: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="relative z-10 overflow-hidden whitespace-nowrap"
+                              >
+                                {label}
+                              </motion.span>
+                            ) : (
+                              <div
+                                className="absolute left-full ml-3 hidden items-center whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold tracking-wide text-white opacity-0 shadow-lg transition-all delay-75 duration-200 group-hover:flex group-hover:opacity-100 z-50"
+                                style={{ backgroundColor: themeColor || 'var(--color-accent)' }}
+                              >
+                                {label}
+                              </div>
+                            )}
+                          </AnimatePresence>
+                        </>
+                      )}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </nav>
-
-        <div className={`mb-3 ${sidebarOpen ? 'mx-3' : 'mx-2'}`}>
-          <motion.button
-            type="button"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setSidebarOpen((open) => !open)}
-            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            className={`flex items-center rounded-xl border border-white/20 bg-white/10 text-sm font-medium text-white/80 transition-colors hover:bg-white/20 hover:text-white ${sidebarOpen ? 'w-full justify-between gap-3 px-3 py-2.5' : 'mx-auto grid h-10 w-10 place-items-center'
-              }`}
-          >
-            {sidebarOpen ? (
-              <>
-                <span>Collapse</span>
-                <PanelLeftCloseIcon />
-              </>
-            ) : (
-              <PanelLeftOpenIcon />
-            )}
-          </motion.button>
-        </div>
       </motion.aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 border-b border-[var(--color-line)] bg-[var(--color-surface)]/90 backdrop-blur-xl">
           <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
-            <AnimatePresence mode="wait">
-              <motion.h2
-                key={pageTitle}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.2 }}
-                className="min-w-0 truncate text-lg font-semibold tracking-tight text-[var(--color-ink)]"
+            <div className="flex min-w-0 items-center gap-3">
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.06 }}
+                whileTap={{ scale: 0.94 }}
+                onClick={() => setSidebarOpen((open) => !open)}
+                aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+                title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-[var(--color-line)] bg-white text-[var(--color-muted)] shadow-sm transition-colors hover:bg-slate-50 hover:text-[var(--color-ink)]"
               >
-                {pageTitle}
-              </motion.h2>
-            </AnimatePresence>
+                {sidebarOpen ? <PanelLeftCloseIcon /> : <PanelLeftOpenIcon />}
+              </motion.button>
+
+              <AnimatePresence mode="wait">
+                <motion.h2
+                  key={pageTitle}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.2 }}
+                  className="min-w-0 truncate text-lg font-semibold tracking-tight text-[var(--color-ink)]"
+                >
+                  {pageTitle}
+                </motion.h2>
+              </AnimatePresence>
+            </div>
 
             <div ref={profileMenuRef} className="relative shrink-0">
               <motion.button
@@ -480,7 +543,7 @@ export function AppShell() {
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  <Outlet />
+                  {showCurrentSchoolYear ? <DeanCurrentCourse /> : <Outlet />}
                 </motion.div>
               </AnimatePresence>
             )}
@@ -495,6 +558,56 @@ export function AppShell() {
       </div>
     </div>
   )
+}
+
+// Dean landing page for "School Year": their own department's details,
+// filtered to the current school year (no school year list, no program cards).
+function DeanCurrentCourse() {
+  const { token, user } = useAuth()
+  const courseId =
+    user?.course?.id ?? (user as unknown as { course_id?: number } | null)?.course_id
+
+  const { data: currentYear, isLoading, isError } = useQuery({
+    queryKey: [...queryKeys.schoolYears.all, 'current'],
+    queryFn: () => apiRequest<{ id: number }>('/school-years/current', { token }),
+    enabled: Boolean(token),
+    retry: false, // a 404 means no active school year
+  })
+
+  if (isLoading) {
+    return (
+      <div className="flex h-60 items-center justify-center">
+        <Loader2 className="animate-spin text-[var(--color-accent)]" size={28} />
+      </div>
+    )
+  }
+
+  if (!courseId) {
+    return (
+      <div className="mt-10 rounded-xl border border-dashed border-[var(--color-line)] p-8 text-center text-sm text-[var(--color-muted)]">
+        Your account is not assigned to a department yet.
+      </div>
+    )
+  }
+
+  if (isError || !currentYear) {
+    return (
+      <section className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--color-line)] py-24 text-center">
+        <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
+          <CalendarDays size={24} />
+        </div>
+        <h2 className="mt-5 text-lg font-semibold text-[var(--color-ink)]">
+          No Current School Year
+        </h2>
+        <p className="mt-2 max-w-sm text-sm text-[var(--color-muted)]">
+          The Super Admin has not set an active school year yet. Once they do,
+          your department will show up here.
+        </p>
+      </section>
+    )
+  }
+
+  return <CourseDetailsPage courseId={courseId} schoolYearId={currentYear.id} embedded />
 }
 
 function PanelLeftCloseIcon() {

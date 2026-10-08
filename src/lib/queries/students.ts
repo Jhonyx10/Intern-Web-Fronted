@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query'
 import { apiRequest } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
@@ -10,6 +15,9 @@ export type CreateStudentInput = {
   first_name: string
   middle_name: string | null
   last_name: string
+  email?: string | null
+  contact_number?: string | null
+  gender?: 'Male' | 'Female' | null
   section_id: number
   is_active: boolean
 }
@@ -31,6 +39,15 @@ export type ImportFailure = {
 export type ImportStudentsResult = {
   imported: number
   failures: ImportFailure[]
+}
+
+// Anything that shows student lists or per-section / per-course student counts
+// (students page, section details, course details, school year views).
+function invalidateStudentRelated(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: queryKeys.students.all })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.sections.all })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.courses.all })
+  void queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all })
 }
 
 export async function fetchStudents(
@@ -95,7 +112,7 @@ export function useCreateStudent() {
       return createStudent(token, body)
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.students.all })
+      invalidateStudentRelated(queryClient)
       toastMutationSuccess('Student created')
     },
     onError: (error) => toastMutationError(error, 'Failed to create student'),
@@ -132,7 +149,8 @@ export function useUpdateStudent() {
           data: current.data.map((s) => (s.id === student.id ? { ...s, ...student } : s)),
         }
       })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.students.all })
+      // A student can be moved to another section, so counts elsewhere may change too
+      invalidateStudentRelated(queryClient)
       toastMutationSuccess('Student updated')
     },
     onError: (error) => toastMutationError(error, 'Failed to update student'),
@@ -166,7 +184,7 @@ export function useDeleteStudent() {
           total: Math.max(0, current.total - 1),
         }
       })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.students.all })
+      invalidateStudentRelated(queryClient)
       toastMutationSuccess('Student deleted')
     },
     onError: (error) => toastMutationError(error, 'Failed to delete student'),
@@ -211,8 +229,7 @@ export function useImportStudents() {
       return importStudents(token, sectionId, file)
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.students.all })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sections.all })
+      invalidateStudentRelated(queryClient)
     },
   })
 }

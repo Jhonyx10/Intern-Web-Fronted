@@ -2,29 +2,25 @@ import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BookOpen,
-  ClipboardList,
-  Clock,
   FileText,
   Plus,
   Search,
   Tag,
-  UserRound,
   X,
-  ExternalLink,
-  Filter,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import {
   useDocumentRequirements,
   useCourseDocumentRequirements,
-  useSubmittedDocuments,
-  useUpdateDocumentStatus,
+  useDepartmentRequirements,
+  useCourseThemes,
 } from "@/lib/queries/documents";
 import { useCourses } from "@/lib/queries/courses";
 import { CreateRequirementModal } from "@/components/modal/CreateRequirementModal";
 import { CreateTypeModal } from "@/components/modal/CreateTypeModal";
 import { AssignRequirementsModal } from "@/components/modal/AssignRequirementsModal";
-import { DocumentPreviewModal } from "@/components/modal/DocumentPreviewModal";
+import { DepartmentRequirementCards } from "@/components/cards/DepartmentRequirementCard";
+import type { Program } from "@/types";
 
 // ─── animation variants ─────────────────────────────────
 
@@ -44,141 +40,61 @@ const row = {
   },
 };
 
-function formatDeadline(dateStr?: string | null) {
-  if (!dateStr) return "—";
-  try {
-    return new Date(dateStr).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  } catch {
-    return dateStr;
-  }
-}
-
-function formatFileSize(bytes?: number) {
-  if (!bytes) return null;
-  const units = ["B", "KB", "MB", "GB"];
-  let size = bytes;
-  let unitIndex = 0;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex++;
-  }
-  return `${size.toFixed(size < 10 && unitIndex > 0 ? 1 : 0)} ${units[unitIndex]
-    }`;
-}
-
-// Resolves a submitted document's type from either its direct document_type
-// or the document_type nested under its document_requirement.
-function getDocType(doc: {
-  document_type?: { id: number; name: string } | null;
-  document_requirement?: {
-    document_type?: { id: number; name: string } | null;
-  } | null;
-}) {
-  return doc.document_type ?? doc.document_requirement?.document_type ?? null;
-}
-
 export default function DocumentPage() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role?.name === "super_admin";
-  const isAdmin = user?.role?.name === "admin";
   const isDean = user?.role?.name === "dean";
   const courseId = user?.course?.id as number | undefined;
-  const updateStatus = useUpdateDocumentStatus();
-  const [activeTab, setActiveTab] = useState<"requirements" | "submitted">(isAdmin ? "submitted" : "requirements");
+
   const [search, setSearch] = useState("");
-  const [selectedCourseId, setSelectedCourseId] = useState<string>("");
-  const [selectedDocTypeId, setSelectedDocTypeId] = useState<string>("");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showTypeModal, setShowTypeModal] = useState(false);
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [previewDoc, setPreviewDoc] = useState<{
-    id: number;
-    title: string;
-    filename?: string;
-    fileSize?: number;
-    mimeType?: string;
-    notes?: string | null;
-    status?: string;
-    rejectionReason?: string | null;
-    reviewedAt?: string | null;
-    reviewedByName?: string | null;
-  } | null>(null);
+  // Super admin: the department whose requirements are being assigned
+  const [assignCourseId, setAssignCourseId] = useState<number | null>(null);
 
-  // Master courses list for Super Admin filter
+  // Master courses list (super admin filter + department picker + cards)
   const { data: courses } = useCourses();
 
-  // Requirements list — super_admin's own view, and the checklist source a dean
-  // picks from in the assign modal.
+  const courseIds = useMemo(
+    () => (courses ?? []).map((c) => Number(c.id)),
+    [courses]
+  );
+
+  // Requirements assigned to each department (one request per department).
+  // Super admin only; deans and admins make no extra requests.
+  const deptResults = useDepartmentRequirements(isSuperAdmin ? courseIds : []);
+
+  // Per-course theme colors from the settings table (super admin only)
+  const { data: themes } = useCourseThemes(isSuperAdmin);
+
+  // Master requirements list — used for the stat cards and as the checklist
+  // source in the assign modal.
   const {
     data: allRequirements,
-    isLoading: loadingAll,
     isError: errorAll,
   } = useDocumentRequirements();
 
-  // Dean's course-scoped view
-  const {
-    data: courseRequirements,
-    isLoading: loadingCourse,
-    isError: errorCourse,
-  } = useCourseDocumentRequirements(isDean ? courseId : undefined);
+  // Dean's read-only, course-scoped view
+  const deanQuery = useCourseDocumentRequirements(isDean ? courseId : undefined);
+  const courseRequirements = deanQuery.data;
+  const errorCourse = deanQuery.isError;
 
-  // Submitted documents list with role-based scoping and filters
-  const {
-    data: submittedDocs,
-    isLoading: loadingSubmitted,
-    isError: errorSubmitted,
-  } = useSubmittedDocuments(
-    activeTab === "submitted"
-      ? {
-        course_id: isSuperAdmin ? selectedCourseId || undefined : undefined,
-        search: search.trim() || undefined,
-      }
-      : undefined
+  const deanCourse =
+    (courses ?? []).find((c) => Number(c.id) === Number(courseId)) ??
+    (user?.course as Program | undefined);
+
+  // Requirements currently assigned to the department the super admin picked.
+  // The modal only mounts once this has loaded so its checkboxes start correct.
+  const { data: assignTarget } = useCourseDocumentRequirements(
+    isSuperAdmin ? assignCourseId ?? undefined : undefined
   );
 
   const requirements = isDean ? courseRequirements : allRequirements;
-  const isLoadingRequirements = isDean ? loadingCourse : loadingAll;
   const isErrorRequirements = isDean ? errorCourse : errorAll;
-
-  const currentIds = useMemo(
-    () => (courseRequirements ?? []).map((r) => r.id),
-    [courseRequirements]
-  );
-
-  const currentDeadline = courseRequirements?.[0]?.pivot?.deadline_at;
-
-  // Combined, de-duped list of document types seen in whichever dataset is loaded
-  const documentTypeOptions = useMemo(() => {
-    const map = new Map<number, string>();
-    (requirements ?? []).forEach((r) => {
-      if (r.document_type) map.set(r.document_type.id, r.document_type.name);
-    });
-    (submittedDocs ?? []).forEach((d) => {
-      const t = getDocType(d);
-      if (t) map.set(t.id, t.name);
-    });
-    return Array.from(map, ([id, name]) => ({ id, name }));
-  }, [requirements, submittedDocs]);
-
-  const filteredRequirements = (requirements ?? []).filter(
-    (r) =>
-      r.title.toLowerCase().includes(search.toLowerCase()) &&
-      (!selectedDocTypeId || String(r.document_type?.id) === selectedDocTypeId)
-  );
-
-  const filteredSubmittedDocs = (submittedDocs ?? []).filter(
-    (d) => !selectedDocTypeId || String(getDocType(d)?.id) === selectedDocTypeId
-  );
 
   const totalRequirements = requirements?.length ?? 0;
   const activeRequirements = requirements?.filter((r) => r.is_active).length ?? 0;
   const inactiveRequirements = totalRequirements - activeRequirements;
-
-  const totalSubmitted = submittedDocs?.length ?? 0;
 
   return (
     <>
@@ -198,24 +114,35 @@ export default function DocumentPage() {
               Document Management
             </p>
             <h2 className="mt-2 text-3xl font-semibold tracking-tight">
-              {activeTab === "submitted"
-                ? "Intern Submitted Documents"
-                : isDean
-                  ? "Your Course Requirements"
-                  : "Document Requirements"}
+              {isDean ? "Your Program Requirements" : "Document Requirements"}
             </h2>
             <p className="mt-1.5 text-sm text-[var(--color-muted)]">
-              {activeTab === "submitted"
-                ? "Review and track all documents uploaded by students and interns."
-                : isDean
-                  ? "Documents your students are required to submit, and when they're due."
-                  : "Manage the master list of document types and requirements."}
+              {isDean
+                ? "Documents your students are required to submit, and when they're due."
+                : "Manage document types and requirements, and assign them to departments."}
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            {isSuperAdmin && activeTab === "requirements" && (
+          <div className="flex flex-wrap items-center gap-3">
+            {isSuperAdmin && (
               <>
+                {/* Pick a department to assign requirements and a deadline */}
+                <select
+                  value=""
+                  onChange={(e) =>
+                    e.target.value && setAssignCourseId(Number(e.target.value))
+                  }
+                  aria-label="Assign requirements to a department"
+                  className="cursor-pointer rounded-xl border border-[var(--color-line)] bg-white px-3 py-2.5 text-sm font-medium text-[var(--color-muted)] shadow-sm outline-none transition hover:border-[var(--color-accent)]"
+                >
+                  <option value="">Assign to department…</option>
+                  {courses?.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.code} — {c.name}
+                    </option>
+                  ))}
+                </select>
+
                 <button
                   type="button"
                   onClick={() => setShowTypeModal(true)}
@@ -232,182 +159,90 @@ export default function DocumentPage() {
                 </button>
               </>
             )}
-
-            {isDean && activeTab === "requirements" && (
-              <button
-                type="button"
-                onClick={() => setShowAssignModal(true)}
-                className="flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-              >
-                <ClipboardList size={15} /> Manage Requirements
-              </button>
-            )}
           </div>
         </motion.div>
 
-        {/* ── View Toggle Tabs ─────────────────────────────── */}
-        <motion.div variants={row} className="flex items-center gap-2">
-          {!isAdmin && (
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("requirements");
-                setSearch("");
-              }}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${activeTab === "requirements"
-                ? "bg-[var(--color-accent)] text-white shadow-sm"
-                : "bg-white text-[var(--color-muted)] hover:bg-slate-100 border border-[var(--color-line)]"
-                }`}
-            >
-              <FileText size={16} /> Requirements Needed
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("submitted");
-              setSearch("");
-            }}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${activeTab === "submitted"
-              ? "bg-[var(--color-accent)] text-white shadow-sm"
-              : "bg-white text-[var(--color-muted)] hover:bg-slate-100 border border-[var(--color-line)]"
-              }`}
-          >
-            <UserRound size={16} /> Intern Submitted Documents
-          </button>
-        </motion.div>
-
-        {/* ── Stat cards ───────────────────────────────────── */}
-        {activeTab === "requirements" ? (
+        {/* ── Dean read-only notice ────────────────────────── */}
+        {isDean && (
           <motion.div
             variants={row}
-            className="grid grid-cols-2 gap-4 sm:grid-cols-3"
+            className="rounded-xl border border-[var(--color-line)] bg-slate-50 px-4 py-3 text-sm text-[var(--color-muted)]"
           >
-            {[
-              {
-                label: isDean ? "Assigned" : "Total requirements",
-                value: totalRequirements,
-                icon: FileText,
-                color:
-                  "text-[var(--color-accent)] bg-[var(--color-accent-soft)]",
-              },
-              {
-                label: "Active",
-                value: activeRequirements,
-                icon: BookOpen,
-                color: "text-emerald-600 bg-emerald-50",
-              },
-              {
-                label: "Inactive",
-                value: inactiveRequirements,
-                icon: X,
-                color: "text-red-500 bg-red-50",
-              },
-            ].map(({ label, value, icon: Icon, color }) => (
-              <article
-                key={label}
-                className="flex items-center gap-4 rounded-2xl border border-[var(--color-line)] bg-white/80 px-5 py-4 shadow-[var(--shadow-soft)] backdrop-blur"
-              >
-                <div
-                  className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl text-sm ${color}`}
-                >
-                  <Icon size={18} />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold tracking-tight">{value}</p>
-                  <p className="text-xs font-medium text-[var(--color-muted)]">
-                    {label}
-                  </p>
-                </div>
-              </article>
-            ))}
-          </motion.div>
-        ) : (
-          <motion.div
-            variants={row}
-            className="grid grid-cols-2 gap-4 sm:grid-cols-3"
-          >
-            {[
-              {
-                label: "Total Submitted",
-                value: totalSubmitted,
-                icon: UserRound,
-                color:
-                  "text-[var(--color-accent)] bg-[var(--color-accent-soft)]",
-              },
-              {
-                label: "Reviewed / Approved",
-                value:
-                  submittedDocs?.filter((d) => d.review_status === "approved")
-                    .length ?? 0,
-                icon: BookOpen,
-                color: "text-emerald-600 bg-emerald-50",
-              },
-              {
-                label: "Pending Review",
-                value:
-                  submittedDocs?.filter(
-                    (d) => d.review_status === "pending" || !d.review_status
-                  ).length ?? 0,
-                icon: Clock,
-                color: "text-amber-600 bg-amber-50",
-              },
-            ].map(({ label, value, icon: Icon, color }) => (
-              <article
-                key={label}
-                className="flex items-center gap-4 rounded-2xl border border-[var(--color-line)] bg-white/80 px-5 py-4 shadow-[var(--shadow-soft)] backdrop-blur"
-              >
-                <div
-                  className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl text-sm ${color}`}
-                >
-                  <Icon size={18} />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold tracking-tight">{value}</p>
-                  <p className="text-xs font-medium text-[var(--color-muted)]">
-                    {label}
-                  </p>
-                </div>
-              </article>
-            ))}
+            These requirements and deadlines are set by the Super Admin for
+            your department.
           </motion.div>
         )}
 
-        {/* ── Error banner ─────────────────────────────────── */}
-        {(activeTab === "requirements"
-          ? isErrorRequirements
-          : errorSubmitted) && (
-            <motion.div
-              variants={row}
-              className="rounded-xl border border-red-200 bg-red-50 px-4 py-3"
-            >
-              <p className="text-sm font-medium text-red-700">
-                Couldn't load documents. Please check your network connection and
-                try again.
-              </p>
-            </motion.div>
-          )}
-
-        {/* ── Table card ───────────────────────────────────── */}
+        {/* ── Stat cards ───────────────────────────────────── */}
         <motion.div
           variants={row}
-          className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white/80 shadow-[var(--shadow-soft)] backdrop-blur"
+          className="grid grid-cols-2 gap-4 sm:grid-cols-3"
         >
-          {/* Toolbar */}
-          <div className="flex flex-wrap items-center gap-3 border-b border-[var(--color-line)] px-5 py-3.5">
-            <label className="flex flex-1 min-w-48 items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-muted)] focus-within:border-[var(--color-accent)] focus-within:ring-2 focus-within:ring-[var(--color-accent)]/20 transition">
+          {[
+            {
+              label: isDean ? "Assigned" : "Total requirements",
+              value: totalRequirements,
+              icon: FileText,
+              color:
+                "text-[var(--color-accent)] bg-[var(--color-accent-soft)]",
+            },
+            {
+              label: "Active",
+              value: activeRequirements,
+              icon: BookOpen,
+              color: "text-emerald-600 bg-emerald-50",
+            },
+            {
+              label: "Inactive",
+              value: inactiveRequirements,
+              icon: X,
+              color: "text-red-500 bg-red-50",
+            },
+          ].map(({ label, value, icon: Icon, color }) => (
+            <article
+              key={label}
+              className="flex items-center gap-4 rounded-2xl border border-[var(--color-line)] bg-white/80 px-5 py-4 shadow-[var(--shadow-soft)] backdrop-blur"
+            >
+              <div
+                className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl text-sm ${color}`}
+              >
+                <Icon size={18} />
+              </div>
+              <div>
+                <p className="text-2xl font-bold tracking-tight">{value}</p>
+                <p className="text-xs font-medium text-[var(--color-muted)]">
+                  {label}
+                </p>
+              </div>
+            </article>
+          ))}
+        </motion.div>
+
+        {/* ── Error banner ─────────────────────────────────── */}
+        {isErrorRequirements && (
+          <motion.div
+            variants={row}
+            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3"
+          >
+            <p className="text-sm font-medium text-red-700">
+              Couldn't load documents. Please check your network connection and
+              try again.
+            </p>
+          </motion.div>
+        )}
+
+        {/* ── Requirements: department cards ───────────────── */}
+        {/* Super admin: one themed card per department */}
+        {isSuperAdmin && (
+          <motion.div variants={row} className="space-y-4">
+            <label className="flex max-w-md items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-muted)] transition focus-within:border-[var(--color-accent)] focus-within:ring-2 focus-within:ring-[var(--color-accent)]/20">
               <Search size={14} />
               <input
                 type="search"
-                placeholder={
-                  activeTab === "submitted"
-                    ? "Search course, student name, ID, or filename…"
-                    : "Search requirements…"
-                }
+                placeholder="Search departments…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 bg-transparent outline-none placeholder:text-[var(--color-muted)] text-[var(--color-ink)]"
+                className="flex-1 bg-transparent text-[var(--color-ink)] outline-none placeholder:text-[var(--color-muted)]"
               />
               {search && (
                 <button
@@ -420,378 +255,25 @@ export default function DocumentPage() {
               )}
             </label>
 
-            {/* Super Admin Course Dropdown Filter */}
-            {isSuperAdmin && activeTab === "submitted" && (
-              <div className="flex items-center gap-2">
-                <Filter size={14} className="text-[var(--color-muted)]" />
-                <select
-                  value={selectedCourseId}
-                  onChange={(e) => setSelectedCourseId(e.target.value)}
-                  className="rounded-xl border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-accent)] transition cursor-pointer"
-                >
-                  <option value="">All Courses</option>
-                  {courses?.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.code} — {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {courses && (
+              <DepartmentRequirementCards
+                courses={courses}
+                results={deptResults}
+                themes={themes}
+                search={search}
+                onManage={setAssignCourseId}
+              />
             )}
+          </motion.div>
+        )}
 
-            {/* Document Type Filter */}
-            {documentTypeOptions.length > 0 && (
-              <div className="flex items-center gap-2">
-                <Tag size={14} className="text-[var(--color-muted)]" />
-                <select
-                  value={selectedDocTypeId}
-                  onChange={(e) => setSelectedDocTypeId(e.target.value)}
-                  className="rounded-xl border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-accent)] transition cursor-pointer"
-                >
-                  <option value="">All Document Types</option>
-                  {documentTypeOptions.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <span className="ml-auto text-xs text-[var(--color-muted)]">
-              {activeTab === "requirements"
-                ? isLoadingRequirements
-                  ? "Loading…"
-                  : `${filteredRequirements.length} of ${totalRequirements}`
-                : loadingSubmitted
-                  ? "Loading…"
-                  : `${filteredSubmittedDocs.length} submitted`}
-            </span>
-          </div>
-
-          {/* ── Requirements Table ───────────────────────────── */}
-          {activeTab === "requirements" ? (
-            isLoadingRequirements ? (
-              <div className="flex flex-col items-center justify-center gap-3 py-20 text-[var(--color-muted)]">
-                <span className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
-                <p className="text-sm">Loading requirements…</p>
-              </div>
-            ) : filteredRequirements.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 px-6 py-20 text-center">
-                <ClipboardList size={36} className="text-[var(--color-line)]" />
-                <p className="text-sm font-medium text-[var(--color-muted)]">
-                  {search || selectedDocTypeId
-                    ? "No requirements match your filters."
-                    : isDean
-                      ? "No requirements assigned yet."
-                      : "No document requirements have been created yet."}
-                </p>
-                {search || selectedDocTypeId ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearch("");
-                      setSelectedDocTypeId("");
-                    }}
-                    className="text-xs font-semibold text-[var(--color-accent)] hover:underline"
-                  >
-                    Clear filters
-                  </button>
-                ) : isDean ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowAssignModal(true)}
-                    className="mt-1 flex items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
-                  >
-                    <Plus size={15} /> Select Requirements
-                  </button>
-                ) : null}
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] border-collapse text-left">
-                  <thead>
-                    <tr className="border-b border-[var(--color-line)] bg-slate-50/70">
-                      <th className="py-3 pl-5 pr-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                        Requirement
-                      </th>
-                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                        Type
-                      </th>
-                      {isDean && (
-                        <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                          Deadline
-                        </th>
-                      )}
-                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <motion.tbody
-                    variants={container}
-                    initial="hidden"
-                    animate="show"
-                  >
-                    <AnimatePresence>
-                      {filteredRequirements.map((req) => (
-                        <motion.tr
-                          key={req.id}
-                          variants={row}
-                          className="group border-b border-[var(--color-line)] last:border-0 hover:bg-slate-50/50 transition"
-                        >
-                          <td className="py-3.5 pl-5 pr-4">
-                            <div className="flex items-center gap-3">
-                              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
-                                <FileText size={15} />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-medium text-[var(--color-ink)]">
-                                  {req.title}
-                                </p>
-                                {req.description && (
-                                  <p className="truncate text-xs text-[var(--color-muted)]">
-                                    {req.description}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-3.5">
-                            {req.document_type ? (
-                              <span className="inline-flex items-center rounded-md bg-[var(--color-accent-soft)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-accent)]">
-                                {req.document_type.name}
-                              </span>
-                            ) : (
-                              <span className="text-sm text-[var(--color-muted)]">
-                                —
-                              </span>
-                            )}
-                          </td>
-
-                          {isDean && (
-                            <td className="px-4 py-3.5">
-                              <div className="flex items-center gap-1.5 text-sm text-[var(--color-ink)]">
-                                <Clock
-                                  size={13}
-                                  className="shrink-0 text-[var(--color-muted)]"
-                                />
-                                <span>
-                                  {formatDeadline(req.pivot?.deadline_at)}
-                                </span>
-                              </div>
-                            </td>
-                          )}
-
-                          <td className="px-4 py-3.5">
-                            <span
-                              className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold ${req.is_active
-                                ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
-                                : "bg-red-50 text-red-600"
-                                }`}
-                            >
-                              {req.is_active ? "Active" : "Inactive"}
-                            </span>
-                          </td>
-                        </motion.tr>
-                      ))}
-                    </AnimatePresence>
-                  </motion.tbody>
-                </table>
-              </div>
-            )
-          ) : /* ── Submitted Documents Table ───────────────────── */
-            loadingSubmitted ? (
-              <div className="flex flex-col items-center justify-center gap-3 py-20 text-[var(--color-muted)]">
-                <span className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
-                <p className="text-sm">Loading submitted documents…</p>
-              </div>
-            ) : filteredSubmittedDocs.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 px-6 py-20 text-center">
-                <UserRound size={36} className="text-[var(--color-line)]" />
-                <p className="text-sm font-medium text-[var(--color-muted)]">
-                  {search || selectedDocTypeId
-                    ? "No submitted documents match your filters."
-                    : "No intern document submissions found."}
-                </p>
-                {(search || selectedDocTypeId) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearch("");
-                      setSelectedDocTypeId("");
-                    }}
-                    className="text-xs font-semibold text-[var(--color-accent)] hover:underline"
-                  >
-                    Clear filters
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] border-collapse text-left">
-                  <thead>
-                    <tr className="border-b border-[var(--color-line)] bg-slate-50/70">
-                      <th className="py-3 pl-5 pr-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                        Student / Intern
-                      </th>
-                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                        Course / Section
-                      </th>
-                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                        Requirement / Document
-                      </th>
-                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                        Filename
-                      </th>
-                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                        Submitted Date
-                      </th>
-                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                        Status
-                      </th>
-                      <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
-                        Action
-                      </th>
-                    </tr>
-                  </thead>
-                  <motion.tbody
-                    variants={container}
-                    initial="hidden"
-                    animate="show"
-                  >
-                    <AnimatePresence>
-                      {filteredSubmittedDocs.map((doc) => {
-                        const studentName = doc.student
-                          ? `${doc.student.last_name}, ${doc.student.first_name}`
-                          : "Unknown Student";
-                        const courseCode =
-                          doc.student?.section?.course?.code ?? "—";
-                        const sectionCode = doc.student?.section?.code ?? "";
-
-                        const reqTitle =
-                          doc.document_requirement?.title ??
-                          doc.document_type?.name ??
-                          "Submitted Document";
-
-                        const status =
-                          doc.review_status?.toLowerCase() ?? "pending";
-
-                        return (
-                          <motion.tr
-                            key={doc.id}
-                            variants={row}
-                            className="group border-b border-[var(--color-line)] last:border-0 hover:bg-slate-50/50 transition"
-                          >
-                            {/* Student */}
-                            <td className="py-3.5 pl-5 pr-4">
-                              <div className="flex items-center gap-3">
-                                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-violet-100 text-violet-700 font-semibold text-xs">
-                                  {doc.student?.first_name?.[0]}
-                                  {doc.student?.last_name?.[0]}
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-medium text-[var(--color-ink)]">
-                                    {studentName}
-                                  </p>
-                                  {doc.student?.student_number && (
-                                    <p className="truncate text-xs text-[var(--color-muted)]">
-                                      {doc.student.student_number}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            </td>
-
-                            {/* Course / Section */}
-                            <td className="px-4 py-3.5">
-                              <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                                {courseCode}{" "}
-                                {sectionCode ? `(${sectionCode})` : ""}
-                              </span>
-                            </td>
-
-                            {/* Requirement / Document */}
-                            <td className="px-4 py-3.5">
-                              <p className="truncate text-sm font-medium text-[var(--color-ink)] max-w-xs">
-                                {reqTitle}
-                              </p>
-                            </td>
-
-                            {/* Filename */}
-                            <td className="px-4 py-3.5">
-                              <p
-                                className="truncate text-xs text-[var(--color-muted)] max-w-44"
-                                title={doc.original_filename}
-                              >
-                                {doc.original_filename}
-                              </p>
-                              {(doc?.file_size || doc.mime_type) && (
-                                <p className="mt-0.5 text-[10px] text-[var(--color-muted)]">
-                                  {[
-                                    formatFileSize(doc?.file_size ?? undefined),
-                                    doc?.mime_type?.split("/")[1]?.toUpperCase(),
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" · ")}
-                                </p>
-                              )}
-                            </td>
-
-                            {/* Submitted Date */}
-                            <td className="px-4 py-3.5">
-                              <span className="text-xs text-[var(--color-muted)]">
-                                {formatDeadline(doc.uploaded_at)}
-                              </span>
-                            </td>
-
-                            {/* Status */}
-                            <td className="px-4 py-3.5">
-                              <span
-                                className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold ${status === "approved"
-                                  ? "bg-emerald-50 text-emerald-700"
-                                  : status === "rejected"
-                                    ? "bg-red-50 text-red-600"
-                                    : "bg-amber-50 text-amber-700"
-                                  }`}
-                              >
-                                {status.charAt(0).toUpperCase() + status.slice(1)}
-                              </span>
-                            </td>
-
-                            {/* Action */}
-                            <td className="px-4 py-3.5">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setPreviewDoc({
-                                    id: doc.id,
-                                    title: reqTitle,
-                                    filename: doc.original_filename,
-                                    fileSize: doc.file_size ?? undefined,
-                                    mimeType: doc.mime_type ?? undefined,
-                                    notes: doc.notes,
-                                    status: doc.review_status,
-                                    rejectionReason: doc.rejection_reason,
-                                    reviewedAt: doc.reviewed_at,
-                                    reviewedByName: doc.reviewed_by?.name,
-                                  })
-                                }
-                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-sky-600 shadow-sm hover:bg-sky-50 transition whitespace-nowrap"
-                              >
-                                <ExternalLink size={12} /> View
-                              </button>
-                            </td>
-                          </motion.tr>
-                        );
-                      })}
-                    </AnimatePresence>
-                  </motion.tbody>
-                </table>
-              </div>
-            )}
-        </motion.div>
+        {/* Dean: a single read-only card for their own department */}
+        {isDean && deanCourse && (
+          <DepartmentRequirementCards
+            courses={[deanCourse]}
+            results={[deanQuery]}
+          />
+        )}
       </motion.section>
 
       {/* ── Modals ─────────────────────────────────────────── */}
@@ -810,57 +292,16 @@ export default function DocumentPage() {
             onClose={() => setShowTypeModal(false)}
           />
         )}
-        {isDean && courseId && showAssignModal && (
+        {isSuperAdmin && assignCourseId !== null && assignTarget && (
           <AssignRequirementsModal
-            key="assign-requirements"
-            visible={showAssignModal}
-            onClose={() => setShowAssignModal(false)}
-            courseId={courseId}
+            key={`assign-requirements-${assignCourseId}`}
+            visible
+            onClose={() => setAssignCourseId(null)}
+            courseId={assignCourseId}
+            courseName={courses?.find((c) => Number(c.id) === assignCourseId)?.name}
             masterList={allRequirements ?? []}
-            currentIds={currentIds}
-            currentDeadline={currentDeadline}
-          />
-        )}
-        {previewDoc && (
-          <DocumentPreviewModal
-            key="document-preview"
-            visible={!!previewDoc}
-            onClose={() => setPreviewDoc(null)}
-            fetchUrl={`${import.meta.env.VITE_API_URL?.replace(
-              /\/$/,
-              ""
-            )}/student/documents/${previewDoc.id}/view`}
-            title={previewDoc.title}
-            filename={previewDoc.filename}
-            fileSize={previewDoc.fileSize}
-            mimeType={previewDoc.mimeType}
-            notes={previewDoc.notes}
-            status={previewDoc.status}
-            rejectionReason={previewDoc.rejectionReason}
-            reviewedAt={previewDoc.reviewedAt}
-            reviewedByName={previewDoc.reviewedByName}
-            isSubmittingReview={updateStatus.isPending}
-            onApprove={async () => {
-              await updateStatus.mutateAsync({
-                id: previewDoc.id,
-                status: "approved",
-              });
-              setPreviewDoc((prev) =>
-                prev ? { ...prev, status: "approved" } : prev
-              );
-            }}
-            onReject={async (reason) => {
-              await updateStatus.mutateAsync({
-                id: previewDoc.id,
-                status: "rejected",
-                rejection_reason: reason,
-              });
-              setPreviewDoc((prev) =>
-                prev
-                  ? { ...prev, status: "rejected", rejectionReason: reason }
-                  : prev
-              );
-            }}
+            currentIds={assignTarget.map((r) => r.id)}
+            currentDeadline={assignTarget[0]?.pivot?.deadline_at?.slice(0, 10)}
           />
         )}
       </AnimatePresence>

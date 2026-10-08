@@ -8,6 +8,7 @@ import { CompaniesMapPage } from "@/pages/coordinator/CompaniesMapPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { LandingPage } from "@/pages/LandingPage";
+import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
 import { AddCompanyPage } from "@/pages/forms/AddCompanyPage";
 import CoursePage from "@/pages/CoursePage";
 import { CourseFormPage } from "@/pages/forms/CourseFormPage";
@@ -18,6 +19,7 @@ import CoordinatorDetailsPage from "./pages/details/CoordinatorDetails";
 import StudentsPage from "./pages/dean/Students";
 import { StudentDetailsPage } from "./pages/details/StudentDetailsPage";
 import SchoolYearSectionPage from "./pages/dean/SchoolYearSectionPage";
+import DeanSchoolYearPage from "./pages/dean/DeanSchoolYearPage";
 import SectionDetailsPage from "./pages/details/SectionDetails";
 import Companies from "./pages/Companies";
 import { CoordinatorSectionPage } from "./pages/coordinator/CoordinatorSectionPage";
@@ -30,11 +32,16 @@ import CompanyInfo from "./pages/supervisor/CompanyInfo";
 import CourseDetailsPage from "./pages/details/CourseDetails";
 import EvaluationPage from "./pages/dean/Evaluation";
 import CreateEvaluationTemplatePage from "./pages/forms/CreateEvaluationTemplatePage";
+import { EditEvaluationTemplatePage } from "./pages/forms/EditEvaluationTemplatePage";
 import EvaluationTemplateDetails from "./pages/details/EvaluationTemplateDetails";
 import EvaluationInternPage from "./pages/forms/EvaluationInternPage";
 import DocumentPage from "./pages/DocumentPage";
 import { useGeofenceAlerts } from "./hooks/useGeofenceAlert";
 import AddOrganization from "./pages/dean/AddOrganizaton";
+import HistoryPage from "./pages/admin/HistoryPage";
+import HistoryDetailsPage from "./pages/details/HistoryDetailsPage";
+import SchoolYearDetailsPage from "./pages/details/SchoolYearDetailsPage";
+import DepartmentDocumentsPage from "./pages/details/DepartmentDocumentsPage";
 
 function AppContent() {
   const { user } = useAuth();
@@ -46,6 +53,7 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/dashboard" element={<DashboardPage />} />
@@ -72,6 +80,10 @@ function AppContent() {
                 element={<EvaluationTemplateDetails />}
               />
               <Route
+                path="/evaluation/edit/:id"
+                element={<EditEvaluationTemplatePage />}
+              />
+              <Route
                 path="/supervisor/interns/:internId/evaluations/:evaluationId"
                 element={<EvaluationInternPage />}
               />
@@ -96,7 +108,7 @@ function AppContent() {
               />
               <Route
                 path="/dean/school-year-section"
-                element={<SchoolYearSectionPage />}
+                element={<DeanSchoolYearPage />}
               />
               <Route
                 path="/dean/school-year-section/:id"
@@ -130,7 +142,14 @@ function AppContent() {
                 path="/documents"
                 element={<DocumentPage />}
               />
+              <Route
+                path="/documents/:id"
+                element={<DepartmentDocumentsPage />}
+              />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/history" element={<HistoryPage />} />
+              <Route path="/history/school-years/:id" element={<HistoryDetailsPage />} />
+              <Route path="/school-year/:id" element={<SchoolYearDetailsPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

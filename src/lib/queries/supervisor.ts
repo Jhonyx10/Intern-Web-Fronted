@@ -139,6 +139,7 @@ export type InternDetail = {
     first_name: string
     middle_name: string | null
     last_name: string
+    email?: string | null
     is_active: boolean
     section: { id: number; name: string } | null
     required_hours: number | null
@@ -319,6 +320,107 @@ export function useRemoveIntern() {
             toastMutationSuccess('Intern removed')
         },
         onError: (error) => toastMutationError(error, 'Failed to remove intern'),
+    })
+}
+
+export type UpdateBuildingInput = {
+    name?: string
+    code?: string
+    description?: string
+    latitude?: number
+    longitude?: number
+    geofence_radius_meters?: number
+    geofence_enabled?: boolean
+    geofence_polygon?: unknown
+    is_active?: boolean
+}
+
+export function useUpdateBuilding() {
+    const { token } = useAuth()
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            companyId,
+            buildingId,
+            input,
+        }: {
+            companyId: number
+            buildingId: number
+            input: UpdateBuildingInput
+        }) =>
+            apiRequest(`/companies/${companyId}/buildings/${buildingId}`, {
+                method: 'PUT',
+                token: token!,
+                body: input,
+            }),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: ['companies'] })
+            toastMutationSuccess('Building updated')
+        },
+        onError: (error) => toastMutationError(error, 'Failed to update building'),
+    })
+}
+
+export type UpdateCompanyGeofenceInput = {
+    geofence_enabled: boolean
+    geofence_polygon: unknown
+    geofence_radius_meters?: number
+}
+
+export function useUpdateCompanyGeofence() {
+    const { token } = useAuth()
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (input: UpdateCompanyGeofenceInput) =>
+            apiRequest(`/supervisor/company/geofence`, {
+                method: 'PUT',
+                token: token!,
+                body: input,
+            }),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: ['companies'] })
+            toastMutationSuccess('Company geofence updated')
+        },
+        onError: (error) => toastMutationError(error, 'Failed to update company geofence'),
+    })
+}
+
+export type CreateBuildingInput = {
+    name: string
+    code: string
+    description?: string
+    latitude?: number
+    longitude?: number
+    geofence_radius_meters?: number
+    geofence_enabled?: boolean
+    geofence_polygon?: unknown
+    is_active?: boolean
+}
+
+export function useCreateBuilding() {
+    const { token } = useAuth()
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            companyId,
+            input,
+        }: {
+            companyId: number
+            input: CreateBuildingInput
+        }) =>
+            apiRequest(`/companies/${companyId}/buildings`, {
+                method: 'POST',
+                token: token!,
+                body: input,
+            }),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: ['companies'] })
+            toastMutationSuccess('Building created')
+        },
+        onError: (error) => toastMutationError(error, 'Failed to create building'),
     })
 }
 

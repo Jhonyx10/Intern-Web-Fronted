@@ -68,7 +68,7 @@ export function DeanDashboard() {
                             <BookOpen size={18} />
                         </div>
                         <div>
-                            <p className="text-xs font-medium text-[var(--color-muted)] uppercase tracking-wider">Course</p>
+                            <p className="text-xs font-medium text-[var(--color-muted)] uppercase tracking-wider">Program</p>
                             <p className="text-sm font-bold text-[var(--color-ink)]">{course.code} — {course.name}</p>
                         </div>
                     </div>
@@ -85,7 +85,7 @@ export function DeanDashboard() {
                         </div>
                     </div>
                     <p className="mt-3 text-3xl font-bold text-[var(--color-ink)]">{overview.total_sections}</p>
-                    <p className="mt-1 text-xs text-[var(--color-muted)]">Course sections active</p>
+                    <p className="mt-1 text-xs text-[var(--color-muted)]">Program sections active</p>
                 </div>
 
                 <div className="rounded-2xl border border-[var(--color-line)] bg-white p-5 shadow-[var(--shadow-soft)] transition-transform hover:-translate-y-0.5">

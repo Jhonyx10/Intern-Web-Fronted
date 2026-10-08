@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  useMutation,
+  useQuery,
+  useQueries,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { useAuth } from '@/lib/auth'
 import { apiRequest } from '@/lib/api'
 import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
@@ -22,6 +27,24 @@ export interface DocumentRequirement {
   is_active: boolean
   document_type?: DocumentType
   created_by?: { id: number; name: string } | null
+}
+
+export interface CourseTheme {
+  course_id: number
+  department_name: string | null
+  theme_color: string | null
+  theme_color_hover: string | null
+  theme_color_soft: string | null
+  logo_url: string | null
+}
+
+type CreateRequirementPayload = {
+  document_type_id: number
+  title: string
+  description?: string
+  accepted_file_types?: string
+  course_ids?: number[]
+  deadline_at?: string
 }
 
 // --- Master list (created/managed by superadmin) ---
@@ -50,18 +73,14 @@ export function useCreateDocumentRequirement() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (payload: {
-      document_type_id: number
-      title: string
-      description?: string
-      accepted_file_types?: string
-    }) =>
+    mutationFn: (payload: CreateRequirementPayload) =>
       apiRequest<DocumentRequirement>('/document-requirements', {
         method: 'POST',
         body: payload,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['document-requirements'] })
+      queryClient.invalidateQueries({ queryKey: ['course-document-requirements'] })
       toastMutationSuccess('Document requirement created')
     },
     onError: (error) => toastMutationError(error, 'Failed to create requirement'),
@@ -85,7 +104,7 @@ export function useCreateDocumentType() {
   })
 }
 
-// --- Course/dean-scoped ---
+// --- Program/dean-scoped ---
 
 export function useCourseDocumentRequirements(courseId?: number) {
   const { user } = useAuth()
@@ -95,6 +114,32 @@ export function useCourseDocumentRequirements(courseId?: number) {
     queryFn: () =>
       apiRequest<DocumentRequirement[]>(`/courses/${courseId}/document-requirements`),
     enabled: !!user && !!courseId,
+  })
+}
+
+// One query per department (super admin cards). Uses the same query key as
+// useCourseDocumentRequirements, so the cache is shared and invalidation works.
+export function useDepartmentRequirements(courseIds: number[]) {
+  const { user } = useAuth()
+
+  return useQueries({
+    queries: courseIds.map((id) => ({
+      queryKey: ['course-document-requirements', id],
+      queryFn: () =>
+        apiRequest<DocumentRequirement[]>(`/courses/${id}/document-requirements`),
+      enabled: !!user,
+    })),
+  })
+}
+
+// Per-course name, theme colors and logo from the settings table (super admin only)
+export function useCourseThemes(enabled = true) {
+  const { user, token } = useAuth()
+
+  return useQuery({
+    queryKey: ['course-themes'],
+    queryFn: () => apiRequest<CourseTheme[]>('/course-settings', { token }),
+    enabled: !!user && !!token && enabled,
   })
 }
 

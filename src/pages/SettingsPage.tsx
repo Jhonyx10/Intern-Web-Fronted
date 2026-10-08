@@ -19,7 +19,7 @@ import OCCLOGO from '@/assets/OCC logo.webp'
 
 export function SettingsPage() {
     const { user } = useAuth()
-    const isDeanOrAdmin = user?.role?.name === 'dean' || user?.role?.name === 'program_head'
+    const isDeanOrAdmin = user?.role?.name === 'dean'
 
     const [activeTab, setActiveTab] = useState<'profile' | 'general'>('profile')
 

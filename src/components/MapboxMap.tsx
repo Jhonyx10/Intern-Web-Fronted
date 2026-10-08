@@ -69,6 +69,7 @@ type MapboxMapProps = {
   onDrawChange?: (polygon: GeofencePolygon | null) => void
   onRouteInfo?: (info: MapRouteInfo | null) => void
   onMapClick?: (longitude: number, latitude: number) => void
+  defaultFlyTo?: [number, number]
 }
 
 function extractPolygon(draw: MapboxDraw): GeofencePolygon | null {
@@ -150,6 +151,36 @@ function emptyLineCollection(): GeoJSON.FeatureCollection {
   return { type: 'FeatureCollection', features: [] }
 }
 
+class CenterControl implements mapboxgl.IControl {
+  private _map?: mapboxgl.Map
+  private _container?: HTMLDivElement
+  private _target: [number, number]
+
+  constructor(target: [number, number]) {
+    this._target = target
+  }
+
+  onAdd(map: mapboxgl.Map) {
+    this._map = map
+    this._container = document.createElement('div')
+    this._container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group'
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.title = `Center map`
+    button.onclick = () => {
+      this._map?.flyTo({ center: this._target, zoom: 18 })
+    }
+    button.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;height:100%;width:100%;"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px;color:#334155;"><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/></svg></span>`
+    this._container.appendChild(button)
+    return this._container
+  }
+
+  onRemove() {
+    this._container?.parentNode?.removeChild(this._container)
+    this._map = undefined
+  }
+}
+
 export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function MapboxMap(
   {
     className,
@@ -164,6 +195,7 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
     showCampusMarker = true,
     routeTo = null,
     pickPointMode = false,
+    defaultFlyTo = DEFAULT_MAP_CENTER,
     onMarkerClick,
     onDrawChange,
     onRouteInfo,
@@ -350,6 +382,8 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
       map.on('draw.delete', syncGeofenceFromDraw)
       drawRef.current = draw
     }
+
+    map.addControl(new CenterControl(defaultFlyTo), 'top-left')
 
     mapRef.current = map
 

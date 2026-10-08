@@ -17,7 +17,7 @@ export interface Evaluation {
   created_at: string
   updated_at: string
   // Eager-loaded relations — present only if the endpoint includes them
-  course?: Course | null
+  course?: Program | null
   evaluation_template?: EvaluationTemplate | null
   student?: Student | null
   evaluator?: User | null
@@ -38,7 +38,7 @@ export type User = {
   is_active: boolean
   role: Role | null
   role_id: number | string
-  course: Course | null
+  course: Program | null
   course_id: string
   section?: {
     id: number
@@ -116,7 +116,7 @@ export type LoginResponse = {
   user: User
 }
 
-export type Course = {
+export type Program = {
   id: string | number
   code: string
   name: string
@@ -138,7 +138,7 @@ export type Major = {
   program_head_user_id: string | number | null
   sort_order: number | null
   program_head: User | null
-  course: Course | null
+  course: Program | null
 }
 
 export type CompanySchedule = {
@@ -167,7 +167,7 @@ export type TimeLog = {
   task_note: string | null
   time_in: string
   break_out: string | null
-  break_in: string  | null
+  break_in: string | null
   time_out: string | null
   duration_minutes: number | null
   verification_method: string | null
@@ -246,6 +246,7 @@ export type Student = {
   first_name: string
   middle_name: string | null
   last_name: string
+  email?: string | null
   section_id: number
   is_active: boolean
   section?: Section | null
@@ -255,6 +256,7 @@ export type Student = {
   documents?: StudentDocument[]
   evaluations: Evaluation[]
   geofence_excursions?: GeofenceExcursion[]
+  is_ready_for_assignment?: boolean
 }
 
 export type Supervisor = {
@@ -282,7 +284,7 @@ export type Section = {
   created_at: string
   updated_at: string
   students: Student[]
-  course: Course | null
+  course: Program | null
   course_major: Major | null
   coordinator: User | null
   school_year: SchoolYear | null
@@ -343,7 +345,7 @@ export interface EvaluationTemplate {
   title: string; // Updated from 'name' to match model attribute
   description?: string;
   is_active: boolean;
-  courses?: Course[]; // Many-to-Many attached courses
+  courses?: Program[]; // Many-to-Many attached courses
   items?: EvaluationTemplateItem[];
   items_count?: number;
   created_at: string;

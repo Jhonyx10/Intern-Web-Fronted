@@ -13,6 +13,7 @@ export function AssignRequirementsModal({
   visible,
   onClose,
   courseId,
+  courseName,
   masterList,
   currentIds,
   currentDeadline,
@@ -20,12 +21,13 @@ export function AssignRequirementsModal({
   visible: boolean;
   onClose: () => void;
   courseId: number;
+  courseName?: string;
   masterList: DocumentRequirement[];
   currentIds: number[];
   currentDeadline?: string;
 }) {
   const syncRequirements = useSyncCourseRequirements(courseId);
-  const { themeColor, logoUrl, departmentName } = useTheme();
+  const { themeColor } = useTheme();
   const [selected, setSelected] = useState<Set<number>>(new Set(currentIds));
   const [deadline, setDeadline] = useState(currentDeadline ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +55,7 @@ export function AssignRequirementsModal({
       setError(
         firstErrorMessage(
           err,
-          "Could not save your selection. Please try again."
+          "Could not save the assignment. Please try again."
         )
       );
     }
@@ -78,33 +80,24 @@ export function AssignRequirementsModal({
             onClick={(e) => e.stopPropagation()}
             className="flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-[var(--color-line)] bg-[var(--color-paper,#FAF9F5)]"
           >
-            {/* Header — branded with department logo / name via ThemeContext */}
+            {/* Header */}
             <div className="flex shrink-0 items-start gap-3 border-b border-[var(--color-line)] px-6 py-4">
-              {logoUrl ? (
-                <img
-                  src={logoUrl}
-                  alt={departmentName ?? "Department logo"}
-                  className="mt-0.5 h-8 w-8 shrink-0 rounded object-contain"
-                />
-              ) : (
-                <div
-                  className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded"
-                  style={{ backgroundColor: `${themeColor}1e` }}
-                >
-                  <FileText size={16} style={{ color: themeColor }} />
-                </div>
-              )}
+              <div
+                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded"
+                style={{ backgroundColor: `${themeColor}1e` }}
+              >
+                <FileText size={16} style={{ color: themeColor }} />
+              </div>
               <div className="min-w-0 flex-1">
                 <h2
                   className="text-base font-semibold text-[var(--color-ink)]"
                   style={{ fontFamily: '"Source Serif 4", Georgia, serif' }}
                 >
-                  Select Requirements for Your Course
+                  Assign Requirements{courseName ? ` to ${courseName}` : ""}
                 </h2>
                 <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-                  {departmentName
-                    ? `Choose which requirements ${departmentName} applies to your students, and set the deadline for this course.`
-                    : "Choose which requirements from the master list apply to your students, and set the deadline for this course."}
+                  Choose which requirements apply to this department's
+                  students, and set the deadline.
                 </p>
               </div>
             </div>
@@ -128,7 +121,7 @@ export function AssignRequirementsModal({
               />
               <p className="mt-1 text-[11px] text-[var(--color-muted)]">
                 Applies to every requirement selected below — useful when this
-                course starts internships earlier or later than others.
+                department starts internships earlier or later than others.
               </p>
             </div>
 
@@ -230,7 +223,7 @@ export function AssignRequirementsModal({
                   {syncRequirements.isPending && (
                     <Loader2 size={13} className="animate-spin" />
                   )}
-                  Save Selection ({selected.size})
+                  Save Assignment ({selected.size})
                 </motion.button>
               </div>
             </div>

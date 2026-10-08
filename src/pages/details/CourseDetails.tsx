@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
 import { queryKeys } from "@/lib/query-keys";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
+  ArrowLeft,
   Loader2,
   GraduationCap,
   User,
@@ -12,9 +14,14 @@ import {
   Layers,
   Plus,
   Eye,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import type { Course } from "@/types";
+import { toastMutationError, toastMutationSuccess } from "@/lib/mutationToast";
+import AddSectionModal, {
+  type CoordinatorOption,
+} from "@/components/modal/AddSectionModal";
+import type { Program } from "@/types";
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return "—";
@@ -25,8 +32,31 @@ function formatDate(dateStr: string | null) {
   });
 }
 
-export default function CourseDetailsPage() {
-  const { id } = useParams();
+// Two modes:
+//   • Routed (/course/details/:id?school_year_id=5): id and school year come from the URL.
+//   • Embedded (dean, from the "School Year" sidenav item): AppShell passes the dean's
+//     course id and the current school year id as props. No Back button, and
+//     "Show all" is local state instead of a URL change.
+export default function CourseDetailsPage({
+  courseId,
+  schoolYearId: schoolYearIdProp,
+  embedded = false,
+}: {
+  courseId?: string | number;
+  schoolYearId?: string | number | null;
+  embedded?: boolean;
+}) {
+  const params = useParams();
+  const id = courseId != null ? String(courseId) : params.id;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [showAll, setShowAll] = useState(false);
+
+  const schoolYearId = embedded
+    ? showAll || schoolYearIdProp == null
+      ? null
+      : String(schoolYearIdProp)
+    : searchParams.get("school_year_id");
+
   const navigate = useNavigate();
   const { token, user } = useAuth();
   const isDean = user?.role?.name === "dean";
@@ -36,14 +66,88 @@ export default function CourseDetailsPage() {
     isLoading,
     isError,
   } = useQuery({
-    queryKey: queryKeys.courses.detail(id!),
-    queryFn: () => apiRequest<Course>(`/courses/${id}`, { token }),
+    // schoolYearId is in the key so each school year gets its own cache entry
+    queryKey: [...queryKeys.courses.detail(id!), { schoolYearId }],
+    queryFn: () =>
+      apiRequest<Program>(
+        `/courses/${id}${schoolYearId ? `?school_year_id=${schoolYearId}` : ""}`,
+        { token }
+      ),
     enabled: Boolean(token) && Boolean(id),
   });
 
+  // School year name for the "Showing" chip (works even when there are no sections)
+  const { data: filterYear } = useQuery({
+    queryKey: queryKeys.schoolYears.detail(schoolYearId ?? ""),
+    queryFn: () =>
+      apiRequest<{ id: number; name: string; semester?: string | null }>(
+        `/school-years/${schoolYearId}`,
+        { token }
+      ),
+    enabled: Boolean(token) && Boolean(schoolYearId),
+  });
+
+  // ── Add Section modal ───────────────────────────────────────────
+  const queryClient = useQueryClient();
+  const [addOpen, setAddOpen] = useState(false);
+  const [modalKey, setModalKey] = useState(0); // fresh form every time it opens
+
+  // Current school year = fallback target when no school year is selected ("Show all")
+  const { data: currentYear } = useQuery({
+    queryKey: [...queryKeys.schoolYears.all, "current"],
+    queryFn: () =>
+      apiRequest<{ id: number; name: string; semester?: string | null }>(
+        "/school-years/current",
+        { token }
+      ),
+    enabled: Boolean(token) && isDean,
+    retry: false,
+  });
+
+  // The school year the new section is added to
+  const targetYear = schoolYearId ? filterYear : currentYear;
+  const targetYearId =
+    schoolYearId ?? (currentYear ? String(currentYear.id) : null);
+
+  // Coordinators for the dropdown (only loaded while the modal is open)
+  const { data: coordinators = [], isLoading: coordinatorsLoading } = useQuery({
+    queryKey: ["coordinators", "options"],
+    queryFn: async () => {
+      const res = await apiRequest<
+        CoordinatorOption[] | { data: CoordinatorOption[] }
+      >("/coordinators", { token });
+      return Array.isArray(res) ? res : res.data;
+    },
+    enabled: Boolean(token) && isDean && addOpen,
+  });
+
+  const addSectionMutation = useMutation({
+    mutationFn: (data: {
+      name: string;
+      code: string;
+      course_id: number;
+      course_major_id: number | null;
+      coordinator_user_id: number | null;
+    }) =>
+      apiRequest(`/school-years/${targetYearId}/sections`, {
+        method: "POST",
+        body: data,
+        token,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.courses.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all });
+      setAddOpen(false);
+      toastMutationSuccess("Section added");
+    },
+    onError: (err) => toastMutationError(err, "Failed to add section"),
+  });
+
+  const loadingHeight = embedded ? "h-60" : "h-screen";
+
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className={`flex ${loadingHeight} items-center justify-center`}>
         <Loader2
           className="animate-spin text-[var(--color-accent)]"
           size={24}
@@ -54,7 +158,7 @@ export default function CourseDetailsPage() {
 
   if (isError || !course) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className={`flex ${loadingHeight} items-center justify-center`}>
         <p className="text-red-500">Failed to load course details</p>
       </div>
     );
@@ -67,6 +171,17 @@ export default function CourseDetailsPage() {
 
   return (
     <section className="pb-10">
+      {/* Back (only when opened from another page) */}
+      {!embedded && (
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="mb-4 inline-flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2 text-xs font-semibold text-[var(--color-ink)] shadow-sm transition hover:bg-slate-50"
+        >
+          <ArrowLeft size={14} /> Back
+        </button>
+      )}
+
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
@@ -103,13 +218,54 @@ export default function CourseDetailsPage() {
             {course.sections.length === 1 ? "" : "s"} · {totalStudents} student
             {totalStudents === 1 ? "" : "s"} total
           </p>
+
+          {schoolYearId && (
+            <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-[var(--color-line)] bg-white px-3 py-1 text-xs">
+              <span className="text-[var(--color-muted)]">Showing</span>
+              <span className="font-semibold text-[var(--color-ink)]">
+                {filterYear
+                  ? `${filterYear.name}${filterYear.semester ? ` · ${filterYear.semester}` : ""}`
+                  : "…"}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  embedded ? setShowAll(true) : setSearchParams({})
+                }
+                className="inline-flex items-center gap-1 font-semibold text-[var(--color-accent)] hover:underline"
+              >
+                <X size={12} /> Show all
+              </button>
+            </div>
+          )}
+
+          {/* Embedded only: way back to the current school year after "Show all" */}
+          {embedded && showAll && schoolYearIdProp != null && (
+            <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-[var(--color-line)] bg-white px-3 py-1 text-xs">
+              <span className="text-[var(--color-muted)]">
+                Showing all school years
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowAll(false)}
+                className="font-semibold text-[var(--color-accent)] hover:underline"
+              >
+                Show current only
+              </button>
+            </div>
+          )}
         </div>
 
         {isDean && (
           <button
             type="button"
-            onClick={() => navigate(`/sections/new?course_id=${id}`)}
-            className="inline-flex w-fit items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
+            onClick={() => {
+              setModalKey((k) => k + 1);
+              setAddOpen(true);
+            }}
+            disabled={!targetYearId}
+            title={!targetYearId ? "No active school year" : undefined}
+            className="inline-flex w-fit items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus size={15} className="text-white" /> Add Section
           </button>
@@ -129,7 +285,7 @@ export default function CourseDetailsPage() {
           </div>
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-              Course code
+              Program code
             </p>
             <p className="mt-0.5 truncate text-sm font-semibold text-[var(--color-ink)]">
               {course.code ?? "—"}
@@ -224,10 +380,14 @@ export default function CourseDetailsPage() {
         {course.sections.length === 0 ? (
           <div className="mt-3 flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--color-line)] py-12 text-center">
             <p className="text-sm font-medium text-[var(--color-ink)]">
-              No sections yet
+              {schoolYearId
+                ? "No sections in this school year"
+                : "No sections yet"}
             </p>
             <p className="mt-1 text-xs text-[var(--color-muted)]">
-              Sections under this course will appear here.
+              {schoolYearId
+                ? "Use “Show all” to see this program's sections from other school years."
+                : "Sections under this course will appear here."}
             </p>
           </div>
         ) : (
@@ -247,7 +407,7 @@ export default function CourseDetailsPage() {
                 {course.sections.map((section) => (
                   <tr
                     key={section.id}
-                    onClick={() => navigate(`/sections/${section.id}`)}
+                    onClick={() => navigate(`/school-year-section/${section.id}`)}
                     className="hover:bg-slate-50/60 cursor-pointer transition"
                   >
                     <td className="px-4 py-3">
@@ -312,6 +472,19 @@ export default function CourseDetailsPage() {
           </div>
         )}
       </motion.div>
+      {isDean && (
+        <AddSectionModal
+          key={modalKey}
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          onAdd={(data) => addSectionMutation.mutate(data)}
+          isLoading={addSectionMutation.isPending}
+          schoolYearName={targetYear?.name ?? ""}
+          courses={[{ id: Number(course.id), code: course.code ?? "", name: course.name }]}
+          coordinators={coordinators}
+          coordinatorsLoading={coordinatorsLoading}
+        />
+      )}
     </section>
   );
 }

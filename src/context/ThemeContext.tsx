@@ -19,6 +19,30 @@ export const THEME_PRESETS: ThemePreset[] = [
   { name: "Slate", hex: "#0f172a", hover: "#020617", soft: "#f1f5f9" },
 ];
 
+/**
+ * Turns saved theme values into a full set of colors. Missing hover/soft
+ * values fall back to the matching preset, then to the base color.
+ * Shared by the app theme and the per-department cards.
+ */
+export function resolveThemeColors(
+  t?: {
+    theme_color?: string | null;
+    theme_color_hover?: string | null;
+    theme_color_soft?: string | null;
+  } | null
+) {
+  const color = t?.theme_color || "#16305C";
+  const preset = THEME_PRESETS.find(
+    (p) => p.hex.toLowerCase() === color.toLowerCase()
+  );
+
+  return {
+    color,
+    hover: t?.theme_color_hover || preset?.hover || color,
+    soft: t?.theme_color_soft || preset?.soft || `${color}1e`,
+  };
+}
+
 interface ThemeContextType {
   themeColor: string;
   hoverColor: string;
@@ -43,18 +67,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   const { data: settings, isLoading } = useSettings();
 
   const { activeColor, hoverColor, softColor } = useMemo(() => {
-    const activeColor = settings?.theme_color || "#16305C";
-
-    const matchedPreset = THEME_PRESETS.find(
-      (p) => p.hex.toLowerCase() === activeColor.toLowerCase()
-    );
-
-    const hoverColor =
-      settings?.theme_color_hover || matchedPreset?.hover || activeColor;
-    const softColor =
-      settings?.theme_color_soft || matchedPreset?.soft || `${activeColor}1e`;
-
-    return { activeColor, hoverColor, softColor };
+    const { color, hover, soft } = resolveThemeColors(settings);
+    return { activeColor: color, hoverColor: hover, softColor: soft };
   }, [settings]);
 
   useEffect(() => {

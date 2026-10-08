@@ -128,7 +128,7 @@ export function CompanyDetailsPage() {
                         )}
                     </div>
                 </div>
-                {user?.role?.name === 'coordinator' && (
+                {user?.role?.name === 'super_admin' && (
                     <div className="flex gap-2">
                         <button
                             className="rounded-xl border border-[var(--color-line)] bg-white/80 px-4 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:border-[var(--color-ink)]"

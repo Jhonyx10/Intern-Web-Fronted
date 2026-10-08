@@ -5,6 +5,7 @@ import {
   useCreateDocumentRequirement,
   useDocumentTypes,
 } from "@/lib/queries/documents";
+import { useCourses } from "@/lib/queries/courses";
 import { firstErrorMessage } from "@/lib/utils/errors";
 import { useTheme } from "@/context/ThemeContext";
 
@@ -18,10 +19,15 @@ export function CreateRequirementModal({
   const { themeColor } = useTheme();
   const createRequirement = useCreateDocumentRequirement();
   const { data: documentTypes, isLoading: loadingTypes } = useDocumentTypes();
+  const { data: courses, isLoading: loadingCourses } = useCourses();
 
   const [documentTypeId, setDocumentTypeId] = useState<number | "">("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [selectedCourseIds, setSelectedCourseIds] = useState<Set<number>>(
+    new Set()
+  );
+  const [deadline, setDeadline] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const selectedType = useMemo(
@@ -30,10 +36,31 @@ export function CreateRequirementModal({
   );
   const recurrence = selectedType?.recurrence ?? "none";
 
+  const allCourseIds = useMemo(
+    () => (courses ?? []).map((c) => Number(c.id)),
+    [courses]
+  );
+  const allSelected =
+    allCourseIds.length > 0 && selectedCourseIds.size === allCourseIds.length;
+
+  const toggleCourse = (id: number) => {
+    setSelectedCourseIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    setSelectedCourseIds(allSelected ? new Set() : new Set(allCourseIds));
+  };
+
   const reset = () => {
     setDocumentTypeId("");
     setTitle("");
     setDescription("");
+    setSelectedCourseIds(new Set());
+    setDeadline("");
     setError(null);
   };
 
@@ -43,8 +70,16 @@ export function CreateRequirementModal({
   };
 
   const handleSubmit = async () => {
-    if (!documentTypeId || !title.trim()) {
-      setError("Document type, title, and deadline are required.");
+    if (!title.trim()) {
+      setError("Title is required.");
+      return;
+    }
+    if (!documentTypeId) {
+      setError("Document type is required.");
+      return;
+    }
+    if (selectedCourseIds.size > 0 && !deadline) {
+      setError("Please set a deadline for the selected departments.");
       return;
     }
     try {
@@ -52,6 +87,8 @@ export function CreateRequirementModal({
         document_type_id: Number(documentTypeId),
         title: title.trim(),
         description: description.trim() || undefined,
+        course_ids: Array.from(selectedCourseIds),
+        deadline_at: selectedCourseIds.size > 0 ? deadline : undefined,
       });
       reset();
       onClose();
@@ -82,10 +119,10 @@ export function CreateRequirementModal({
             exit={{ opacity: 0, scale: 0.98, y: 8 }}
             transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+            className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
           >
             {/* Header */}
-            <div className="flex items-start justify-between px-6 pb-5 pt-6">
+            <div className="flex shrink-0 items-start justify-between px-6 pb-5 pt-6">
               <div className="flex items-center gap-3">
                 <div
                   className="flex h-10 w-10 items-center justify-center rounded-xl"
@@ -111,7 +148,7 @@ export function CreateRequirementModal({
             </div>
 
             {/* Body */}
-            <div className="space-y-4 px-6 pb-5">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-5">
               <div>
                 <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">
                   Document Type
@@ -175,9 +212,9 @@ export function CreateRequirementModal({
                   }}
                   onFocus={(e) => (e.currentTarget.style.borderColor = themeColor)}
                   onBlur={(e) =>
-                    (e.currentTarget.style.borderColor = title
-                      ? `${themeColor}55`
-                      : "")
+                  (e.currentTarget.style.borderColor = title
+                    ? `${themeColor}55`
+                    : "")
                   }
                 />
               </div>
@@ -196,12 +233,91 @@ export function CreateRequirementModal({
                   }}
                   onFocus={(e) => (e.currentTarget.style.borderColor = themeColor)}
                   onBlur={(e) =>
-                    (e.currentTarget.style.borderColor = description
-                      ? `${themeColor}55`
-                      : "")
+                  (e.currentTarget.style.borderColor = description
+                    ? `${themeColor}55`
+                    : "")
                   }
                 />
               </div>
+
+              {/* Assign to departments */}
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="block text-[11px] font-semibold text-slate-500">
+                    Assign to departments (optional)
+                  </label>
+                  {allCourseIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={toggleAll}
+                      className="text-[11px] font-semibold hover:underline"
+                      style={{ color: themeColor }}
+                    >
+                      {allSelected ? "Clear all" : "Select all"}
+                    </button>
+                  )}
+                </div>
+
+                <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50">
+                  {loadingCourses ? (
+                    <p className="px-3 py-3 text-[12px] text-slate-400">
+                      Loading departments…
+                    </p>
+                  ) : (courses ?? []).length === 0 ? (
+                    <p className="px-3 py-3 text-[12px] text-slate-400">
+                      No departments found.
+                    </p>
+                  ) : (
+                    (courses ?? []).map((c, index) => {
+                      const courseId = Number(c.id);
+                        const checked = selectedCourseIds.has(courseId);
+                      return (
+                        <label
+                          key={c.id}
+                          className={`flex cursor-pointer items-center gap-2.5 px-3 py-2 text-[13px] text-slate-700 transition hover:bg-white ${
+                            index !== 0 ? "border-t border-slate-200" : ""
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleCourse(courseId)}
+                            className="h-3.5 w-3.5"
+                            style={{ accentColor: themeColor }}
+                          />
+                          <span className="font-mono text-[11px] text-slate-400">
+                            {c.code}
+                          </span>
+                          <span className="truncate">{c.name}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  {selectedCourseIds.size} selected. You can change this later
+                  with “Assign to department”.
+                </p>
+              </div>
+
+              {/* Deadline (only needed when departments are selected) */}
+              {selectedCourseIds.size > 0 && (
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">
+                    Deadline for selected departments
+                  </label>
+                  <input
+                    type="date"
+                    value={deadline}
+                    onChange={(e) => setDeadline(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] text-slate-800 outline-none transition"
+                    style={{
+                      borderColor: deadline ? `${themeColor}55` : undefined,
+                    }}
+                  />
+                </div>
+              )}
+
               <AnimatePresence>
                 {error && (
                   <motion.div
@@ -217,7 +333,7 @@ export function CreateRequirementModal({
             </div>
 
             {/* Footer */}
-            <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
+            <div className="flex shrink-0 justify-end gap-2 border-t border-slate-100 px-6 py-4">
               <button
                 onClick={handleClose}
                 className="rounded-xl px-4 py-2.5 text-[12.5px] font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"

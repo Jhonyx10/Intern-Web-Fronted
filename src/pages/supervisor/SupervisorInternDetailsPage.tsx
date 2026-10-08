@@ -13,6 +13,7 @@ import {
   Send,
   ArrowUpRight,
   UserX,
+  Mail,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -153,9 +154,9 @@ export default function SupervisorInternDetailsPage() {
 
   const pct = intern.required_hours
     ? Math.min(
-        100,
-        Math.round((intern.total_hours / intern.required_hours) * 100)
-      )
+      100,
+      Math.round((intern.total_hours / intern.required_hours) * 100)
+    )
     : null;
 
   const fullName = [intern.first_name, intern.middle_name, intern.last_name]
@@ -310,6 +311,18 @@ export default function SupervisorInternDetailsPage() {
                     <GraduationCap size={13} />
                     {intern.section.name}
                   </span>
+                </>
+              )}
+              {intern.email && (
+                <>
+                  <span>·</span>
+                  <a
+                    href={`mailto:${intern.email}`}
+                    className="flex items-center gap-1 hover:text-[var(--color-accent)] transition-colors"
+                  >
+                    <Mail size={13} />
+                    {intern.email}
+                  </a>
                 </>
               )}
             </div>
@@ -551,8 +564,8 @@ export default function SupervisorInternDetailsPage() {
                           req.status === "approved"
                             ? "bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-600/20"
                             : req.status === "rejected"
-                            ? "bg-red-50 text-red-600 ring-1 ring-inset ring-red-600/20"
-                            : "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-600/20",
+                              ? "bg-red-50 text-red-600 ring-1 ring-inset ring-red-600/20"
+                              : "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-600/20",
                         ].join(" ")}
                       >
                         {req.status}

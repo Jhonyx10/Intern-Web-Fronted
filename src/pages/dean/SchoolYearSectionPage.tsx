@@ -1,15 +1,14 @@
-import { useState } from "react";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
+import { useMemo, useState } from "react";
+import { motion, type Variants } from "framer-motion";
 import {
   Plus,
-  ChevronDown,
-  CalendarDays,
-  X,
+  Search,
   Loader2,
-  Trash2,
-  Eye,
-  Users,
   Pencil,
+  Settings,
+  ExternalLink,
+  CalendarDays,
+  CopyPlus,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -17,66 +16,267 @@ import { queryKeys } from "@/lib/query-keys";
 import { apiRequest } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { toastMutationError, toastMutationSuccess } from "@/lib/mutationToast";
-import AddSectionModal from "@/components/modal/AddSectionModal";
 import AddSchoolYearModal from "@/components/modal/AddSchoolYearModal";
-
-type SectionData = {
-  id: number;
-  name: string;
-  code: string | null;
-  course_major?: { id: number; name: string } | null;
-  coordinator?: { id: number; name: string } | null;
-  students_count?: number;
-};
+import SchoolYearSettingsModal from "@/components/modal/SchoolYearSettingsModal";
 
 type SchoolYearData = {
   id: number;
-  name: string;
+  name: string; // e.g. "2025-2026"
+  semester?: string | null; // e.g. "First Semester" | "Second Semester" | "Summer Semester"
   start_date: string | null;
   end_date: string | null;
   is_active: boolean;
-  sections: SectionData[];
+};
+
+type SchoolYearPayload = {
+  name: string;
+  semester: string;
+  start_date: string | null;
+  end_date: string | null;
+  is_active: boolean;
 };
 
 const listVariants: Variants = {
   hidden: {},
-  show: {
-    transition: { staggerChildren: 0.07, delayChildren: 0.05 },
-  },
+  show: { transition: { staggerChildren: 0.06, delayChildren: 0.04 } },
 };
 
 const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 14 },
+  hidden: { opacity: 0, y: 12 },
   show: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] as const },
+    transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] as const },
   },
+};
+
+// Semester pill colors (summer = orange, second = green, first = blue)
+function semesterStyle(semester?: string | null) {
+  const s = (semester ?? "").toLowerCase();
+  if (s.includes("summer"))
+    return { pill: "bg-orange-50 text-orange-700", dot: "bg-orange-600" };
+  if (s.includes("second"))
+    return { pill: "bg-green-50 text-green-700", dot: "bg-green-600" };
+  if (s.includes("first"))
+    return { pill: "bg-blue-50 text-blue-700", dot: "bg-blue-600" };
+  return { pill: "bg-slate-100 text-slate-600", dot: "bg-slate-400" };
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "—";
+  const d = new Date(value.length === 10 ? `${value}T00:00:00` : value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+// ── Status ────────────────────────────────────────────────────────
+//   Current = marked active by the super admin (only one at a time)
+//   Ongoing = not current, but today is inside the internship period
+//   Draft   = not current, and not started yet (or no dates set)
+//   Ended   = not current, and the internship period has passed
+
+type YearStatus = "current" | "ongoing" | "draft" | "ended";
+
+// Local date as YYYY-MM-DD (toISOString would shift the day for UTC+8)
+function todayLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+function getYearStatus(year: {
+  is_active: boolean;
+  start_date: string | null;
+  end_date: string | null;
+}): YearStatus {
+  if (year.is_active) return "current";
+  if (!year.start_date || !year.end_date) return "draft";
+
+  const today = todayLocal();
+  if (today < year.start_date.slice(0, 10)) return "draft";
+  if (today > year.end_date.slice(0, 10)) return "ended";
+  return "ongoing";
+}
+
+const STATUS_BADGE: Record<
+  YearStatus,
+  { label: string; className: string; dot: string }
+> = {
+  current: {
+    label: "Current",
+    className: "bg-green-500 text-white",
+    dot: "bg-white",
+  },
+  ongoing: {
+    label: "Ongoing",
+    className: "bg-sky-100 text-sky-700",
+    dot: "bg-sky-500",
+  },
+  draft: {
+    label: "Draft",
+    className: "bg-amber-100 text-amber-700",
+    dot: "bg-amber-500",
+  },
+  ended: {
+    label: "Ended",
+    className: "bg-slate-200 text-slate-600",
+    dot: "bg-slate-400",
+  },
+};
+
+// "2025-2026" -> "2026-2027"
+function shiftName(name: string) {
+  return name.replace(/\d{4}/g, (y) => String(Number(y) + 1));
+}
+
+// "2025-06-15" -> "2026-06-15" (string-based, so no timezone surprises)
+function shiftDate(value: string | null) {
+  if (!value) return null;
+  const [y, m, d] = value.slice(0, 10).split("-").map(Number);
+  const newYear = y + 1;
+  const isLeap =
+    (newYear % 4 === 0 && newYear % 100 !== 0) || newYear % 400 === 0;
+  // Feb 29 -> Feb 28 when the next year isn't a leap year
+  const day = m === 2 && d === 29 && !isLeap ? 28 : d;
+  return `${newYear}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+// ── Card ──────────────────────────────────────────────────────────
+
+const SchoolYearCard = ({
+  year,
+  canManage,
+  onEdit,
+  onSettings,
+  onOpen,
+  onNextYear,
+  isCreatingNext,
+}: {
+  year: SchoolYearData;
+  canManage: boolean;
+  onEdit: () => void;
+  onSettings: () => void;
+  onOpen: () => void;
+  onNextYear: () => void;
+  isCreatingNext: boolean;
+}) => {
+  const sem = semesterStyle(year.semester);
+  const status = getYearStatus(year);
+  const badge = STATUS_BADGE[status];
+
+  return (
+    <motion.article
+      variants={itemVariants}
+      className={`flex flex-col rounded-2xl border border-[var(--color-line)] p-5 shadow-sm ${
+        year.is_active ? "bg-white" : "bg-slate-50"
+      }`}
+    >
+      {/* Title + status badge */}
+      <div className="flex items-start justify-between gap-2">
+        <h2
+          className={`text-xl font-bold tracking-tight ${
+            year.is_active
+              ? "text-[var(--color-ink)]"
+              : "text-[var(--color-muted)]"
+          }`}
+        >
+          {year.name}
+        </h2>
+        <span
+          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${badge.className}`}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${badge.dot}`} />
+          {badge.label}
+        </span>
+      </div>
+
+      {/* Semester pill */}
+      {year.semester && (
+        <div
+          className={`mt-3 flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium ${sem.pill}`}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${sem.dot}`} />
+          {year.semester}
+        </div>
+      )}
+
+      {/* Internship period */}
+      <div className="mt-4 rounded-lg bg-slate-50 px-3 py-2.5">
+        <p className="text-xs text-[var(--color-muted)]">Internship Period</p>
+        <p className="mt-0.5 text-sm font-semibold text-[var(--color-ink)]">
+          {formatDate(year.start_date)} - {formatDate(year.end_date)}
+        </p>
+      </div>
+
+      {/* Actions — pushed to the bottom so cards in a row align */}
+      <div className="mt-auto pt-6">
+        {canManage && (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={onEdit}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:bg-slate-50"
+            >
+              <Pencil size={14} /> Edit
+            </button>
+            <button
+              type="button"
+              onClick={onSettings}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:bg-slate-50"
+            >
+              <Settings size={14} /> Settings
+            </button>
+            <button
+              type="button"
+              onClick={onNextYear}
+              disabled={isCreatingNext}
+              className="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isCreatingNext ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <CopyPlus size={14} />
+              )}
+              Create {shiftName(year.name)}
+            </button>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onOpen}
+          className={`${canManage ? "mt-2" : ""} inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-accent)] px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]`}
+        >
+          <ExternalLink size={14} /> Open
+        </button>
+      </div>
+    </motion.article>
+  );
 };
 
 // ── Main Page ─────────────────────────────────────────────────────
 
-const SchoolYearSectionPage = () => {
+const SchoolYearPage = () => {
   const { token, user } = useAuth();
-  const deanCourse = user?.course
-    ? [
-        {
-          id: Number(user.course.id),
-          code: user.course.code,
-          name: user.course.name,
-        },
-      ]
-    : null;
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  // Accept both spellings so it works regardless of what RoleSeeder created.
+  // Once you know the real role name, replace this with a single check.
+  const roleName = user?.role?.name;
+  const canManage = roleName === "superadmin" || roleName === "super_admin";
 
-  const [expanded, setExpanded] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
   const [addSyOpen, setAddSyOpen] = useState(false);
   const [editSyTarget, setEditSyTarget] = useState<SchoolYearData | null>(null);
-  const [addSectionTarget, setAddSectionTarget] =
-    useState<SchoolYearData | null>(null);
+  const [settingsTarget, setSettingsTarget] = useState<SchoolYearData | null>(
+    null
+  );
 
-  // ── Fetch school years ──────────────────────────────────────────
   const {
     data: schoolYears = [],
     isLoading,
@@ -87,179 +287,163 @@ const SchoolYearSectionPage = () => {
     enabled: Boolean(token),
   });
 
-  // ── Fetch courses for the Add Section form ────────────────────────
-  const { data: fetchedCourses = [], isLoading: coursesLoading } = useQuery({
-    queryKey: queryKeys.courses.list(),
-    queryFn: () =>
-      apiRequest<{ id: number; code: string; name: string }[]>("/courses", {
-        token,
-      }),
-    enabled: Boolean(token) && addSectionTarget !== null && deanCourse === null,
-    staleTime: 5 * 60 * 1000,
-  });
-  const courses = deanCourse ?? fetchedCourses;
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return schoolYears;
+    return schoolYears.filter(
+      (sy) =>
+        sy.name.toLowerCase().includes(q) ||
+        (sy.semester ?? "").toLowerCase().includes(q) ||
+        STATUS_BADGE[getYearStatus(sy)].label.toLowerCase().includes(q)
+    );
+  }, [schoolYears, search]);
 
-  // ── Fetch coordinators for the Add Section form ──────────────────
-  const { data: coordinators = [], isLoading: coordinatorsLoading } = useQuery({
-    queryKey: queryKeys.coordinators.list(),
-    queryFn: () =>
-      apiRequest<{ id: number; name: string; email: string }[]>(
-        "/coordinators",
-        { token }
-      ),
-    enabled: Boolean(token) && addSectionTarget !== null,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // Auto-expand first active SY on load
-  if (expanded === null && schoolYears.length > 0) {
-    const activeSy = schoolYears.find((sy) => sy.is_active);
-    if (activeSy) {
-      // safe — this is the initial render guard
-      setTimeout(() => setExpanded(activeSy.id), 0);
-    }
-  }
-
-  // ── Add school year ─────────────────────────────────────────────
   const addSyMutation = useMutation({
-    mutationFn: (data: {
-      name: string;
-      start_date: string;
-      end_date: string;
-      is_active: boolean;
-    }) => apiRequest("/school-years", { method: "POST", body: data, token }),
+    mutationFn: (data: SchoolYearPayload) =>
+      apiRequest("/school-years", { method: "POST", body: data, token }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all });
       setAddSyOpen(false);
       toastMutationSuccess("School year created");
     },
-    onError: (err) => {
-      toastMutationError(err, "Failed to create school year");
-    },
+    onError: (err) => toastMutationError(err, "Failed to create school year"),
   });
 
-  // ── Edit school year ─────────────────────────────────────────────
   const editSyMutation = useMutation({
-    mutationFn: ({
-      id,
-      data,
-    }: {
-      id: number;
-      data: {
-        name: string;
-        start_date: string;
-        end_date: string;
-        is_active: boolean;
-      };
-    }) =>
+    mutationFn: ({ id, data }: { id: number; data: SchoolYearPayload }) =>
       apiRequest(`/school-years/${id}`, { method: "PUT", body: data, token }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all });
       setEditSyTarget(null);
       toastMutationSuccess("School year updated");
     },
-    onError: (err) => {
-      toastMutationError(err, "Failed to update school year");
-    },
+    onError: (err) => toastMutationError(err, "Failed to update school year"),
   });
 
-  // ── Delete school year ──────────────────────────────────────────
-  const deleteSyMutation = useMutation({
-    mutationFn: (id: number) =>
-      apiRequest(`/school-years/${id}`, { method: "DELETE", token }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all });
-      toastMutationSuccess("School year deleted");
-    },
-    onError: (err) => {
-      toastMutationError(err, "Failed to delete school year");
-    },
-  });
-
-  // ── Add section ─────────────────────────────────────────────────
-  const addSectionMutation = useMutation({
+  // Status change from the settings modal. The update endpoint requires the
+  // semester, so the full record is sent along with the new is_active value.
+  const statusMutation = useMutation({
     mutationFn: ({
-      syId,
-      data,
+      year,
+      isActive,
     }: {
-      syId: number;
-      data: {
-        name: string;
-        code: string;
-        course_id: number;
-        course_major_id: number | null;
-        coordinator_user_id: number | null;
-      };
+      year: SchoolYearData;
+      isActive: boolean;
     }) =>
-      apiRequest(`/school-years/${syId}/sections`, {
+      apiRequest(`/school-years/${year.id}`, {
+        method: "PUT",
+        body: {
+          name: year.name,
+          semester: year.semester ?? "",
+          start_date: year.start_date,
+          end_date: year.end_date,
+          is_active: isActive,
+        } satisfies SchoolYearPayload,
+        token,
+      }),
+    onSuccess: (_, { isActive }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all });
+      setSettingsTarget(null);
+      toastMutationSuccess(
+        isActive ? "School year set as current" : "School year set as inactive"
+      );
+    },
+    onError: (err) =>
+      toastMutationError(err, "Failed to update school year status"),
+  });
+
+  // "School year +1": duplicate a year with name and dates shifted forward by one year.
+  const nextYearMutation = useMutation({
+    mutationFn: (year: SchoolYearData) => {
+      const payload: SchoolYearPayload = {
+        name: shiftName(year.name),
+        semester: year.semester ?? "",
+        start_date: shiftDate(year.start_date),
+        end_date: shiftDate(year.end_date),
+        is_active: false, // new year starts as a draft; set it as current later
+      };
+      return apiRequest("/school-years", {
         method: "POST",
-        body: data,
+        body: payload,
         token,
-      }),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all });
-      setAddSectionTarget(null);
-      toastMutationSuccess("Section added");
+      toastMutationSuccess("Next school year created");
     },
-    onError: (err) => {
-      toastMutationError(err, "Failed to add section");
-    },
+    onError: (err) =>
+      toastMutationError(err, "Failed to create next school year"),
   });
 
-  // ── Delete section ──────────────────────────────────────────────
-  const deleteSectionMutation = useMutation({
-    mutationFn: ({ syId, sectionId }: { syId: number; sectionId: number }) =>
-      apiRequest(`/school-years/${syId}/sections/${sectionId}`, {
-        method: "DELETE",
-        token,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all });
-      toastMutationSuccess("Section deleted");
-    },
-    onError: (err) => {
-      toastMutationError(err, "Failed to delete section");
-    },
-  });
-
-  const isProgramHead = user?.role?.name === "program_head";
-
-  function toggle(id: number) {
-    setExpanded((current) => (current === id ? null : id));
-  }
+  const handleNextYear = (year: SchoolYearData) => {
+    const newName = shiftName(year.name);
+    const exists = schoolYears.some(
+      (sy) =>
+        sy.name === newName && (sy.semester ?? "") === (year.semester ?? "")
+    );
+    if (exists) {
+      toastMutationError(
+        new Error("Already exists"),
+        `${newName} already exists`
+      );
+      return;
+    }
+    if (
+      window.confirm(
+        `Create ${newName} (${year.semester ?? "no semester"}) from ${year.name}?`
+      )
+    ) {
+      nextYearMutation.mutate(year);
+    }
+  };
 
   return (
     <section>
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+        className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"
       >
         <div>
-          <p className="text-[11px] font-semibold tracking-[0.22em] text-[var(--color-accent)] uppercase">
-            Academic
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--color-ink)]">
-            School Year &amp; Sections
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--color-ink)]">
+            School Years
           </h1>
           <p className="mt-1 text-sm text-[var(--color-muted)]">
-            {schoolYears.length} school year
-            {schoolYears.length === 1 ? "" : "s"} on record
+            Manage academic year and internship periods
           </p>
         </div>
 
-        {!isProgramHead && (
-          <button
-            type="button"
-            onClick={() => setAddSyOpen(true)}
-            className="inline-flex w-fit items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
-          >
-            <Plus size={15} className="text-white" /> Add School Year
-          </button>
-        )}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative">
+            <Search
+              size={14}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]"
+            />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search school years..."
+              className="w-full rounded-lg border border-[var(--color-line)] bg-white py-2 pl-9 pr-3 text-sm text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] sm:w-64"
+            />
+          </div>
+
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => setAddSyOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
+            >
+              <Plus size={15} /> Add School Year
+            </button>
+          )}
+        </div>
       </motion.div>
 
+      {/* Content */}
       {isLoading ? (
         <div className="mt-10 flex items-center justify-center">
           <Loader2
@@ -271,262 +455,44 @@ const SchoolYearSectionPage = () => {
         <div className="mt-10 text-center text-sm text-red-500">
           Failed to load school years.
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="mt-6 flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--color-line)] py-14 text-center">
+          <div className="grid h-11 w-11 place-items-center rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
+            <CalendarDays size={16} />
+          </div>
+          <p className="mt-3 text-sm font-medium text-[var(--color-ink)]">
+            {search ? "No matching school years" : "No school years yet"}
+          </p>
+          <p className="mt-1 text-xs text-[var(--color-muted)]">
+            {search
+              ? "Try a different search."
+              : "Add a school year to get started."}
+          </p>
+        </div>
       ) : (
         <motion.div
           variants={listVariants}
           initial="hidden"
           animate="show"
-          className="mt-6 flex flex-col gap-3"
+          className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
         >
-          {schoolYears.map((year) => {
-            const isOpen = expanded === year.id;
-
-            return (
-              <motion.article
-                key={year.id}
-                variants={itemVariants}
-                layout
-                className="overflow-hidden rounded-xl border border-[var(--color-line)] bg-white/80 shadow-sm"
-              >
-                <button
-                  type="button"
-                  onClick={() => toggle(year.id)}
-                  aria-expanded={isOpen}
-                  className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-slate-50"
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
-                      <CalendarDays size={15} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
-                        {year.name}
-                      </p>
-                      <p className="truncate text-xs text-[var(--color-muted)]">
-                        {year.sections.length} section
-                        {year.sections.length === 1 ? "" : "s"}
-                        {year.start_date && year.end_date
-                          ? ` · ${year.start_date} → ${year.end_date}`
-                          : ""}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex shrink-0 items-center gap-3">
-                    <span
-                      className={[
-                        "rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase",
-                        year.is_active
-                          ? "bg-emerald-50 text-emerald-600"
-                          : "bg-slate-100 text-[var(--color-muted)]",
-                      ].join(" ")}
-                    >
-                      {year.is_active ? "Active" : "Archived"}
-                    </span>
-
-                    {!isProgramHead && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditSyTarget(year);
-                        }}
-                        aria-label={`Edit ${year.name}`}
-                        className="rounded-lg p-1 text-[var(--color-muted)] transition-colors hover:bg-slate-100 hover:text-[var(--color-accent)]"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                    )}
-
-                    {!isProgramHead &&
-                      !year.is_active &&
-                      year.sections.length === 0 && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm(`Delete school year "${year.name}"?`)) {
-                              deleteSyMutation.mutate(year.id);
-                            }
-                          }}
-                          aria-label={`Delete ${year.name}`}
-                          className="rounded-lg p-1 text-[var(--color-muted)] transition-colors hover:bg-red-50 hover:text-red-500"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-
-                    <motion.span
-                      animate={{ rotate: isOpen ? 180 : 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="text-[var(--color-muted)]"
-                    >
-                      <ChevronDown size={16} />
-                    </motion.span>
-                  </div>
-                </button>
-
-                <AnimatePresence initial={false}>
-                  {isOpen ? (
-                    <motion.div
-                      key="content"
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-                      className="border-t border-[var(--color-line)]"
-                    >
-                      {/* Section header row: label left, Add Section right */}
-                      <div className="flex items-center justify-between gap-3 px-4 py-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
-                          Sections
-                        </p>
-                        {!isProgramHead && year.is_active && (
-                          <button
-                            type="button"
-                            onClick={() => setAddSectionTarget(year)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--color-line)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-                          >
-                            <Plus size={12} /> Add Section
-                          </button>
-                        )}
-                      </div>
-
-                      {year.sections.length === 0 ? (
-                        <p className="px-4 pb-4 text-xs text-[var(--color-muted)]">
-                          No sections added for this school year yet.
-                        </p>
-                      ) : (
-                        <div className="overflow-x-auto px-4 pb-4">
-                          <table className="w-full min-w-[560px] border-collapse text-left">
-                            <thead>
-                              <tr className="border-b border-[var(--color-line)]">
-                                <th className="py-2 pr-3 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]">
-                                  Section
-                                </th>
-                                <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]">
-                                  Course Major
-                                </th>
-                                <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]">
-                                  Coordinator
-                                </th>
-                                <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]">
-                                  Students
-                                </th>
-                                <th className="py-2 pl-3 text-right text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]">
-                                  Actions
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {year.sections.map((section) => (
-                                <tr
-                                  key={section.id}
-                                  className="group border-b border-[var(--color-line)] last:border-0 hover:bg-slate-50/60"
-                                >
-                                  <td className="py-2.5 pr-3">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-sm font-medium text-[var(--color-ink)]">
-                                        {section.name}
-                                      </span>
-                                      {section.code && (
-                                        <span className="text-[10px] text-[var(--color-muted)]">
-                                          ({section.code})
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="px-3 py-2.5 text-xs text-[var(--color-ink)]">
-                                    {section.course_major?.name ?? "—"}
-                                  </td>
-                                  <td className="px-3 py-2.5 text-xs text-[var(--color-ink)]">
-                                    {section.coordinator?.name ?? "—"}
-                                  </td>
-                                  <td className="px-3 py-2.5">
-                                    <span className="inline-flex items-center gap-1 text-xs text-[var(--color-ink)]">
-                                      <Users
-                                        size={12}
-                                        className="text-[var(--color-muted)]"
-                                      />
-                                      {section.students_count ?? "—"}
-                                    </span>
-                                  </td>
-                                  <td className="py-2.5 pl-3">
-                                    <div className="flex items-center justify-end gap-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          navigate(
-                                            `/school-year-section/${section.id}`
-                                          )
-                                        }
-                                        aria-label={`View ${section.name}`}
-                                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2 py-1 text-[11px] font-semibold text-sky-600 shadow-sm transition hover:bg-sky-50"
-                                      >
-                                        <Eye size={12} /> View
-                                      </button>
-
-                                      {!isProgramHead && year.is_active && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            if (
-                                              confirm(
-                                                `Delete section "${section.name}"?`
-                                              )
-                                            ) {
-                                              deleteSectionMutation.mutate({
-                                                syId: year.id,
-                                                sectionId: section.id,
-                                              });
-                                            }
-                                          }}
-                                          aria-label={`Remove ${section.name}`}
-                                          className="rounded-lg p-1.5 text-[var(--color-muted)] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-50 hover:text-red-500"
-                                        >
-                                          <X size={12} />
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
-              </motion.article>
-            );
-          })}
+          {filtered.map((year) => (
+            <SchoolYearCard
+              key={year.id}
+              year={year}
+              canManage={canManage}
+              onEdit={() => setEditSyTarget(year)}
+              onSettings={() => setSettingsTarget(year)}
+              onOpen={() => navigate(`/school-year/${year.id}`)}
+              onNextYear={() => handleNextYear(year)}
+              isCreatingNext={
+                nextYearMutation.isPending &&
+                nextYearMutation.variables?.id === year.id
+              }
+            />
+          ))}
         </motion.div>
       )}
-
-      {/* Empty state */}
-      <AnimatePresence>
-        {!isLoading && schoolYears.length === 0 ? (
-          <motion.div
-            key="empty-state"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.24 }}
-            className="mt-6 flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--color-line)] py-14 text-center"
-          >
-            <div className="grid h-11 w-11 place-items-center rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
-              <CalendarDays size={16} />
-            </div>
-            <p className="mt-3 text-sm font-medium text-[var(--color-ink)]">
-              No school years yet
-            </p>
-            <p className="mt-1 text-xs text-[var(--color-muted)]">
-              Create a school year to get started.
-            </p>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
 
       {/* Modals */}
       <AddSchoolYearModal
@@ -548,23 +514,19 @@ const SchoolYearSectionPage = () => {
         initialData={editSyTarget ?? undefined}
       />
 
-      <AddSectionModal
-        open={addSectionTarget !== null}
-        onClose={() => setAddSectionTarget(null)}
-        onAdd={(data) => {
-          if (addSectionTarget) {
-            addSectionMutation.mutate({ syId: addSectionTarget.id, data });
+      <SchoolYearSettingsModal
+        open={settingsTarget !== null}
+        onClose={() => setSettingsTarget(null)}
+        year={settingsTarget}
+        onSave={(isActive) => {
+          if (settingsTarget) {
+            statusMutation.mutate({ year: settingsTarget, isActive });
           }
         }}
-        isLoading={addSectionMutation.isPending}
-        schoolYearName={addSectionTarget?.name ?? ""}
-        courses={courses}
-        coordinators={coordinators}
-        coursesLoading={coursesLoading}
-        coordinatorsLoading={coordinatorsLoading}
+        isLoading={statusMutation.isPending}
       />
     </section>
   );
 };
 
-export default SchoolYearSectionPage;
+export default SchoolYearPage;
