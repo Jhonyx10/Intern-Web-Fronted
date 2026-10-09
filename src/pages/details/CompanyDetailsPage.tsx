@@ -1,5 +1,6 @@
-import { useRef, useState, useMemo } from 'react'
+import { useRef, useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
     MapboxMap,
     MapTokenWarning,
@@ -10,10 +11,10 @@ import {
 import { useCompany } from '@/lib/queries/companies'
 import { formatDistance, formatDuration, haversineMeters, OCC_CENTER, OCC_NAME } from '@/lib/geo'
 import { type MapRouteInfo } from '@/components/MapboxMap'
-import { Building2, MapPin, Phone, Mail, User2, Users2, Shield, ShieldOff, Navigation, ArrowLeft } from 'lucide-react'
+import { Building2, MapPin, Phone, Mail, User2, Users2, Shield, ShieldOff, Navigation, ArrowLeft, MoreVertical } from 'lucide-react'
 import AssignStudentModal from '@/components/modal/AssignStudentModal'
 import AddSupervisorModal from '@/components/modal/AddSupervisorModal'
-import { useAssignStudentToCompany, useCreateSupervisor } from '@/lib/queries/companies'
+import { useAssignStudentToCompany, useCreateSupervisor, useToggleCompanyActive } from '@/lib/queries/companies'
 import { useAuth } from '@/lib/auth'
 
 export function CompanyDetailsPage() {
@@ -23,9 +24,22 @@ export function CompanyDetailsPage() {
     const { data: company, isLoading, error } = useCompany(id)
     const [routeInfo, setRouteInfo] = useState<MapRouteInfo | null>(null)
     const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
+    const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false)
+    const actionsMenuRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target as Node)) {
+                setIsActionsMenuOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
     const [isSupervisorModalOpen, setIsSupervisorModalOpen] = useState(false)
     const { mutate: assignStudent, isPending: isAssigning } = useAssignStudentToCompany()
     const { mutate: createSupervisor, isPending: isCreatingSupervisor } = useCreateSupervisor()
+    const toggleActive = useToggleCompanyActive()
     const { user } = useAuth()
 
     const markers = useMemo<MapMarker[]>(() => {
@@ -129,19 +143,70 @@ export function CompanyDetailsPage() {
                     </div>
                 </div>
                 {user?.role?.name === 'super_admin' && (
-                    <div className="flex gap-2">
+                    <div className="relative" ref={actionsMenuRef}>
                         <button
-                            className="rounded-xl border border-[var(--color-line)] bg-white/80 px-4 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:border-[var(--color-ink)]"
-                            onClick={() => setIsSupervisorModalOpen(true)}
+                            onClick={() => setIsActionsMenuOpen((p) => !p)}
+                            className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--color-line)] bg-white/80 text-[var(--color-ink)] transition hover:bg-slate-50 hover:border-[var(--color-ink)]"
                         >
-                            Add Supervisor
+                            <MoreVertical size={20} />
                         </button>
-                        <button
-                            className="rounded-xl border border-[var(--color-line)] bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--color-accent-hover)]"
-                            onClick={() => setIsAssignModalOpen(true)}
-                        >
-                            Assign Student
-                        </button>
+
+                        <AnimatePresence>
+                            {isActionsMenuOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95, y: 8 }}
+                                    transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                                    className="absolute right-0 top-full mt-2 w-56 max-w-sm rounded-xl border border-[var(--color-line)] bg-white p-2 shadow-lg z-50"
+                                >
+                                    <div className="flex flex-col gap-1">
+                                        {/* Activate / Deactivate Toggle */}
+                                        <div className="flex items-center justify-between rounded-lg px-3 py-2.5 transition hover:bg-slate-50">
+                                            <span className="text-sm font-medium text-[var(--color-ink)] pointer-events-none">
+                                                Active Status
+                                            </span>
+                                            <div
+                                                role="switch"
+                                                aria-checked={company.is_active !== false}
+                                                onClick={() => {
+                                                    if (!toggleActive.isPending) {
+                                                        toggleActive.mutate(company.id)
+                                                    }
+                                                }}
+                                                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${company.is_active !== false ? 'bg-[var(--color-accent)]' : 'bg-slate-300'
+                                                    } ${toggleActive.isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            >
+                                                <span
+                                                    aria-hidden="true"
+                                                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${company.is_active !== false ? 'translate-x-4' : 'translate-x-0.5'
+                                                        }`}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="my-1 h-px w-full bg-[var(--color-line)]" />
+                                        <button
+                                            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:bg-slate-50"
+                                            onClick={() => {
+                                                setIsSupervisorModalOpen(true)
+                                                setIsActionsMenuOpen(false)
+                                            }}
+                                        >
+                                            <User2 size={16} /> Add Supervisor
+                                        </button>
+                                        <button
+                                            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:bg-slate-50"
+                                            onClick={() => {
+                                                setIsAssignModalOpen(true)
+                                                setIsActionsMenuOpen(false)
+                                            }}
+                                        >
+                                            <Users2 size={16} /> Assign Student
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
                 )}
             </div>

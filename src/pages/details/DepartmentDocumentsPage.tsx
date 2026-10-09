@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { useAuth } from "@/lib/auth";
 import { AnimatePresence, motion } from "framer-motion";
 import {
     ArrowLeft,
@@ -275,6 +276,8 @@ function RequirementCard({ title, totalStudents, approved, pending, rejected, on
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function DepartmentDocumentsPage() {
     const { id } = useParams<{ id: string }>();
+    const { user } = useAuth();
+    const isDean = user?.role?.name === "dean";
     const updateStatus = useUpdateDocumentStatus();
 
     const { data: requirements, isLoading: loadingReqs } = useCourseDocumentRequirements(id ? Number(id) : undefined);
@@ -341,12 +344,14 @@ export default function DepartmentDocumentsPage() {
                 {/* ── Page header ──────────────────────────────── */}
                 <motion.div variants={item} className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                        <Link
-                            to="/documents"
-                            className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--color-muted)] hover:text-[var(--color-accent)] transition mb-3"
-                        >
-                            <ArrowLeft size={16} /> Back to Departments
-                        </Link>
+                        {!isDean && (
+                            <Link
+                                to="/documents"
+                                className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--color-muted)] hover:text-[var(--color-accent)] transition mb-3"
+                            >
+                                <ArrowLeft size={16} /> Back to Departments
+                            </Link>
+                        )}
                         <h2 className="text-3xl font-semibold tracking-tight">Document Requirements</h2>
                         <p className="mt-1.5 text-sm text-[var(--color-muted)]">
                             View submissions by interns for each required document in this department.

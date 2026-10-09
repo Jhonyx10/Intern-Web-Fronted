@@ -114,9 +114,9 @@ export function AssignRequirementsModal({
                 style={{ borderBottomColor: deadline ? themeColor : undefined }}
                 onFocus={(e) => (e.currentTarget.style.borderBottomColor = themeColor)}
                 onBlur={(e) =>
-                  (e.currentTarget.style.borderBottomColor = deadline
-                    ? themeColor
-                    : "")
+                (e.currentTarget.style.borderBottomColor = deadline
+                  ? themeColor
+                  : "")
                 }
               />
               <p className="mt-1 text-[11px] text-[var(--color-muted)]">
@@ -145,9 +145,8 @@ export function AssignRequirementsModal({
                     <motion.label
                       key={req.id}
                       variants={itemVariants}
-                      className={`flex cursor-pointer items-start gap-3 px-6 py-3.5 transition ${
-                        index !== 0 ? "border-t border-[var(--color-line)]" : ""
-                      }`}
+                      className={`flex cursor-pointer items-start gap-3 px-6 py-3.5 transition ${index !== 0 ? "border-t border-[var(--color-line)]" : ""
+                        }`}
                       style={{
                         backgroundColor: checked ? `${themeColor}0d` : undefined,
                       }}
@@ -170,9 +169,9 @@ export function AssignRequirementsModal({
                         <p className="text-sm font-medium text-[var(--color-ink)]">
                           {req.title}
                         </p>
-                        {req.document_type && (
-                          <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">
-                            {req.document_type.name}
+                        {req.recurrence && req.recurrence !== 'none' && (
+                          <p className="mt-0.5 text-[11px] text-[var(--color-muted)] capitalize">
+                            {req.recurrence}
                           </p>
                         )}
                       </div>

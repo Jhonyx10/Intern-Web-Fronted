@@ -23,6 +23,7 @@ import {
     usePendingCompanies,
     useApproveCompany,
     useRejectCompany,
+    useToggleCompanyActive,
 } from '@/lib/queries/companies'
 import type { Company } from '@/types'
 
@@ -129,10 +130,12 @@ function CompanyCard({
     company,
     onApprove,
     onReject,
+    onToggleActive,
 }: {
     company: Company
     onApprove?: (c: Company) => void
     onReject?: (c: Company) => void
+    onToggleActive?: (c: Company) => void
 }) {
     const navigate = useNavigate()
     const isPending = company.is_approved === false && company.is_active !== false
@@ -160,8 +163,8 @@ function CompanyCard({
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="truncate text-sm font-semibold text-[var(--color-ink)]">
+                        <div className="flex flex-col items-start gap-1">
+                            <h3 className="w-full truncate text-sm font-semibold text-[var(--color-ink)]">
                                 {company.name}
                             </h3>
                             <span
@@ -251,6 +254,31 @@ function CompanyCard({
                         </button>
                     </div>
                 )}
+
+                {/* Activate / Deactivate toggle for approved companies */}
+                {isApproved && onToggleActive && (
+                    <div className="mt-4 flex items-center justify-between border-t border-[var(--color-line)] pt-4">
+                        <span className="text-xs font-semibold text-[var(--color-ink)]">
+                            Active Status
+                        </span>
+                        <div
+                            role="switch"
+                            aria-checked={company.is_active !== false}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleActive(company);
+                            }}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${company.is_active !== false ? 'bg-[var(--color-accent)]' : 'bg-slate-300'
+                                }`}
+                        >
+                            <span
+                                aria-hidden="true"
+                                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${company.is_active !== false ? 'translate-x-4' : 'translate-x-0.5'
+                                    }`}
+                            />
+                        </div>
+                    </div>
+                )}
             </div>
         </motion.article>
     )
@@ -272,6 +300,7 @@ export default function Companies() {
 
     const approveCompany = useApproveCompany()
     const rejectCompany = useRejectCompany()
+    const toggleActive = useToggleCompanyActive()
 
     // Combine: pending tab uses the /companies/pending endpoint directly
     const displayCompanies = (() => {
@@ -501,6 +530,7 @@ export default function Companies() {
                                         company={company}
                                         onApprove={activeTab === 'pending' ? (c) => setConfirmTarget({ company: c, action: 'approve' }) : undefined}
                                         onReject={activeTab === 'pending' ? (c) => setConfirmTarget({ company: c, action: 'reject' }) : undefined}
+                                        onToggleActive={(c) => toggleActive.mutate(c.id)}
                                     />
                                 ))}
                             </AnimatePresence>

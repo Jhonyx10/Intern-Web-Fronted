@@ -8,24 +8,15 @@ import { useAuth } from '@/lib/auth'
 import { apiRequest } from '@/lib/api'
 import { toastMutationError, toastMutationSuccess } from '@/lib/mutationToast'
 
-export interface DocumentType {
-  id: number
-  code: string
-  name: string
-  is_required: boolean
-  recurrence: 'none' | 'daily' | 'weekly'
-}
-
 export interface DocumentRequirement {
   pivot: any
   id: number
-  document_type_id: number
   created_by_user_id: number | null
   title: string
   description: string | null
   accepted_file_types: string
   is_active: boolean
-  document_type?: DocumentType
+  recurrence: 'none' | 'daily' | 'weekly'
   created_by?: { id: number; name: string } | null
 }
 
@@ -39,10 +30,10 @@ export interface CourseTheme {
 }
 
 type CreateRequirementPayload = {
-  document_type_id: number
   title: string
   description?: string
   accepted_file_types?: string
+  recurrence?: 'none' | 'daily' | 'weekly'
   course_ids?: number[]
   deadline_at?: string
 }
@@ -55,16 +46,6 @@ export function useDocumentRequirements() {
   return useQuery({
     queryKey: ['document-requirements'],
     queryFn: () => apiRequest<DocumentRequirement[]>('/document-requirements'),
-    enabled: !!user,
-  })
-}
-
-export function useDocumentTypes() {
-  const { user } = useAuth()
-
-  return useQuery({
-    queryKey: ['document-types'],
-    queryFn: () => apiRequest<DocumentType[]>('/document-types'),
     enabled: !!user,
   })
 }
@@ -84,23 +65,6 @@ export function useCreateDocumentRequirement() {
       toastMutationSuccess('Document requirement created')
     },
     onError: (error) => toastMutationError(error, 'Failed to create requirement'),
-  })
-}
-
-export function useCreateDocumentType() {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (payload: { code: string; name: string; is_required?: boolean, recurrence?: 'none' | 'daily' | 'weekly' }) =>
-      apiRequest<DocumentType>('/document-types', {
-        method: 'POST',
-        body: payload,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['document-types'] })
-      toastMutationSuccess('Document type created')
-    },
-    onError: (error) => toastMutationError(error, 'Failed to create document type'),
   })
 }
 

@@ -13,18 +13,9 @@ type CurrentSchoolYear = {
     start_date: string | null;
     end_date: string | null;
     is_active: boolean;
+    is_evaluation_enabled?: boolean;
+    evaluation_templates?: { id: number; title: string }[];
 };
-
-function formatDate(value: string | null) {
-    if (!value) return "—";
-    const d = new Date(value.length === 10 ? `${value}T00:00:00` : value);
-    if (Number.isNaN(d.getTime())) return value;
-    return d.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-    });
-}
 
 function semesterStyle(semester?: string | null) {
     const s = (semester ?? "").toLowerCase();

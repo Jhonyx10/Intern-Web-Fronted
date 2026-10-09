@@ -195,3 +195,24 @@ export function useCreateSupervisor() {
     onError: (error) => toastMutationError(error, 'Failed to add supervisor'),
   })
 }
+
+export function useToggleCompanyActive() {
+  const { token } = useAuth()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: number) => {
+      if (!token) throw new Error('Not authenticated.')
+      return apiRequest<{ data: { id: number; name: string; is_active: boolean; is_approved: boolean } }>(
+        `/companies/${id}/toggle-active`,
+        { method: 'PATCH', token },
+      ).then((res) => res.data)
+    },
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.companies.all })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.companies.detail(data.id) })
+      toastMutationSuccess(data.is_active ? 'Company activated' : 'Company deactivated')
+    },
+    onError: (error) => toastMutationError(error, 'Failed to toggle company status'),
+  })
+}

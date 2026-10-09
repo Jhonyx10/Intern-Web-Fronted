@@ -131,6 +131,8 @@ export const useCreateEvaluationTemplate = (token?: string | null) => {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.evaluations.templates() });
+      queryClient.invalidateQueries({ queryKey: ["document-requirements"] });
+      queryClient.invalidateQueries({ queryKey: ["course-document-requirements"] });
       toastMutationSuccess('Template created', 'Evaluation template created successfully.');
     },
     onError: (error) => toastMutationError(error, 'Failed to save template'),
@@ -149,6 +151,8 @@ export const useUpdateEvaluationTemplate = (id?: number | string, token?: string
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.evaluations.templates() });
+      queryClient.invalidateQueries({ queryKey: ["document-requirements"] });
+      queryClient.invalidateQueries({ queryKey: ["course-document-requirements"] });
       if (id) {
         queryClient.invalidateQueries({ queryKey: queryKeys.evaluations.templateDetail(id) });
       }
@@ -190,6 +194,8 @@ export const useDuplicateEvaluationTemplate = (token?: string | null) => {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.evaluations.templates() });
+      queryClient.invalidateQueries({ queryKey: ["document-requirements"] });
+      queryClient.invalidateQueries({ queryKey: ["course-document-requirements"] });
       toastMutationSuccess('Template duplicated', 'A copy of the evaluation template has been created.');
     },
     onError: (error) => toastMutationError(error, 'Failed to duplicate template'),

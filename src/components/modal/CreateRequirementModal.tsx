@@ -1,13 +1,12 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Loader2, AlertCircle, ClipboardList, Repeat, CalendarDays } from "lucide-react";
-import {
-  useCreateDocumentRequirement,
-  useDocumentTypes,
-} from "@/lib/queries/documents";
+import { useCreateDocumentRequirement } from "@/lib/queries/documents";
 import { useCourses } from "@/lib/queries/courses";
 import { firstErrorMessage } from "@/lib/utils/errors";
 import { useTheme } from "@/context/ThemeContext";
+
+type Recurrence = "none" | "daily" | "weekly";
 
 export function CreateRequirementModal({
   visible,
@@ -18,23 +17,16 @@ export function CreateRequirementModal({
 }) {
   const { themeColor } = useTheme();
   const createRequirement = useCreateDocumentRequirement();
-  const { data: documentTypes, isLoading: loadingTypes } = useDocumentTypes();
   const { data: courses, isLoading: loadingCourses } = useCourses();
 
-  const [documentTypeId, setDocumentTypeId] = useState<number | "">("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [recurrence, setRecurrence] = useState<Recurrence>("none");
   const [selectedCourseIds, setSelectedCourseIds] = useState<Set<number>>(
     new Set()
   );
   const [deadline, setDeadline] = useState("");
   const [error, setError] = useState<string | null>(null);
-
-  const selectedType = useMemo(
-    () => documentTypes?.find((t) => t.id === documentTypeId) ?? null,
-    [documentTypes, documentTypeId]
-  );
-  const recurrence = selectedType?.recurrence ?? "none";
 
   const allCourseIds = useMemo(
     () => (courses ?? []).map((c) => Number(c.id)),
@@ -56,9 +48,9 @@ export function CreateRequirementModal({
   };
 
   const reset = () => {
-    setDocumentTypeId("");
     setTitle("");
     setDescription("");
+    setRecurrence("none");
     setSelectedCourseIds(new Set());
     setDeadline("");
     setError(null);
@@ -74,19 +66,15 @@ export function CreateRequirementModal({
       setError("Title is required.");
       return;
     }
-    if (!documentTypeId) {
-      setError("Document type is required.");
-      return;
-    }
     if (selectedCourseIds.size > 0 && !deadline) {
       setError("Please set a deadline for the selected departments.");
       return;
     }
     try {
       await createRequirement.mutateAsync({
-        document_type_id: Number(documentTypeId),
         title: title.trim(),
         description: description.trim() || undefined,
+        recurrence,
         course_ids: Array.from(selectedCourseIds),
         deadline_at: selectedCourseIds.size > 0 ? deadline : undefined,
       });
@@ -135,7 +123,7 @@ export function CreateRequirementModal({
                     New Document Requirement
                   </h2>
                   <p className="text-[12px] text-slate-400">
-                    A specific ask tied to a document type
+                    Define a document requirement for interns
                   </p>
                 </div>
               </div>
@@ -149,54 +137,7 @@ export function CreateRequirementModal({
 
             {/* Body */}
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-5">
-              <div>
-                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">
-                  Document Type
-                </label>
-                <select
-                  value={documentTypeId}
-                  onChange={(e) =>
-                    setDocumentTypeId(
-                      e.target.value ? Number(e.target.value) : ""
-                    )
-                  }
-                  disabled={loadingTypes}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] text-slate-800 outline-none transition disabled:opacity-60"
-                  style={{
-                    borderColor: documentTypeId ? `${themeColor}55` : undefined,
-                  }}
-                >
-                  <option value="">
-                    {loadingTypes ? "Loading..." : "Select a type"}
-                  </option>
-                  {documentTypes?.map((type) => (
-                    <option key={type.id} value={type.id}>
-                      {type.name}
-                      {type.recurrence && type.recurrence !== "none"
-                        ? ` (${type.recurrence})`
-                        : ""}
-                    </option>
-                  ))}
-                </select>
-
-                {selectedType && recurrence !== "none" && (
-                  <div
-                    className="mt-2 flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold"
-                    style={{
-                      backgroundColor: "var(--color-accent-soft)",
-                      color: themeColor,
-                    }}
-                  >
-                    {recurrence === "weekly" ? (
-                      <Repeat size={12} strokeWidth={2.5} />
-                    ) : (
-                      <CalendarDays size={12} strokeWidth={2.5} />
-                    )}
-                    Interns will submit this {recurrence} — each period is tracked separately.
-                  </div>
-                )}
-              </div>
-
+              {/* Title */}
               <div>
                 <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">
                   Title
@@ -207,18 +148,15 @@ export function CreateRequirementModal({
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Waiver Form"
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] text-slate-800 outline-none transition placeholder:text-slate-400"
-                  style={{
-                    borderColor: title ? `${themeColor}55` : undefined,
-                  }}
+                  style={{ borderColor: title ? `${themeColor}55` : undefined }}
                   onFocus={(e) => (e.currentTarget.style.borderColor = themeColor)}
                   onBlur={(e) =>
-                  (e.currentTarget.style.borderColor = title
-                    ? `${themeColor}55`
-                    : "")
+                    (e.currentTarget.style.borderColor = title ? `${themeColor}55` : "")
                   }
                 />
               </div>
 
+              {/* Description */}
               <div>
                 <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">
                   Description (optional)
@@ -228,16 +166,42 @@ export function CreateRequirementModal({
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] text-slate-800 outline-none transition placeholder:text-slate-400"
-                  style={{
-                    borderColor: description ? `${themeColor}55` : undefined,
-                  }}
+                  style={{ borderColor: description ? `${themeColor}55` : undefined }}
                   onFocus={(e) => (e.currentTarget.style.borderColor = themeColor)}
                   onBlur={(e) =>
-                  (e.currentTarget.style.borderColor = description
-                    ? `${themeColor}55`
-                    : "")
+                    (e.currentTarget.style.borderColor = description ? `${themeColor}55` : "")
                   }
                 />
+              </div>
+
+              {/* Recurrence */}
+              <div>
+                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">
+                  Recurrence
+                </label>
+                <select
+                  value={recurrence}
+                  onChange={(e) => setRecurrence(e.target.value as Recurrence)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] text-slate-800 outline-none transition"
+                  style={{ borderColor: recurrence !== "none" ? `${themeColor}55` : undefined }}
+                >
+                  <option value="none">One-time (no recurrence)</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                </select>
+                {recurrence !== "none" && (
+                  <div
+                    className="mt-2 flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-semibold"
+                    style={{ backgroundColor: "var(--color-accent-soft)", color: themeColor }}
+                  >
+                    {recurrence === "weekly" ? (
+                      <Repeat size={12} strokeWidth={2.5} />
+                    ) : (
+                      <CalendarDays size={12} strokeWidth={2.5} />
+                    )}
+                    Interns will submit this {recurrence} — each period is tracked separately.
+                  </div>
+                )}
               </div>
 
               {/* Assign to departments */}
@@ -270,13 +234,12 @@ export function CreateRequirementModal({
                   ) : (
                     (courses ?? []).map((c, index) => {
                       const courseId = Number(c.id);
-                        const checked = selectedCourseIds.has(courseId);
+                      const checked = selectedCourseIds.has(courseId);
                       return (
                         <label
                           key={c.id}
-                          className={`flex cursor-pointer items-center gap-2.5 px-3 py-2 text-[13px] text-slate-700 transition hover:bg-white ${
-                            index !== 0 ? "border-t border-slate-200" : ""
-                          }`}
+                          className={`flex cursor-pointer items-center gap-2.5 px-3 py-2 text-[13px] text-slate-700 transition hover:bg-white ${index !== 0 ? "border-t border-slate-200" : ""
+                            }`}
                         >
                           <input
                             type="checkbox"
@@ -296,11 +259,11 @@ export function CreateRequirementModal({
                 </div>
                 <p className="mt-1 text-[11px] text-slate-400">
                   {selectedCourseIds.size} selected. You can change this later
-                  with “Assign to department”.
+                  with "Assign to department".
                 </p>
               </div>
 
-              {/* Deadline (only needed when departments are selected) */}
+              {/* Deadline */}
               {selectedCourseIds.size > 0 && (
                 <div>
                   <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">
@@ -311,9 +274,7 @@ export function CreateRequirementModal({
                     value={deadline}
                     onChange={(e) => setDeadline(e.target.value)}
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] text-slate-800 outline-none transition"
-                    style={{
-                      borderColor: deadline ? `${themeColor}55` : undefined,
-                    }}
+                    style={{ borderColor: deadline ? `${themeColor}55` : undefined }}
                   />
                 </div>
               )}

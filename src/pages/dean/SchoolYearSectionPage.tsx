@@ -26,6 +26,8 @@ type SchoolYearData = {
   start_date: string | null;
   end_date: string | null;
   is_active: boolean;
+  is_evaluation_enabled: boolean;
+  evaluation_templates?: { id: number; title: string }[];
 };
 
 type SchoolYearPayload = {
@@ -34,6 +36,8 @@ type SchoolYearPayload = {
   start_date: string | null;
   end_date: string | null;
   is_active: boolean;
+  is_evaluation_enabled?: boolean;
+  evaluation_template_ids?: number[];
 };
 
 const listVariants: Variants = {
@@ -172,18 +176,16 @@ const SchoolYearCard = ({
   return (
     <motion.article
       variants={itemVariants}
-      className={`flex flex-col rounded-2xl border border-[var(--color-line)] p-5 shadow-sm ${
-        year.is_active ? "bg-white" : "bg-slate-50"
-      }`}
+      className={`flex flex-col rounded-2xl border border-[var(--color-line)] p-5 shadow-sm ${year.is_active ? "bg-white" : "bg-slate-50"
+        }`}
     >
       {/* Title + status badge */}
       <div className="flex items-start justify-between gap-2">
         <h2
-          className={`text-xl font-bold tracking-tight ${
-            year.is_active
-              ? "text-[var(--color-ink)]"
-              : "text-[var(--color-muted)]"
-          }`}
+          className={`text-xl font-bold tracking-tight ${year.is_active
+            ? "text-[var(--color-ink)]"
+            : "text-[var(--color-muted)]"
+            }`}
         >
           {year.name}
         </h2>
@@ -264,6 +266,10 @@ const SchoolYearCard = ({
 const SchoolYearPage = () => {
   const { token, user } = useAuth();
   const queryClient = useQueryClient();
+  const refreshEvaluationTemplates = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.evaluations.templates() });
+    queryClient.invalidateQueries({ queryKey: queryKeys.evaluations.all });
+  };
   const navigate = useNavigate();
   // Accept both spellings so it works regardless of what RoleSeeder created.
   // Once you know the real role name, replace this with a single check.
@@ -326,9 +332,13 @@ const SchoolYearPage = () => {
     mutationFn: ({
       year,
       isActive,
+      isEvaluationEnabled,
+      templateIds,
     }: {
       year: SchoolYearData;
       isActive: boolean;
+      isEvaluationEnabled: boolean;
+      templateIds?: number[];
     }) =>
       apiRequest(`/school-years/${year.id}`, {
         method: "PUT",
@@ -338,14 +348,18 @@ const SchoolYearPage = () => {
           start_date: year.start_date,
           end_date: year.end_date,
           is_active: isActive,
+          is_evaluation_enabled: isEvaluationEnabled,
+          evaluation_template_ids: templateIds ?? year.evaluation_templates?.map((t) => t.id) ?? [],
         } satisfies SchoolYearPayload,
         token,
       }),
-    onSuccess: (_, { isActive }) => {
+    onSuccess: (_,) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all });
+      queryClient.invalidateQueries({ queryKey: ["document-requirements"] });
+      queryClient.invalidateQueries({ queryKey: ["course-document-requirements"] });
+      refreshEvaluationTemplates();
       setSettingsTarget(null);
-      toastMutationSuccess(
-        isActive ? "School year set as current" : "School year set as inactive"
+      toastMutationSuccess("Settings Successfully Applied."
       );
     },
     onError: (err) =>
@@ -361,6 +375,8 @@ const SchoolYearPage = () => {
         start_date: shiftDate(year.start_date),
         end_date: shiftDate(year.end_date),
         is_active: false, // new year starts as a draft; set it as current later
+        is_evaluation_enabled: false,
+        evaluation_template_ids: year.evaluation_templates?.map((t) => t.id) ?? [],
       };
       return apiRequest("/school-years", {
         method: "POST",
@@ -518,9 +534,9 @@ const SchoolYearPage = () => {
         open={settingsTarget !== null}
         onClose={() => setSettingsTarget(null)}
         year={settingsTarget}
-        onSave={(isActive) => {
+        onSave={(isActive, isEvaluationEnabled, templateIds) => {
           if (settingsTarget) {
-            statusMutation.mutate({ year: settingsTarget, isActive });
+            statusMutation.mutate({ year: settingsTarget, isActive, isEvaluationEnabled, templateIds });
           }
         }}
         isLoading={statusMutation.isPending}

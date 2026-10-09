@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useEvaluationTemplate } from "@/lib/queries/evaluation";
 import { useTheme } from "@/context/ThemeContext"; // adjust path to wherever ThemeProvider lives
+import { useAuth } from "@/lib/auth";
 
 type ItemType =
   | "rating"
@@ -89,6 +90,7 @@ const formatDate = (value: string) =>
 export const EvaluationTemplateDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const {
     data: template,
@@ -197,13 +199,15 @@ export const EvaluationTemplateDetails: React.FC = () => {
           </div>
         </div>
 
-        <button
+       {user?.role?.name === 'super_admin' && (
+         <button
           onClick={() => navigate(`/evaluation/edit/${id}`)}
           className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors shrink-0"
         >
           <Pencil className="w-3.5 h-3.5" />
           Edit
         </button>
+       )}
       </div>
 
       {/* Description */}

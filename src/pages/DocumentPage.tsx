@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BookOpen,
   FileText,
+  FolderOpen,
+  Loader2,
   Plus,
   Search,
-  Tag,
   X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -17,7 +19,6 @@ import {
 } from "@/lib/queries/documents";
 import { useCourses } from "@/lib/queries/courses";
 import { CreateRequirementModal } from "@/components/modal/CreateRequirementModal";
-import { CreateTypeModal } from "@/components/modal/CreateTypeModal";
 import { AssignRequirementsModal } from "@/components/modal/AssignRequirementsModal";
 import { DepartmentRequirementCards } from "@/components/cards/DepartmentRequirementCard";
 import type { Program } from "@/types";
@@ -42,13 +43,20 @@ const row = {
 
 export default function DocumentPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isSuperAdmin = user?.role?.name === "super_admin";
   const isDean = user?.role?.name === "dean";
   const courseId = user?.course?.id as number | undefined;
 
+  // Deans only ever have one department — redirect straight to its details page.
+  useEffect(() => {
+    if (isDean && courseId) {
+      navigate(`/documents/${courseId}`, { replace: true });
+    }
+  }, [isDean, courseId, navigate]);
+
   const [search, setSearch] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showTypeModal, setShowTypeModal] = useState(false);
   // Super admin: the department whose requirements are being assigned
   const [assignCourseId, setAssignCourseId] = useState<number | null>(null);
 
@@ -96,6 +104,38 @@ export default function DocumentPage() {
   const activeRequirements = requirements?.filter((r) => r.is_active).length ?? 0;
   const inactiveRequirements = totalRequirements - activeRequirements;
 
+  // Show a brief loading state while the redirect fires for deans
+  if (isDean && courseId) {
+    return (
+      <div className="flex h-60 items-center justify-center">
+        <Loader2 className="animate-spin text-[var(--color-accent)]" size={28} />
+      </div>
+    );
+  }
+
+  // Dean with no assigned course
+  if (isDean && !courseId) {
+    return (
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--color-line)] py-24 text-center"
+      >
+        <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
+          <FolderOpen size={24} />
+        </div>
+        <h2 className="mt-5 text-lg font-semibold text-[var(--color-ink)]">
+          No Department Assigned
+        </h2>
+        <p className="mt-2 max-w-sm text-sm text-[var(--color-muted)]">
+          Your account is not linked to a department yet. Please contact a
+          Super Admin to have your course assigned.
+        </p>
+      </motion.section>
+    );
+  }
+
   return (
     <>
       <motion.section
@@ -142,14 +182,6 @@ export default function DocumentPage() {
                     </option>
                   ))}
                 </select>
-
-                <button
-                  type="button"
-                  onClick={() => setShowTypeModal(true)}
-                  className="flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm font-medium text-[var(--color-muted)] shadow-sm transition hover:border-violet-300 hover:text-violet-600"
-                >
-                  <Tag size={15} /> Document Type
-                </button>
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(true)}
@@ -283,13 +315,6 @@ export default function DocumentPage() {
             key="create-requirement"
             visible={showCreateModal}
             onClose={() => setShowCreateModal(false)}
-          />
-        )}
-        {isSuperAdmin && showTypeModal && (
-          <CreateTypeModal
-            key="create-type"
-            visible={showTypeModal}
-            onClose={() => setShowTypeModal(false)}
           />
         )}
         {isSuperAdmin && assignCourseId !== null && assignTarget && (
