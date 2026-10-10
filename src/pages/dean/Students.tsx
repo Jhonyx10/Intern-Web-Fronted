@@ -181,7 +181,8 @@ const StudentsPage = () => {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                    <select
+                   {user?.role?.name === 'super_admin' && (
+                     <select
                         value={departmentFilter}
                         onChange={(event) => setDepartmentFilter(event.target.value)}
                         className="rounded-lg border border-[var(--color-line)] bg-white/80 px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
@@ -192,6 +193,7 @@ const StudentsPage = () => {
                             </option>
                         ))}
                     </select>
+                   )}
 
                     <select
                         value={companyFilter}

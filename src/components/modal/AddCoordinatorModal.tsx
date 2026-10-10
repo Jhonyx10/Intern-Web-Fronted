@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 type AddCoordinatorModalProps = {
@@ -10,6 +12,7 @@ type AddCoordinatorModalProps = {
     name: string;
     email: string;
     course_id: number;
+    section_id?: number;
   }) => void;
   isLoading?: boolean;
 };
@@ -42,9 +45,28 @@ export function AddCoordinatorModal({
   onAdd,
   isLoading,
 }: AddCoordinatorModalProps) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [sectionId, setSectionId] = useState<string>("");
+
+  // Fetch current active school year to get available sections for Dean/Coordinator
+  const { data: currentSchoolYear } = useQuery<{
+    id: number;
+    sections?: Array<{
+      id: number;
+      name: string;
+      code?: string | null;
+      coordinator?: { id: number; name: string } | null;
+    }>;
+  }>({
+    queryKey: ["school-years", "current"],
+    queryFn: () => apiRequest("/school-years/current", { token }),
+    enabled: Boolean(open && token),
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const availableSections = currentSchoolYear?.sections ?? [];
 
   useEffect(() => {
     if (!open) return;
@@ -60,6 +82,7 @@ export function AddCoordinatorModal({
     if (!open) {
       setName("");
       setEmail("");
+      setSectionId("");
     }
   }, [open]);
 
@@ -70,6 +93,7 @@ export function AddCoordinatorModal({
       name: name.trim(),
       email: email.trim(),
       course_id: Number(user.course.id),
+      section_id: sectionId ? Number(sectionId) : undefined,
     });
   }
 
@@ -144,6 +168,30 @@ export function AddCoordinatorModal({
                     required
                     className="rounded-xl border border-[var(--color-line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
                   />
+                </label>
+
+                <label className="flex flex-col gap-1.5 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-[var(--color-ink)]">
+                      Assigned Section
+                    </span>
+                    <span className="text-[11px] text-[var(--color-muted)]">
+                      Optional
+                    </span>
+                  </div>
+                  <select
+                    value={sectionId}
+                    onChange={(e) => setSectionId(e.target.value)}
+                    className="rounded-xl border border-[var(--color-line)] px-3 py-2.5 text-sm bg-white outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                  >
+                    <option value="">No section assigned yet</option>
+                    {availableSections.map((sec) => (
+                      <option key={sec.id} value={sec.id}>
+                        {sec.name} {sec.code ? `(${sec.code})` : ""}{" "}
+                        {sec.coordinator ? `— Assigned to ${sec.coordinator.name}` : ""}
+                      </option>
+                    ))}
+                  </select>
                 </label>
 
                 <p className="text-xs text-[var(--color-muted)]">

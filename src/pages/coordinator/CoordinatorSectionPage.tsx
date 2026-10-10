@@ -2,13 +2,23 @@ import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { sectionQueries } from "@/lib/queries/section";
 import { useAuth } from "@/lib/auth";
-import { Users2, AlertCircle, Eye, BookOpen, Send } from "lucide-react";
+import {
+  Users2,
+  AlertCircle,
+  Eye,
+  BookOpen,
+  Send,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { SendEvaluationModal } from "@/components/modal/SendEvaluationModal";
 import {
   useEvaluationTemplates,
   useBulkAssignEvaluations,
 } from "@/lib/queries/evaluation";
+
+const PAGE_SIZE = 10;
 
 const AVATAR_STYLES = [
   "bg-emerald-50 text-emerald-700",
@@ -29,6 +39,93 @@ function avatarStyle(seed: string) {
   return AVATAR_STYLES[hash];
 }
 
+// Page buttons with ellipses, e.g. 1 … 4 5 6 … 12
+function getPageItems(current: number, total: number): (number | "…")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+
+  const items: (number | "…")[] = [1];
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+
+  if (start > 2) items.push("…");
+  for (let i = start; i <= end; i++) items.push(i);
+  if (end < total - 1) items.push("…");
+  items.push(total);
+
+  return items;
+}
+
+function Pagination({
+  page,
+  totalPages,
+  totalItems,
+  onChange,
+}: {
+  page: number;
+  totalPages: number;
+  totalItems: number;
+  onChange: (page: number) => void;
+}) {
+  const from = (page - 1) * PAGE_SIZE + 1;
+  const to = Math.min(page * PAGE_SIZE, totalItems);
+
+  return (
+    <div className="flex flex-col items-center justify-between gap-3 border-t border-[var(--color-line)] px-6 py-3.5 sm:flex-row">
+      <p className="text-xs text-[var(--color-muted)]">
+        Showing {from}–{to} of {totalItems} students
+      </p>
+
+      <nav className="flex items-center gap-1" aria-label="Pagination">
+        <button
+          type="button"
+          onClick={() => onChange(page - 1)}
+          disabled={page === 1}
+          aria-label="Previous page"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--color-line)] bg-white text-[var(--color-ink)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ChevronLeft size={14} />
+        </button>
+
+        {getPageItems(page, totalPages).map((item, i) =>
+          item === "…" ? (
+            <span
+              key={`gap-${i}`}
+              className="px-1 text-xs text-[var(--color-muted)]"
+            >
+              …
+            </span>
+          ) : (
+            <button
+              key={item}
+              type="button"
+              onClick={() => onChange(item)}
+              aria-label={`Page ${item}`}
+              aria-current={item === page ? "page" : undefined}
+              className={`grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-semibold transition ${
+                item === page
+                  ? "bg-[var(--color-accent)] text-white"
+                  : "border border-[var(--color-line)] bg-white text-[var(--color-ink)] hover:bg-slate-50"
+              }`}
+            >
+              {item}
+            </button>
+          )
+        )}
+
+        <button
+          type="button"
+          onClick={() => onChange(page + 1)}
+          disabled={page === totalPages}
+          aria-label="Next page"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--color-line)] bg-white text-[var(--color-ink)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ChevronRight size={14} />
+        </button>
+      </nav>
+    </div>
+  );
+}
+
 export function CoordinatorSectionPage() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
@@ -38,7 +135,8 @@ export function CoordinatorSectionPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(
     null
   );
-   const [showConfirm, setShowConfirm] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [page, setPage] = useState(1);
   const tabRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const [indicator, setIndicator] = useState<{
     left: number;
@@ -54,14 +152,19 @@ export function CoordinatorSectionPage() {
     enabled: Boolean(user && token && user.role?.name === "coordinator"),
   });
 
-const { mutate: bulkAssign, isPending } = useBulkAssignEvaluations(token);
+  const { mutate: bulkAssign, isPending } = useBulkAssignEvaluations(token);
   const { data: templates = [] } = useEvaluationTemplates(token);
-  
+
   useEffect(() => {
     if (sections && sections.length > 0 && !selectedSectionId) {
       setSelectedSectionId(sections[0].id);
     }
   }, [sections, selectedSectionId]);
+
+  // Start from the first page whenever the coordinator switches sections
+  useEffect(() => {
+    setPage(1);
+  }, [selectedSectionId]);
 
   // Track the active tab's position/width so the pill can slide to it
   useLayoutEffect(() => {
@@ -158,6 +261,14 @@ const { mutate: bulkAssign, isPending } = useBulkAssignEvaluations(token);
   const unassignedCount = students.filter(
     (s) => !s.companies || s.companies.length === 0
   ).length;
+
+  // Pagination (the stats above still count every student in the section)
+  const totalPages = Math.max(1, Math.ceil(students.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedStudents = students.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
 
   return (
     <section className="space-y-6">
@@ -291,7 +402,7 @@ const { mutate: bulkAssign, isPending } = useBulkAssignEvaluations(token);
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--color-line)]">
-                    {students.map((student) => (
+                    {pagedStudents.map((student) => (
                       <tr
                         key={student.id}
                         className="transition-colors hover:bg-slate-50/60"
@@ -368,7 +479,7 @@ const { mutate: bulkAssign, isPending } = useBulkAssignEvaluations(token);
 
               {/* Cards — mobile */}
               <div className="divide-y divide-[var(--color-line)] md:hidden">
-                {students.map((student) => (
+                {pagedStudents.map((student) => (
                   <div key={student.id} className="p-4">
                     <div className="flex items-center gap-3">
                       <div
@@ -424,6 +535,16 @@ const { mutate: bulkAssign, isPending } = useBulkAssignEvaluations(token);
                   </div>
                 ))}
               </div>
+
+              {/* Pagination — only when there is more than one page */}
+              {students.length > PAGE_SIZE && (
+                <Pagination
+                  page={currentPage}
+                  totalPages={totalPages}
+                  totalItems={students.length}
+                  onChange={setPage}
+                />
+              )}
             </>
           ) : (
             <div className="p-14 text-center text-sm text-[var(--color-muted)]">

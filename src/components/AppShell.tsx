@@ -75,7 +75,7 @@ const navItems: NavItem[] = [
     end: false,
     icon: History,
     section: 'academic',
-    roles:["dean", "coordinator"],
+    roles: ["dean", "coordinator"],
   },
 
   // People
@@ -144,6 +144,14 @@ const navItems: NavItem[] = [
     icon: BuildingIcon,
     section: 'internship',
     roles: ["supervisor"],
+  },
+  {
+    to: "/attendance",
+    label: "Attendance",
+    end: true,
+    icon: Calendar1Icon,
+    section: 'internship',
+    roles: ["dean", "coordinator"],
   },
   {
     to: "/supervisor/attendance",

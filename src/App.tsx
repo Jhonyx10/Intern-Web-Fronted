@@ -31,6 +31,7 @@ import StudentLiveTracker from "./pages/coordinator/StudentLiveTracker";
 import CompanyInfo from "./pages/supervisor/CompanyInfo";
 import CourseDetailsPage from "./pages/details/CourseDetails";
 import EvaluationPage from "./pages/dean/Evaluation";
+import EvaluationSubmissionsPage from "./pages/details/EvaluationSumissionPage";
 import CreateEvaluationTemplatePage from "./pages/forms/CreateEvaluationTemplatePage";
 import { EditEvaluationTemplatePage } from "./pages/forms/EditEvaluationTemplatePage";
 import EvaluationTemplateDetails from "./pages/details/EvaluationTemplateDetails";
@@ -42,6 +43,8 @@ import HistoryPage from "./pages/admin/HistoryPage";
 import HistoryDetailsPage from "./pages/details/HistoryDetailsPage";
 import SchoolYearDetailsPage from "./pages/details/SchoolYearDetailsPage";
 import DepartmentDocumentsPage from "./pages/details/DepartmentDocumentsPage";
+
+import AttendancePage from "./pages/dean/AttendancePage";
 
 function AppContent() {
   const { user } = useAuth();
@@ -78,6 +81,10 @@ function AppContent() {
               <Route
                 path="/evaluation/details/:id"
                 element={<EvaluationTemplateDetails />}
+              />
+              <Route
+                path="/evaluation/submissions/:id"
+                element={<EvaluationSubmissionsPage />}
               />
               <Route
                 path="/evaluation/edit/:id"
@@ -129,6 +136,10 @@ function AppContent() {
               <Route
                 path="student/live/location"
                 element={<StudentLiveTracker />}
+              />
+              <Route
+                path="/attendance"
+                element={<AttendancePage />}
               />
               <Route
                 path="/supervisor/attendance"

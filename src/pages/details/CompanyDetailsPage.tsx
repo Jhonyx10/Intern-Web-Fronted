@@ -194,20 +194,22 @@ export function CompanyDetailsPage() {
                                         >
                                             <User2 size={16} /> Add Supervisor
                                         </button>
-                                        <button
-                                            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:bg-slate-50"
-                                            onClick={() => {
-                                                setIsAssignModalOpen(true)
-                                                setIsActionsMenuOpen(false)
-                                            }}
-                                        >
-                                            <Users2 size={16} /> Assign Student
-                                        </button>
                                     </div>
                                 </motion.div>
                             )}
                         </AnimatePresence>
                     </div>
+                )}
+
+                {/* Coordinators get a dedicated button instead of the actions menu */}
+                {user?.role?.name === 'coordinator' && (
+                    <button
+                        type="button"
+                        onClick={() => setIsAssignModalOpen(true)}
+                        className="inline-flex h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
+                    >
+                        <Users2 size={16} /> Assign Student
+                    </button>
                 )}
             </div>
 
@@ -421,7 +423,7 @@ export function CompanyDetailsPage() {
                     <div className="border-b border-[var(--color-line)] px-6 py-4">
                         <h2 className="text-lg font-semibold flex items-center gap-2">
                             <Users2 size={18} className="text-[var(--color-muted)]" />
-                            Assigned Students <span className="text-sm font-normal text-[var(--color-muted)]">({company.students.length})</span>
+                            Deployed Students <span className="text-sm font-normal text-[var(--color-muted)]">({company.students.length})</span>
                         </h2>
                     </div>
                     {company.students.length > 0 ? (

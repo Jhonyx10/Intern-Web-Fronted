@@ -90,6 +90,40 @@ export const useEvaluationTemplates = (token?: string | null) => {
     queryFn: () => apiRequest<EvaluationTemplateDetail[]>('/evaluation-templates', { token }), // Adjust endpoint path if yours differs
   });
 };
+
+export interface EvaluationSubmission {
+  id: number;
+  computed_score: number | null;
+  submitted_at: string | null;
+  responses: Record<number, any> | null;
+  items?: Array<{
+    id: number;
+    sort_order: number;
+    item_type: 'rating' | 'single_choice' | 'multiple_choice' | 'text' | 'textarea';
+    label: string;
+    options: string | null;
+    is_required: boolean | number;
+  }>;
+  student: {
+    name: string;
+    student_number: string;
+  } | null;
+  evaluator: string | null;
+  company_name?: string | null;
+  course_code: string | null;
+  section_code: string | null;
+  school_year: string | null;
+}
+
+/** Fetch all supervisor-submitted evaluations for a given template. */
+export const useEvaluationSubmissions = (templateId?: number | string, token?: string | null) => {
+  return useQuery({
+    queryKey: ['evaluation-submissions', templateId],
+    queryFn: () =>
+      apiRequest<EvaluationSubmission[]>(`/evaluation-templates/${templateId}/submissions`, { token }),
+    enabled: !!templateId,
+  });
+};
 // Fetch unread notifications for a user
 export const useUnreadNotifications = (userId?: number, token?: string | null) => {
   return useQuery({

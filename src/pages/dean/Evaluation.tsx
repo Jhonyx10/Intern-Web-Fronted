@@ -9,6 +9,7 @@ import {
   Copy,
   MoreHorizontal,
   Loader2,
+  ClipboardList,
 } from "lucide-react";
 import {
   useEvaluationTemplates,
@@ -16,9 +17,13 @@ import {
   type EvaluationTemplateDetail,
 } from "@/lib/queries/evaluation";
 import { useAuth } from "@/lib/auth";
+import { EvaluationPreviewModal } from "@/components/modal/EvaluationPreviewModal";
 
 type QuickFilter = "all" | "editable" | "locked";
 type StatusFilter = "all" | "active" | "inactive";
+
+// The list endpoint also returns how many evaluations were submitted
+type TemplateRow = EvaluationTemplateDetail & { submitted_count?: number };
 
 function formatDate(value: string) {
   const d = new Date(value);
@@ -146,6 +151,7 @@ export const EvaluationPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [previewTemplateId, setPreviewTemplateId] = useState<number | string | null>(null);
 
   const { data: templates = [], isLoading } = useEvaluationTemplates();
   const duplicateMutation = useDuplicateEvaluationTemplate();
@@ -262,11 +268,10 @@ export const EvaluationPage: React.FC = () => {
                     key={pill.key}
                     type="button"
                     onClick={() => setQuickFilter(pill.key)}
-                    className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                      active
-                        ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
-                        : "text-[var(--color-muted)] hover:bg-slate-50 hover:text-[var(--color-ink)]"
-                    }`}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold transition ${active
+                      ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
+                      : "text-[var(--color-muted)] hover:bg-slate-50 hover:text-[var(--color-ink)]"
+                      }`}
                   >
                     {pill.label} ({pill.count})
                   </button>
@@ -327,9 +332,10 @@ export const EvaluationPage: React.FC = () => {
                 </tr>
               ) : filteredTemplates.length > 0 ? (
                 <AnimatePresence>
-                  {filteredTemplates.map((template: EvaluationTemplateDetail) => {
+                  {filteredTemplates.map((template: TemplateRow) => {
                     const used = Boolean(template.is_used);
                     const schoolYears = template.used_in_school_years ?? [];
+                    const submittedCount = template.submitted_count;
 
                     return (
                       <motion.tr
@@ -398,14 +404,12 @@ export const EvaluationPage: React.FC = () => {
                         <td className="px-4 py-4">
                           <div className="flex flex-col items-start gap-1">
                             <span
-                              className={`inline-flex items-center gap-1.5 text-xs font-medium ${
-                                used ? "text-emerald-700" : "text-amber-700"
-                              }`}
+                              className={`inline-flex items-center gap-1.5 text-xs font-medium ${used ? "text-emerald-700" : "text-amber-700"
+                                }`}
                             >
                               <span
-                                className={`h-1.5 w-1.5 rounded-full ${
-                                  used ? "bg-emerald-500" : "bg-amber-500"
-                                }`}
+                                className={`h-1.5 w-1.5 rounded-full ${used ? "bg-emerald-500" : "bg-amber-500"
+                                  }`}
                               />
                               {used ? "Used / locked" : "Editable"}
                             </span>
@@ -420,38 +424,61 @@ export const EvaluationPage: React.FC = () => {
                         {/* Actions */}
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-2">
+                            {/* Preview the questionnaire itself */}
                             <button
                               type="button"
-                              onClick={() =>
-                                navigate(`/evaluation/details/${template.id}`)
-                              }
+                              onClick={() => setPreviewTemplateId(template.id)}
+                              title="Preview the questionnaire"
                               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-3 text-xs font-semibold text-[var(--color-ink)] transition hover:bg-slate-50"
                             >
-                              <Eye size={13} /> View
+                              <Eye size={13} /> Preview
                             </button>
+
+                            {/* List of evaluations answered and submitted */}
+                            {user?.role?.name !== 'super_admin' && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  navigate(`/evaluation/submissions/${template.id}`)
+                                }
+                                title="View submitted evaluations"
+                                className="relative inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-3 text-xs font-semibold text-[var(--color-ink)] transition hover:bg-slate-50"
+                              >
+                                <ClipboardList size={13} /> Submissions
+                                {submittedCount !== undefined && submittedCount > 0 ? (
+                                  <span className="ml-0.5 inline-flex items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-xs animate-pulse">
+                                    {submittedCount}
+                                  </span>
+                                ) : (
+                                  <span className="ml-0.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                                    0
+                                  </span>
+                                )}
+                              </button>
+                            )}
 
                             {isSuperAdmin && (
                               <RowMenu
                                 items={
                                   used
                                     ? [
-                                        {
-                                          label: "Duplicate & edit",
-                                          icon: Copy,
-                                          onClick: () => duplicate(template),
-                                          disabled: duplicateMutation.isPending,
-                                        },
-                                      ]
+                                      {
+                                        label: "Duplicate & edit",
+                                        icon: Copy,
+                                        onClick: () => duplicate(template),
+                                        disabled: duplicateMutation.isPending,
+                                      },
+                                    ]
                                     : [
-                                        {
-                                          label: "Edit template",
-                                          icon: Edit3,
-                                          onClick: () =>
-                                            navigate(
-                                              `/evaluation/edit/${template.id}`
-                                            ),
-                                        },
-                                      ]
+                                      {
+                                        label: "Edit template",
+                                        icon: Edit3,
+                                        onClick: () =>
+                                          navigate(
+                                            `/evaluation/edit/${template.id}`
+                                          ),
+                                      },
+                                    ]
                                 }
                               />
                             )}
@@ -475,6 +502,12 @@ export const EvaluationPage: React.FC = () => {
           </table>
         </div>
       </section>
+
+      <EvaluationPreviewModal
+        isOpen={!!previewTemplateId}
+        templateId={previewTemplateId}
+        onClose={() => setPreviewTemplateId(null)}
+      />
     </motion.div>
   );
 };

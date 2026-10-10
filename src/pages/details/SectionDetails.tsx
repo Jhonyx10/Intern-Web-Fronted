@@ -314,7 +314,7 @@ export default function SectionDetailsPage() {
                                                     }}
                                                     className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--color-accent)] shadow-2xs hover:bg-[var(--color-accent-soft)] transition"
                                                 >
-                                                    <Eye size={13} /> View Details
+                                                    <Eye size={16} />
                                                 </button>
                                             </td>
                                         </tr>

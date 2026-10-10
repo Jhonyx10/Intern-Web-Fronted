@@ -64,10 +64,11 @@ const CoordinatorsPage = () => {
     const queryClient = useQueryClient()
 
     const addMutation = useMutation({
-        mutationFn: (data: { name: string; email: string; course_id?: number }) =>
+        mutationFn: (data: { name: string; email: string; course_id?: number; section_id?: number }) =>
             apiRequest('/coordinators', { method: 'POST', body: data, token }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.coordinators.all })
+            queryClient.invalidateQueries({ queryKey: queryKeys.schoolYears.all })
             setAddOpen(false)
             toastMutationSuccess('Coordinator added')
         },

@@ -81,7 +81,7 @@ export function CourseFormPage() {
                     to="/courses"
                     className="rounded-xl border border-[var(--color-line)] bg-white/80 px-4 py-2 text-sm font-medium text-[var(--color-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
                 >
-                    Back to courses
+                    Back to departments
                 </Link>
             </div>
 
@@ -91,14 +91,14 @@ export function CourseFormPage() {
                     className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white/80 p-6 shadow-[var(--shadow-soft)] backdrop-blur"
                 >
                     <div className="mb-6 flex items-baseline justify-between border-b border-[var(--color-line)] pb-4">
-                        <h3 className="text-xl font-semibold tracking-tight">Program details</h3>
+                        <h3 className="text-xl font-semibold tracking-tight">Department details</h3>
                         <span className="font-mono text-xs text-[var(--color-muted)]">FORM OJT-07</span>
                     </div>
 
                     <div className="space-y-5">
                         <div className="flex flex-col gap-1">
                             <label className="text-sm font-medium text-[var(--color-ink)]">
-                                Program code <span className="text-red-500">*</span>
+                                Department code <span className="text-red-500">*</span>
                             </label>
                             <p className="text-xs text-[var(--color-muted)]">unique, e.g. OJT-401</p>
                             <input
@@ -112,7 +112,7 @@ export function CourseFormPage() {
 
                         <div className="flex flex-col gap-1">
                             <label className="text-sm font-medium text-[var(--color-ink)]">
-                                Program name <span className="text-red-500">*</span>
+                                Department name <span className="text-red-500">*</span>
                             </label>
                             <p className="text-xs text-[var(--color-muted)]">e.g. Information Technology Internship</p>
                             <input
