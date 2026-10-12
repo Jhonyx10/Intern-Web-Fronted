@@ -9,6 +9,7 @@ import {
   ExternalLink,
   CalendarDays,
   CopyPlus,
+  History as HistoryIcon,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -277,6 +278,7 @@ const SchoolYearPage = () => {
   const canManage = roleName === "superadmin" || roleName === "super_admin";
 
   const [search, setSearch] = useState("");
+  const [view, setView] = useState<"current" | "history">("current");
   const [addSyOpen, setAddSyOpen] = useState(false);
   const [editSyTarget, setEditSyTarget] = useState<SchoolYearData | null>(null);
   const [settingsTarget, setSettingsTarget] = useState<SchoolYearData | null>(
@@ -293,16 +295,32 @@ const SchoolYearPage = () => {
     enabled: Boolean(token),
   });
 
+  // History = ended years; Current = everything else (current, ongoing, draft)
+  const counts = useMemo(() => {
+    const ended = schoolYears.filter((sy) => getYearStatus(sy) === "ended").length;
+    return { current: schoolYears.length - ended, history: ended };
+  }, [schoolYears]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return schoolYears;
-    return schoolYears.filter(
-      (sy) =>
-        sy.name.toLowerCase().includes(q) ||
-        (sy.semester ?? "").toLowerCase().includes(q) ||
-        STATUS_BADGE[getYearStatus(sy)].label.toLowerCase().includes(q)
-    );
-  }, [schoolYears, search]);
+
+    const list = schoolYears
+      .filter((sy) => (getYearStatus(sy) === "ended") === (view === "history"))
+      .filter(
+        (sy) =>
+          !q ||
+          sy.name.toLowerCase().includes(q) ||
+          (sy.semester ?? "").toLowerCase().includes(q) ||
+          STATUS_BADGE[getYearStatus(sy)].label.toLowerCase().includes(q)
+      );
+
+    // History: most recently ended first
+    return view === "history"
+      ? [...list].sort((a, b) =>
+          (b.end_date ?? "").localeCompare(a.end_date ?? "")
+        )
+      : list;
+  }, [schoolYears, search, view]);
 
   const addSyMutation = useMutation({
     mutationFn: (data: SchoolYearPayload) =>
@@ -459,6 +477,42 @@ const SchoolYearPage = () => {
         </div>
       </motion.div>
 
+      {/* Current / History toggle */}
+      <div className="mt-5 inline-flex rounded-lg border border-[var(--color-line)] bg-white p-1">
+        {(
+          [
+            { key: "current", label: "Current", Icon: CalendarDays, count: counts.current },
+            { key: "history", label: "History", Icon: HistoryIcon, count: counts.history },
+          ] as const
+        ).map(({ key, label, Icon, count }) => {
+          const active = view === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setView(key)}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                active
+                  ? "bg-[var(--color-accent)] text-white shadow-sm"
+                  : "text-[var(--color-muted)] hover:bg-slate-50"
+              }`}
+            >
+              <Icon size={14} />
+              {label}
+              <span
+                className={`rounded-full px-1.5 text-[11px] font-semibold ${
+                  active
+                    ? "bg-white/20 text-white"
+                    : "bg-slate-100 text-[var(--color-muted)]"
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Content */}
       {isLoading ? (
         <div className="mt-10 flex items-center justify-center">
@@ -477,16 +531,23 @@ const SchoolYearPage = () => {
             <CalendarDays size={16} />
           </div>
           <p className="mt-3 text-sm font-medium text-[var(--color-ink)]">
-            {search ? "No matching school years" : "No school years yet"}
+            {search
+              ? "No matching school years"
+              : view === "history"
+                ? "No past school years"
+                : "No school years yet"}
           </p>
           <p className="mt-1 text-xs text-[var(--color-muted)]">
             {search
               ? "Try a different search."
-              : "Add a school year to get started."}
+              : view === "history"
+                ? "School years move here after their internship period ends."
+                : "Add a school year to get started."}
           </p>
         </div>
       ) : (
         <motion.div
+          key={view}
           variants={listVariants}
           initial="hidden"
           animate="show"

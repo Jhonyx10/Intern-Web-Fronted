@@ -1,12 +1,13 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Loader2, AlertCircle, ClipboardList, Repeat, CalendarDays } from "lucide-react";
+import { X, Loader2, AlertCircle, ClipboardList, Repeat, CalendarDays, Layers, Building } from "lucide-react";
 import { useCreateDocumentRequirement } from "@/lib/queries/documents";
 import { useCourses } from "@/lib/queries/courses";
 import { firstErrorMessage } from "@/lib/utils/errors";
 import { useTheme } from "@/context/ThemeContext";
 
 type Recurrence = "none" | "daily" | "weekly";
+type DocumentType = "common" | "departmental";
 
 export function CreateRequirementModal({
   visible,
@@ -22,6 +23,7 @@ export function CreateRequirementModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [recurrence, setRecurrence] = useState<Recurrence>("none");
+  const [documentType, setDocumentType] = useState<DocumentType>("common");
   const [selectedCourseIds, setSelectedCourseIds] = useState<Set<number>>(
     new Set()
   );
@@ -32,8 +34,22 @@ export function CreateRequirementModal({
     () => (courses ?? []).map((c) => Number(c.id)),
     [courses]
   );
-  const allSelected =
-    allCourseIds.length > 0 && selectedCourseIds.size === allCourseIds.length;
+
+  // Auto-check all departments whenever Common is active
+  useEffect(() => {
+    if (documentType === "common" && allCourseIds.length > 0) {
+      setSelectedCourseIds(new Set(allCourseIds));
+    }
+  }, [documentType, allCourseIds]);
+
+  const handleDocumentTypeChange = (type: DocumentType) => {
+    setDocumentType(type);
+    if (type === "common") {
+      setSelectedCourseIds(new Set(allCourseIds));
+    } else {
+      setSelectedCourseIds(new Set());
+    }
+  };
 
   const toggleCourse = (id: number) => {
     setSelectedCourseIds((prev) => {
@@ -43,14 +59,11 @@ export function CreateRequirementModal({
     });
   };
 
-  const toggleAll = () => {
-    setSelectedCourseIds(allSelected ? new Set() : new Set(allCourseIds));
-  };
-
   const reset = () => {
     setTitle("");
     setDescription("");
     setRecurrence("none");
+    setDocumentType("common");
     setSelectedCourseIds(new Set());
     setDeadline("");
     setError(null);
@@ -66,17 +79,25 @@ export function CreateRequirementModal({
       setError("Title is required.");
       return;
     }
-    if (selectedCourseIds.size > 0 && !deadline) {
-      setError("Please set a deadline for the selected departments.");
+    const isRecurring = recurrence !== "none";
+    const targetCourseIds =
+      documentType === "common"
+        ? allCourseIds
+        : Array.from(selectedCourseIds);
+
+    if (documentType === "departmental" && targetCourseIds.length === 0) {
+      setError("Please select at least one department for departmental requirements.");
       return;
     }
+
     try {
       await createRequirement.mutateAsync({
         title: title.trim(),
         description: description.trim() || undefined,
         recurrence,
-        course_ids: Array.from(selectedCourseIds),
-        deadline_at: selectedCourseIds.size > 0 ? deadline : undefined,
+        document_type: documentType,
+        course_ids: targetCourseIds,
+        deadline_at: (!isRecurring && deadline) ? deadline : undefined,
       });
       reset();
       onClose();
@@ -204,70 +225,123 @@ export function CreateRequirementModal({
                 )}
               </div>
 
-              {/* Assign to departments */}
+              {/* Document Type (Common vs Departmental) */}
               <div>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <label className="block text-[11px] font-semibold text-slate-500">
-                    Assign to departments (optional)
-                  </label>
-                  {allCourseIds.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={toggleAll}
-                      className="text-[11px] font-semibold hover:underline"
-                      style={{ color: themeColor }}
-                    >
-                      {allSelected ? "Clear all" : "Select all"}
-                    </button>
-                  )}
-                </div>
+                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">
+                  Document Type
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDocumentTypeChange("common")}
+                    className={`flex flex-col items-start gap-1 rounded-xl border p-2.5 text-left transition ${documentType === "common"
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)]/40 shadow-xs"
+                      : "border-slate-200 bg-slate-50 hover:bg-white"
+                      }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Layers size={13} style={{ color: documentType === "common" ? themeColor : "#64748b" }} />
+                      <span className="text-[12px] font-bold text-slate-800">
+                        Common
+                      </span>
+                    </div>
+                    <span className="text-[10.5px] text-slate-500 leading-tight">
+                      Auto-applies to all departments
+                    </span>
+                  </button>
 
-                <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50">
-                  {loadingCourses ? (
-                    <p className="px-3 py-3 text-[12px] text-slate-400">
-                      Loading departments…
-                    </p>
-                  ) : (courses ?? []).length === 0 ? (
-                    <p className="px-3 py-3 text-[12px] text-slate-400">
-                      No departments found.
-                    </p>
-                  ) : (
-                    (courses ?? []).map((c, index) => {
-                      const courseId = Number(c.id);
-                      const checked = selectedCourseIds.has(courseId);
-                      return (
-                        <label
-                          key={c.id}
-                          className={`flex cursor-pointer items-center gap-2.5 px-3 py-2 text-[13px] text-slate-700 transition hover:bg-white ${index !== 0 ? "border-t border-slate-200" : ""
-                            }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleCourse(courseId)}
-                            className="h-3.5 w-3.5"
-                            style={{ accentColor: themeColor }}
-                          />
-                          <span className="font-mono text-[11px] text-slate-400">
-                            {c.code}
-                          </span>
-                          <span className="truncate">{c.name}</span>
-                        </label>
-                      );
-                    })
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleDocumentTypeChange("departmental")}
+                    className={`flex flex-col items-start gap-1 rounded-xl border p-2.5 text-left transition ${documentType === "departmental"
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)]/40 shadow-xs"
+                      : "border-slate-200 bg-slate-50 hover:bg-white"
+                      }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Building size={13} style={{ color: documentType === "departmental" ? themeColor : "#64748b" }} />
+                      <span className="text-[12px] font-bold text-slate-800">
+                        Departmental
+                      </span>
+                    </div>
+                    <span className="text-[10.5px] text-slate-500 leading-tight">
+                      Selected departments only
+                    </span>
+                  </button>
                 </div>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  {selectedCourseIds.size} selected. You can change this later
-                  with "Assign to department".
-                </p>
               </div>
 
-              {/* Deadline */}
-              {selectedCourseIds.size > 0 && (
+              {/* Assign to departments */}
+              <div>
+                <div className="mb-1.5">
+                  <label className="block text-[11px] font-semibold text-slate-500">
+                    {documentType === "common" ? "Departments (all included)" : "Assign to departments"}
+                  </label>
+                </div>
+
+                {documentType === "common" ? (
+                  <div
+                    className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[12px] font-medium"
+                    style={{
+                      borderColor: `${themeColor}40`,
+                      backgroundColor: "var(--color-accent-soft)",
+                      color: "var(--color-ink)",
+                    }}
+                  >
+                    <Layers size={14} style={{ color: themeColor }} className="shrink-0" />
+                    <span>
+                      All <strong>{allCourseIds.length}</strong> departments are automatically assigned for this common requirement.
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50">
+                      {loadingCourses ? (
+                        <p className="px-3 py-3 text-[12px] text-slate-400">
+                          Loading departments…
+                        </p>
+                      ) : (courses ?? []).length === 0 ? (
+                        <p className="px-3 py-3 text-[12px] text-slate-400">
+                          No departments found.
+                        </p>
+                      ) : (
+                        (courses ?? []).map((c, index) => {
+                          const courseId = Number(c.id);
+                          const checked = selectedCourseIds.has(courseId);
+                          return (
+                            <label
+                              key={c.id}
+                              className={`flex cursor-pointer items-center gap-2.5 px-3 py-2 text-[13px] text-slate-700 transition hover:bg-white ${index !== 0 ? "border-t border-slate-200" : ""
+                                }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleCourse(courseId)}
+                                className="h-3.5 w-3.5"
+                                style={{ accentColor: themeColor }}
+                              />
+                              <span className="font-mono text-[11px] text-slate-400">
+                                {c.code}
+                              </span>
+                              <span className="truncate">{c.name}</span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      {selectedCourseIds.size} of {allCourseIds.length} selected.
+                    </p>
+                  </>
+                )}
+              </div>
+
+              {/* Deadline (shown for one-time requirements, hidden for daily/weekly) */}
+              {recurrence === "none" && (
                 <div>
                   <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">
-                    Deadline for selected departments
+                    Deadline {selectedCourseIds.size > 0 ? "for selected departments" : ""} <span className="font-normal text-slate-400">(optional)</span>
                   </label>
                   <input
                     type="date"
@@ -276,6 +350,11 @@ export function CreateRequirementModal({
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] text-slate-800 outline-none transition"
                     style={{ borderColor: deadline ? `${themeColor}55` : undefined }}
                   />
+                  {selectedCourseIds.size === 0 && (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      If departments are selected, this deadline will be assigned to them.
+                    </p>
+                  )}
                 </div>
               )}
 

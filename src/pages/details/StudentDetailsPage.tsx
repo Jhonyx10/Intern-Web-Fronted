@@ -343,7 +343,7 @@ export function StudentDetailsPage() {
             </div>
           </div>
 
-          {/* Section & Program Badges */}
+          {/* Section, School Year & Program Badges */}
           <div className="flex flex-wrap gap-2.5">
             {student.section && (
               <div className="rounded-xl border border-[var(--color-line)] bg-slate-50 px-3.5 py-2">
@@ -352,6 +352,17 @@ export function StudentDetailsPage() {
                 </p>
                 <p className="text-xs font-bold text-[var(--color-ink)]">
                   {student.section.name}
+                </p>
+              </div>
+            )}
+
+            {(student.section?.school_year?.name || student.section?.schoolYear?.name) && (
+              <div className="rounded-xl border border-[var(--color-line)] bg-amber-50/60 px-3.5 py-2">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-amber-700">
+                  School Year
+                </p>
+                <p className="text-xs font-bold text-amber-900">
+                  {student.section?.school_year?.name ?? student.section?.schoolYear?.name}
                 </p>
               </div>
             )}

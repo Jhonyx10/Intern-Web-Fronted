@@ -71,7 +71,10 @@ export type Company = {
   students?: Student[]
   supervisors?: Supervisor[]
   buildings?: Building[]
-  evaluations: Evaluation[]
+  evaluations?: Evaluation[]
+  school_years?: SchoolYear[]
+  active_school_years?: string[]
+  total_school_years_count?: number
 }
 
 export type CompanyRequest = {
@@ -276,7 +279,8 @@ export type Section = {
   id: number
   course_id: number
   course_major_id: number | null
-  school_year_id: number
+  school_year_id?: number | null
+  schoolYear?: SchoolYear | null
   name: string
   code: string | null
   coordinator_user_id: number | null

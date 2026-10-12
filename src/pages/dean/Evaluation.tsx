@@ -311,8 +311,9 @@ export const EvaluationPage: React.FC = () => {
             <thead>
               <tr className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
                 <th className="px-6 py-3.5">Template</th>
+                <th className="px-4 py-3.5">School Year</th>
                 <th className="px-4 py-3.5">Questions</th>
-                <th className="px-4 py-3.5">Usage</th>
+                <th className="px-4 py-3.5">Anchored Usage</th>
                 <th className="px-4 py-3.5">State</th>
                 <th className="px-6 py-3.5 text-right">Actions</th>
               </tr>
@@ -320,7 +321,7 @@ export const EvaluationPage: React.FC = () => {
             <tbody className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-14 text-center">
+                  <td colSpan={6} className="px-6 py-14 text-center">
                     <Loader2
                       className="mx-auto animate-spin text-[var(--color-accent)]"
                       size={24}
@@ -336,6 +337,8 @@ export const EvaluationPage: React.FC = () => {
                     const used = Boolean(template.is_used);
                     const schoolYears = template.used_in_school_years ?? [];
                     const submittedCount = template.submitted_count;
+                    const anchoredCount = template.anchored_school_years_count ?? schoolYears.length;
+                    const createdSchoolYear = template.created_school_year || (schoolYears[0] ?? "—");
 
                     return (
                       <motion.tr
@@ -364,6 +367,13 @@ export const EvaluationPage: React.FC = () => {
                           )}
                         </td>
 
+                        {/* School Year */}
+                        <td className="px-4 py-4 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                            S.Y. {createdSchoolYear}
+                          </span>
+                        </td>
+
                         {/* Questions */}
                         <td className="px-4 py-4">
                           <span className="inline-flex items-center rounded-full border border-[var(--color-line)] bg-slate-50 px-2.5 py-0.5 text-xs font-semibold text-[var(--color-ink)]">
@@ -374,30 +384,11 @@ export const EvaluationPage: React.FC = () => {
 
                         {/* Usage */}
                         <td className="px-4 py-4">
-                          {schoolYears.length > 0 ? (
-                            <div className="flex flex-wrap gap-1.5">
-                              {schoolYears.slice(0, 2).map((sy) => (
-                                <span
-                                  key={sy}
-                                  className="inline-flex items-center rounded-md border border-[var(--color-line)] bg-white px-2 py-0.5 text-xs font-medium text-[var(--color-ink)]"
-                                >
-                                  {sy}
-                                </span>
-                              ))}
-                              {schoolYears.length > 2 && (
-                                <span
-                                  className="inline-flex items-center rounded-md border border-[var(--color-line)] bg-white px-2 py-0.5 text-xs font-medium text-[var(--color-muted)]"
-                                  title={schoolYears.slice(2).join(", ")}
-                                >
-                                  +{schoolYears.length - 2}
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs italic text-[var(--color-muted)]">
-                              Not used yet
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center justify-center rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-xs font-bold text-slate-700">
+                              {anchoredCount} {anchoredCount === 1 ? "school year" : "school years"}
                             </span>
-                          )}
+                          </div>
                         </td>
 
                         {/* State */}

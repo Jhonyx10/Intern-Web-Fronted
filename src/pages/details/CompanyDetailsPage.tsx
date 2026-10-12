@@ -11,7 +11,7 @@ import {
 import { useCompany } from '@/lib/queries/companies'
 import { formatDistance, formatDuration, haversineMeters, OCC_CENTER, OCC_NAME } from '@/lib/geo'
 import { type MapRouteInfo } from '@/components/MapboxMap'
-import { Building2, MapPin, Phone, Mail, User2, Users2, Shield, ShieldOff, Navigation, ArrowLeft, MoreVertical } from 'lucide-react'
+import { Building2, MapPin, Phone, Mail, User2, Users2, Shield, ShieldOff, Navigation, ArrowLeft, MoreVertical, Calendar } from 'lucide-react'
 import AssignStudentModal from '@/components/modal/AssignStudentModal'
 import AddSupervisorModal from '@/components/modal/AddSupervisorModal'
 import { useAssignStudentToCompany, useCreateSupervisor, useToggleCompanyActive } from '@/lib/queries/companies'
@@ -131,9 +131,26 @@ export function CompanyDetailsPage() {
                         <ArrowLeft size={20} />
                     </button>
                     <div>
-                        <p className="text-[11px] font-semibold tracking-[0.2em] text-[var(--color-accent)] uppercase">
-                            Companies
-                        </p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-[11px] font-semibold tracking-[0.2em] text-[var(--color-accent)] uppercase">
+                                Companies
+                            </p>
+                            {company.active_school_years && company.active_school_years.length > 0 && (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    {company.active_school_years.map((syName) => (
+                                        <span key={syName} className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                                            <Calendar size={11} />
+                                            S.Y. {syName}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                            {company.total_school_years_count != null && company.total_school_years_count > 0 && (
+                                <span className="rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
+                                    Partnered for {company.total_school_years_count} {company.total_school_years_count === 1 ? 'school year' : 'school years'}
+                                </span>
+                            )}
+                        </div>
                         <h2 className="text-3xl font-semibold tracking-tight">{company.name}</h2>
                         {company.address && (
                             <p className="mt-1 flex items-center gap-1.5 text-sm text-[var(--color-muted)]">
@@ -433,6 +450,7 @@ export function CompanyDetailsPage() {
                                     <tr>
                                         <th className="px-6 py-3 font-medium">Student No.</th>
                                         <th className="px-6 py-3 font-medium">Name</th>
+                                        <th className="px-6 py-3 font-medium">Section / S.Y.</th>
                                         <th className="px-6 py-3 font-medium">Status</th>
                                     </tr>
                                 </thead>
@@ -444,6 +462,20 @@ export function CompanyDetailsPage() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 {student.last_name}, {student.first_name} {student.middle_name || ''}
+                                            </td>
+                                            <td className="px-6 py-4 text-xs">
+                                                {student.section?.name ? (
+                                                    <div>
+                                                        <p className="font-medium text-[var(--color-ink)]">{student.section.name}</p>
+                                                        {(student.section.school_year?.name || student.section.schoolYear?.name) && (
+                                                            <p className="text-amber-700 font-medium">
+                                                                S.Y. {student.section.school_year?.name ?? student.section.schoolYear?.name}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[var(--color-muted)]">—</span>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4">
                                                 {student.is_active ? (

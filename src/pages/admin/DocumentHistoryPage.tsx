@@ -48,6 +48,7 @@ export function DocumentHistoryPage() {
                             <tr className="border-b bg-slate-50">
                                 <th className="py-3 px-5 text-xs text-[var(--color-muted)]">Document</th>
                                 <th className="py-3 px-5 text-xs text-[var(--color-muted)]">Student</th>
+                                <th className="py-3 px-5 text-xs text-[var(--color-muted)]">Section / S.Y.</th>
                                 <th className="py-3 px-5 text-xs text-[var(--color-muted)]">Date</th>
                                 <th className="py-3 px-5 text-xs text-[var(--color-muted)]">Download</th>
                             </tr>
@@ -61,6 +62,18 @@ export function DocumentHistoryPage() {
                                     </td>
                                     <td className="py-3 px-5 text-sm text-[var(--color-muted)]">
                                         {doc.student?.first_name} {doc.student?.last_name}
+                                    </td>
+                                    <td className="py-3 px-5 text-xs text-[var(--color-muted)]">
+                                        {doc.student?.section?.name ? (
+                                            <div>
+                                                <p className="font-medium text-[var(--color-ink)]">{doc.student.section.name}</p>
+                                                {(doc.student.section.school_year?.name || doc.student.section.schoolYear?.name) && (
+                                                    <p className="text-amber-700 font-medium">S.Y. {doc.student.section.school_year?.name ?? doc.student.section.schoolYear?.name}</p>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            "—"
+                                        )}
                                     </td>
                                     <td className="py-3 px-5 text-sm text-[var(--color-muted)]">
                                         {doc.uploaded_at ? format(new Date(doc.uploaded_at), "PPP") : "N/A"}

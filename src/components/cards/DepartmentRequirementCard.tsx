@@ -35,6 +35,7 @@ export function DepartmentRequirementCards({
   results,
   themes = [],
   search = "",
+  schoolYear,
   onManage,
 }: {
   courses: Program[];
@@ -43,6 +44,8 @@ export function DepartmentRequirementCards({
   /** Per-course name, colors and logo from the settings table. */
   themes?: CourseTheme[];
   search?: string;
+  /** Active school year name */
+  schoolYear?: string;
   /** Opens the assign modal for a department. Omit to hide the button (read-only). */
   onManage?: (courseId: number) => void;
 }) {
@@ -127,9 +130,19 @@ export function DepartmentRequirementCards({
                       >
                         {displayName}
                       </h4>
-                      <p className="text-xs text-[var(--color-muted)] mt-0.5">
-                        {course.code} &middot; {isLoading ? "…" : requirements.length} Requirements
-                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap text-xs text-[var(--color-muted)] mt-0.5">
+                        <span>{course.code}</span>
+                        <span>&middot;</span>
+                        <span>{isLoading ? "…" : requirements.length} Requirements</span>
+                        {schoolYear && (
+                          <>
+                            <span>&middot;</span>
+                            <span className="inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.2 text-[10px] font-semibold text-amber-800">
+                              S.Y. {schoolYear}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
 

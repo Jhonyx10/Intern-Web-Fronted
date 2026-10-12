@@ -13,6 +13,7 @@ import {
     Users,
     X,
     XCircle,
+    CalendarDays,
 } from "lucide-react";
 import {
     useSubmittedDocuments,
@@ -20,6 +21,7 @@ import {
     useCourseDocumentRequirements,
     type SubmittedDocument,
 } from "@/lib/queries/documents";
+import { useCurrentSchoolYear } from "@/lib/queries/school-year";
 import { DocumentPreviewModal } from "@/components/modal/DocumentPreviewModal";
 
 // ─── animation variants ─────────────────────────────────────────────────────
@@ -163,9 +165,19 @@ function RequirementModal({ requirementTitle, docs, onClose, onPreview }: Requir
                                                     </div>
                                                     <div className="min-w-0">
                                                         <p className="truncate text-sm font-medium text-[var(--color-ink)]">{name}</p>
-                                                        {doc.student?.student_number && (
-                                                            <p className="text-xs text-[var(--color-muted)]">{doc.student.student_number}</p>
-                                                        )}
+                                                        <div className="flex items-center gap-1.5 flex-wrap text-xs text-[var(--color-muted)]">
+                                                            {doc.student?.student_number && (
+                                                                <span>{doc.student.student_number}</span>
+                                                            )}
+                                                            {doc.student?.section && (
+                                                                <span>· {doc.student.section.name}</span>
+                                                            )}
+                                                            {(doc.student?.section?.school_year?.name || doc.student?.section?.schoolYear?.name) && (
+                                                                <span className="text-amber-700 font-medium bg-amber-50 px-1.5 py-0.2 rounded">
+                                                                    S.Y. {doc.student.section.school_year?.name ?? doc.student.section.schoolYear?.name}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </td>
@@ -210,6 +222,7 @@ function RequirementModal({ requirementTitle, docs, onClose, onPreview }: Requir
 // ─── Requirement card ─────────────────────────────────────────────────────────
 interface ReqCardProps {
     title: string;
+    schoolYear?: string;
     totalStudents: number;
     approved: number;
     pending: number;
@@ -217,7 +230,7 @@ interface ReqCardProps {
     onClick: () => void;
 }
 
-function RequirementCard({ title, totalStudents, approved, pending, rejected, onClick }: ReqCardProps) {
+function RequirementCard({ title, schoolYear, totalStudents, approved, pending, rejected, onClick }: ReqCardProps) {
     const pct = totalStudents > 0 ? Math.round((approved / totalStudents) * 100) : 0;
 
     return (
@@ -230,13 +243,18 @@ function RequirementCard({ title, totalStudents, approved, pending, rejected, on
             {/* Title row */}
             <div className="flex items-start justify-between gap-2 mb-3">
                 <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
+                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                         <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
                             <FileText size={14} />
                         </div>
                         <p className="truncate text-sm font-semibold text-[var(--color-ink)] group-hover:text-[var(--color-accent)] transition-colors">
                             {title}
                         </p>
+                        {schoolYear && (
+                            <span className="inline-flex items-center rounded-md bg-amber-50 border border-amber-200/60 px-1.5 py-0.2 text-[10px] font-semibold text-amber-800">
+                                S.Y. {schoolYear}
+                            </span>
+                        )}
                     </div>
                 </div>
                 <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--color-accent)] bg-[var(--color-accent-soft)] rounded-full px-2.5 py-0.5">
@@ -280,6 +298,9 @@ export default function DepartmentDocumentsPage() {
     const isDean = user?.role?.name === "dean";
     const updateStatus = useUpdateDocumentStatus();
 
+    // Active school year
+    const { data: currentSchoolYear } = useCurrentSchoolYear();
+
     const { data: requirements, isLoading: loadingReqs } = useCourseDocumentRequirements(id ? Number(id) : undefined);
     const { data: submittedDocs, isLoading: loadingDocs, isError } = useSubmittedDocuments({ course_id: id });
 
@@ -305,21 +326,31 @@ export default function DepartmentDocumentsPage() {
     // Build unified requirement list (from requirements endpoint + any uncategorized)
     const requirementCards = useMemo(() => {
         const cards: Array<{
-            id: number | string; title: string; docs: SubmittedDocument[];
+            id: number | string; title: string; schoolYear?: string; docs: SubmittedDocument[];
         }> = [];
 
         (requirements ?? []).forEach((req) => {
-            cards.push({ id: req.id, title: req.title, docs: docsByReq.get(req.id) ?? [] });
+            cards.push({
+                id: req.id,
+                title: req.title,
+                schoolYear: (req as any).created_school_year ?? currentSchoolYear?.name,
+                docs: docsByReq.get(req.id) ?? [],
+            });
         });
 
         // Show uncategorized docs submitted without a requirement
         const uncategorized = docsByReq.get("uncategorized") ?? [];
         if (uncategorized.length > 0) {
-            cards.push({ id: "uncategorized", title: "Uncategorized Documents", docs: uncategorized });
+            cards.push({
+                id: "uncategorized",
+                title: "Uncategorized Documents",
+                schoolYear: currentSchoolYear?.name,
+                docs: uncategorized,
+            });
         }
 
         return cards;
-    }, [requirements, docsByReq]);
+    }, [requirements, docsByReq, currentSchoolYear]);
 
     // Apply search filter on displayed cards
     const filteredCards = useMemo(() => {
@@ -352,7 +383,18 @@ export default function DepartmentDocumentsPage() {
                                 <ArrowLeft size={16} /> Back to Departments
                             </Link>
                         )}
-                        <h2 className="text-3xl font-semibold tracking-tight">Document Requirements</h2>
+                        <div className="flex items-center gap-3 flex-wrap">
+                            <h2 className="text-3xl font-semibold tracking-tight">Document Requirements</h2>
+                            {currentSchoolYear && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 shadow-2xs">
+                                    <CalendarDays size={13} className="text-amber-600" />
+                                    S.Y. {currentSchoolYear.name}
+                                    {currentSchoolYear.semester && (
+                                        <span className="font-normal text-amber-700">· {currentSchoolYear.semester}</span>
+                                    )}
+                                </span>
+                            )}
+                        </div>
                         <p className="mt-1.5 text-sm text-[var(--color-muted)]">
                             View submissions by interns for each required document in this department.
                         </p>
@@ -434,6 +476,7 @@ export default function DepartmentDocumentsPage() {
                                 <RequirementCard
                                     key={card.id}
                                     title={card.title}
+                                    schoolYear={card.schoolYear}
                                     totalStudents={card.docs.length}
                                     approved={approved}
                                     pending={pending}

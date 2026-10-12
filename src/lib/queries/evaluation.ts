@@ -65,6 +65,8 @@ export interface EvaluationTemplateDetail {
   creator?: EvaluationTemplateCreator;
   is_used?: boolean;
   used_in_school_years?: string[];
+  created_school_year?: string;
+  anchored_school_years_count?: number;
 }
 
 // Hook to fetch active courses for multi-selection

@@ -1,17 +1,25 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { Search, Building2, Loader2, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 import { useStudents } from '@/lib/queries/students'
 import { useCompanies } from '@/lib/queries/companies'
 import { useCourses } from '@/lib/queries/courses'
+import { useSchoolYears } from '@/lib/queries/school-year'
 import { useAuth } from '@/lib/auth'
 import type { Student } from '@/types'
 
 type InternshipStatus = 'pending' | 'ongoing' | 'completed'
 
 type StudentListItem = Student & {
-    section?: { id: number; name: string; course_id?: number; course?: { id: number; name: string } } | null
+    section?: {
+        id: number
+        name: string
+        course_id?: number
+        course?: { id: number; name: string }
+        school_year?: { id: number; name: string } | null
+        schoolYear?: { id: number; name: string } | null
+    } | null
     course?: { id: number; name: string } | null
     company?: { id: number; name: string } | null
     status?: InternshipStatus
@@ -37,6 +45,9 @@ const FILTERS: Array<{ key: InternshipStatus | 'all'; label: string }> = [
     { key: 'ongoing', label: 'On Internship' },
     { key: 'completed', label: 'Completed' },
 ]
+
+const selectClass =
+    'rounded-lg border border-[var(--color-line)] bg-white/80 px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]'
 
 const listVariants: Variants = {
     hidden: {},
@@ -66,80 +77,111 @@ function initialsOf(student: StudentListItem) {
         .join('')
 }
 
+const toArray = (value: any): any[] => (Array.isArray(value) ? value : value?.data ?? [])
+
 const StudentsPage = () => {
     const navigate = useNavigate()
     const { user } = useAuth()
     const [page, setPage] = useState(1)
     const [query, setQuery] = useState('')
+    const [debouncedQuery, setDebouncedQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState<InternshipStatus | 'all'>('all')
     const [companyFilter, setCompanyFilter] = useState<string>('all')
     const [departmentFilter, setDepartmentFilter] = useState<string>('all')
+    // null = not initialised yet (waiting for school years to load)
+    const [schoolYearFilter, setSchoolYearFilter] = useState<string | null>(null)
+    const schoolYearValue = schoolYearFilter ?? 'all'
 
-    const isAdmin = user?.role?.name === 'super_admin' || user?.role?.name === 'admin'
+    // Debounce the search box so we don't hit the API on every keystroke
+    useEffect(() => {
+        const t = setTimeout(() => {
+            setDebouncedQuery(query.trim())
+            setPage(1)
+        }, 350)
+        return () => clearTimeout(t)
+    }, [query])
 
-    // Pass page to your query hook
-    const { data: paginatedData, isLoading, isError } = useStudents(page)
+    const { data: schoolYearsData, isError: schoolYearsError } = useSchoolYears()
     const { data: companiesData } = useCompanies()
     const { data: coursesData } = useCourses()
 
-    // Safely extract the array and metadata
-    const rawStudents = useMemo(() => {
-        if (!paginatedData) return []
-        // Handle both standard pagination structure (paginatedData.data) or direct array fallback
-        return Array.isArray(paginatedData) ? paginatedData : paginatedData.data ?? []
+    // Default the school year filter to the current school year, once
+    useEffect(() => {
+        if (schoolYearFilter !== null) return
+        if (schoolYearsError) {
+            setSchoolYearFilter('all')
+            return
+        }
+        if (!schoolYearsData) return
+
+        const list = toArray(schoolYearsData)
+        const current =
+            list.find((sy: any) => sy.is_current || sy.is_active) ??
+            [...list].sort((a: any, b: any) => b.id - a.id)[0]
+
+        setSchoolYearFilter(current ? String(current.id) : 'all')
+    }, [schoolYearFilter, schoolYearsData, schoolYearsError])
+
+    // All filters are sent to the server; changing any of them refetches.
+    const filters = useMemo(
+        () => ({
+            search: debouncedQuery || undefined,
+            status: statusFilter === 'all' ? undefined : statusFilter,
+            company_id: companyFilter === 'all' ? undefined : companyFilter,
+            course_id: departmentFilter === 'all' ? undefined : departmentFilter,
+            school_year_id: schoolYearValue === 'all' ? undefined : schoolYearValue,
+        }),
+        [debouncedQuery, statusFilter, companyFilter, departmentFilter, schoolYearValue],
+    )
+
+    // Wait for the default school year so we don't fetch everything first
+    const schoolYearReady = schoolYearFilter !== null
+    const {
+        data: paginatedData,
+        isLoading: studentsLoading,
+        isError,
+        isFetching,
+    } = useStudents(page, filters, { enabled: schoolYearReady })
+    const isLoading = studentsLoading || !schoolYearReady
+
+    const students = useMemo(() => {
+        if (!paginatedData) return [] as StudentListItem[]
+        return toArray(paginatedData) as StudentListItem[]
     }, [paginatedData])
 
-    const totalStudents = paginatedData && 'total' in paginatedData ? paginatedData.total : rawStudents.length
+    const totalStudents = paginatedData && 'total' in paginatedData ? paginatedData.total : students.length
     const currentPage = paginatedData && 'current_page' in paginatedData ? paginatedData.current_page : page
     const lastPage = paginatedData && 'last_page' in paginatedData ? paginatedData.last_page : 1
 
-    const companyOptions = useMemo(() => {
-        if (!companiesData) return [{ key: 'all', label: 'All companies' }]
-        return [
+    const companyOptions = useMemo(
+        () => [
             { key: 'all', label: 'All companies' },
-            ...companiesData.map((c: any) => ({ key: String(c.id), label: c.name }))
-        ]
-    }, [companiesData])
+            ...toArray(companiesData).map((c: any) => ({ key: String(c.id), label: c.name })),
+        ],
+        [companiesData],
+    )
 
-    const departmentOptions = useMemo(() => {
-        const arr = Array.isArray(coursesData) ? coursesData : (coursesData as any)?.data
-        if (!arr) return [{ key: 'all', label: 'All departments' }]
-        return [
+    const departmentOptions = useMemo(
+        () => [
             { key: 'all', label: 'All departments' },
-            ...arr.map((c: any) => ({ key: String(c.id), label: c.name }))
-        ]
-    }, [coursesData])
+            ...toArray(coursesData).map((c: any) => ({ key: String(c.id), label: c.name })),
+        ],
+        [coursesData],
+    )
 
-    // TODO: real scoping for non-admins (e.g. by course for dean/program_head,
-    // by section for coordinator) hasn't been defined yet. For now everyone
-    // sees the same set; only the isAdmin flag is wired up as a seam.
-    const scopedStudents = useMemo(() => {
-        if (isAdmin) return rawStudents as StudentListItem[]
-        return rawStudents as StudentListItem[]
-    }, [rawStudents, isAdmin])
+    const schoolYearOptions = useMemo(
+        () => [
+            { key: 'all', label: 'All school years' },
+            ...toArray(schoolYearsData).map((sy: any) => ({ key: String(sy.id), label: sy.name })),
+        ],
+        [schoolYearsData],
+    )
 
-    const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase()
-        return scopedStudents.filter((student) => {
-            const status = student.status ?? 'pending'
-            const matchesStatus = statusFilter === 'all' || status === statusFilter
-            const matchesCompany = companyFilter === 'all' || String(student.company?.id) === companyFilter
-
-            const studentCourseId = student.course?.id ?? student.section?.course_id ?? student.section?.course?.id
-            const matchesDepartment = departmentFilter === 'all' || String(studentCourseId) === departmentFilter
-
-            const matchesQuery =
-                !q ||
-                [
-                    fullNameOf(student),
-                    student.student_number ?? '',
-                    student.section?.name ?? '',
-                    student.company?.name ?? '',
-                    student.course?.name ?? student.section?.course?.name ?? '',
-                ].some((field) => field.toLowerCase().includes(q))
-            return matchesStatus && matchesCompany && matchesDepartment && matchesQuery
-        })
-    }, [scopedStudents, query, statusFilter, companyFilter, departmentFilter])
+    // Changing a filter always returns to page 1
+    const onFilterChange = <T,>(setter: (v: T) => void) => (value: T) => {
+        setter(value)
+        setPage(1)
+    }
 
     return (
         <section>
@@ -155,7 +197,10 @@ const StudentsPage = () => {
                     </p>
                     <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--color-ink)]">Students</h1>
                     <p className="mt-1 text-sm text-[var(--color-muted)]">
-                        {totalStudents} student intern{totalStudents === 1 ? '' : 's'} on record
+                        {totalStudents} student intern{totalStudents === 1 ? '' : 's'}
+                        {schoolYearValue === 'all' && departmentFilter === 'all' && companyFilter === 'all' && statusFilter === 'all' && !debouncedQuery
+                            ? ' on record'
+                            : ' match your filters'}
                     </p>
                 </div>
             </motion.div>
@@ -175,30 +220,42 @@ const StudentsPage = () => {
                         value={query}
                         onChange={(event) => setQuery(event.target.value)}
                         type="text"
-                        placeholder="Search current page..."
+                        placeholder="Search name, student no., section..."
                         className="w-full rounded-xl border border-[var(--color-line)] bg-white/80 py-2.5 pr-3 pl-9 text-sm text-[var(--color-ink)] outline-none transition placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
                     />
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                   {user?.role?.name === 'super_admin' && (
-                     <select
-                        value={departmentFilter}
-                        onChange={(event) => setDepartmentFilter(event.target.value)}
-                        className="rounded-lg border border-[var(--color-line)] bg-white/80 px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                    <select
+                        value={schoolYearValue}
+                        onChange={(event) => onFilterChange(setSchoolYearFilter)(event.target.value)}
+                        className={selectClass}
                     >
-                        {departmentOptions.map((dept: any) => (
-                            <option key={dept.key} value={dept.key}>
-                                {dept.label}
+                        {schoolYearOptions.map((sy) => (
+                            <option key={sy.key} value={sy.key}>
+                                {sy.label}
                             </option>
                         ))}
                     </select>
-                   )}
+
+                    {user?.role?.name === 'super_admin' && (
+                        <select
+                            value={departmentFilter}
+                            onChange={(event) => onFilterChange(setDepartmentFilter)(event.target.value)}
+                            className={selectClass}
+                        >
+                            {departmentOptions.map((dept) => (
+                                <option key={dept.key} value={dept.key}>
+                                    {dept.label}
+                                </option>
+                            ))}
+                        </select>
+                    )}
 
                     <select
                         value={companyFilter}
-                        onChange={(event) => setCompanyFilter(event.target.value)}
-                        className="rounded-lg border border-[var(--color-line)] bg-white/80 px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                        onChange={(event) => onFilterChange(setCompanyFilter)(event.target.value)}
+                        className={selectClass}
                     >
                         {companyOptions.map((company) => (
                             <option key={company.key} value={company.key}>
@@ -209,8 +266,10 @@ const StudentsPage = () => {
 
                     <select
                         value={statusFilter}
-                        onChange={(event) => setStatusFilter(event.target.value as InternshipStatus | 'all')}
-                        className="rounded-lg border border-[var(--color-line)] bg-white/80 px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                        onChange={(event) =>
+                            onFilterChange(setStatusFilter)(event.target.value as InternshipStatus | 'all')
+                        }
+                        className={selectClass}
                     >
                         {FILTERS.map((filter) => (
                             <option key={filter.key} value={filter.key}>
@@ -221,10 +280,15 @@ const StudentsPage = () => {
                 </div>
             </motion.div>
 
-            <div className="mt-5 overflow-hidden rounded-xl border border-[var(--color-line)] bg-white/80 shadow-sm">
-                <div className="hidden grid-cols-[1.6fr_1fr_1.2fr_1.1fr_0.8fr_0.7fr] gap-3 border-b border-[var(--color-line)] px-4 py-2.5 text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase sm:grid">
+            <div
+                className={[
+                    'mt-5 overflow-hidden rounded-xl border border-[var(--color-line)] bg-white/80 shadow-sm transition-opacity',
+                    isFetching && !isLoading ? 'opacity-70' : 'opacity-100',
+                ].join(' ')}
+            >
+                <div className="hidden grid-cols-[1.5fr_1.1fr_1.1fr_1.1fr_0.8fr_0.7fr] gap-3 border-b border-[var(--color-line)] px-4 py-2.5 text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase sm:grid">
                     <span>Student</span>
-                    <span>Section</span>
+                    <span>Section / S.Y.</span>
                     <span>Company</span>
                     <span>Progress</span>
                     <span>Status</span>
@@ -240,11 +304,13 @@ const StudentsPage = () => {
                 ) : (
                     <motion.div variants={listVariants} initial="hidden" animate="show">
                         <AnimatePresence mode="popLayout">
-                            {filtered.map((student) => {
+                            {students.map((student) => {
                                 const hoursCompleted = student.hours_completed ?? 0
                                 const hoursRequired = student.hours_required ?? 486
                                 const status = student.status ?? 'pending'
                                 const progress = Math.min(100, Math.round((hoursCompleted / hoursRequired) * 100))
+                                const schoolYearName =
+                                    student.section?.school_year?.name ?? student.section?.schoolYear?.name
 
                                 return (
                                     <motion.div
@@ -255,7 +321,7 @@ const StudentsPage = () => {
                                         animate="show"
                                         exit="exit"
                                         onClick={() => navigate(`/students/${student.id}`)}
-                                        className="grid grid-cols-1 gap-3 border-b border-[var(--color-line)] px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-slate-50 cursor-pointer sm:grid-cols-[1.6fr_1fr_1.2fr_1.1fr_0.8fr_0.7fr] sm:items-center"
+                                        className="grid grid-cols-1 gap-3 border-b border-[var(--color-line)] px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-slate-50 cursor-pointer sm:grid-cols-[1.5fr_1.1fr_1.1fr_1.1fr_0.8fr_0.7fr] sm:items-center"
                                     >
                                         <div className="flex min-w-0 items-center gap-3">
                                             <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--color-accent-soft)] text-[11px] font-semibold text-[var(--color-accent)]">
@@ -267,9 +333,16 @@ const StudentsPage = () => {
                                             </div>
                                         </div>
 
-                                        <span className="text-xs text-[var(--color-muted)] sm:text-sm">
-                                            {student.section?.name ?? '—'}
-                                        </span>
+                                        <div className="min-w-0">
+                                            <p className="truncate text-xs font-medium text-[var(--color-ink)] sm:text-sm">
+                                                {student.section?.name ?? '—'}
+                                            </p>
+                                            {schoolYearName && (
+                                                <p className="truncate text-[11px] text-[var(--color-muted)]">
+                                                    S.Y. {schoolYearName}
+                                                </p>
+                                            )}
+                                        </div>
 
                                         <span className="flex min-w-0 items-center gap-1.5 text-xs text-[var(--color-muted)] sm:text-sm">
                                             {student.company ? (
@@ -323,7 +396,7 @@ const StudentsPage = () => {
                 )}
 
                 <AnimatePresence>
-                    {!isLoading && !isError && filtered.length === 0 ? (
+                    {!isLoading && !isError && students.length === 0 ? (
                         <motion.div
                             key="empty"
                             initial={{ opacity: 0 }}
@@ -336,7 +409,7 @@ const StudentsPage = () => {
                             </div>
                             <p className="mt-3 text-sm font-medium text-[var(--color-ink)]">No students found</p>
                             <p className="mt-1 text-xs text-[var(--color-muted)]">
-                                Try adjusting your search query or status filter.
+                                Try adjusting your search or filters.
                             </p>
                         </motion.div>
                     ) : null}

@@ -17,6 +17,7 @@ export interface DocumentRequirement {
   accepted_file_types: string
   is_active: boolean
   recurrence: 'none' | 'daily' | 'weekly'
+  document_type?: 'common' | 'departmental'
   created_by?: { id: number; name: string } | null
 }
 
@@ -34,6 +35,7 @@ type CreateRequirementPayload = {
   description?: string
   accepted_file_types?: string
   recurrence?: 'none' | 'daily' | 'weekly'
+  document_type?: 'common' | 'departmental'
   course_ids?: number[]
   deadline_at?: string
 }
@@ -113,7 +115,7 @@ export function useSyncCourseRequirements(courseId?: number) {
   return useMutation({
     mutationFn: (payload: {
       document_requirement_ids: number[]
-      deadline_at: string
+      deadline_at?: string | null
     }) =>
       apiRequest<DocumentRequirement[]>(`/courses/${courseId}/document-requirements`, {
         method: 'PUT',
@@ -157,6 +159,14 @@ export interface SubmittedDocument {
       course?: {
         id: number
         code: string
+        name: string
+      }
+      school_year?: {
+        id: number
+        name: string
+      }
+      schoolYear?: {
+        id: number
         name: string
       }
     }

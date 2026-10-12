@@ -1,3 +1,13 @@
+type StudentListFilters = {
+  unassigned?: boolean
+  perPage?: number
+  search?: string
+  status?: 'pending' | 'ongoing' | 'completed'
+  company_id?: string
+  course_id?: string
+  school_year_id?: string
+}
+
 export const queryKeys = {
   auth: {
     all: ['auth'] as const,
@@ -10,8 +20,19 @@ export const queryKeys = {
   },
   students: {
     all: ['students'] as const,
-    list: (page?: number, filters?: { unassigned?: boolean; perPage?: number }) =>
-      ['students', 'list', page ?? 1, filters?.unassigned ?? false, filters?.perPage ?? null] as const,
+    list: (page?: number, filters?: StudentListFilters) =>
+      [
+        'students',
+        'list',
+        page ?? 1,
+        filters?.unassigned ?? false,
+        filters?.perPage ?? null,
+        filters?.search ?? '',
+        filters?.status ?? null,
+        filters?.company_id ?? null,
+        filters?.course_id ?? null,
+        filters?.school_year_id ?? null,
+      ] as const,
     detail: (id: number | string) => ['students', 'detail', id] as const,
   },
   courses: {
@@ -58,7 +79,7 @@ export const queryKeys = {
     bySchoolYear: (syId: string | number) => ['sections', 'school-year', syId] as const,
     detail: (id: string | number) => ['sections', 'detail', id] as const,
   },
- notifications: {
+  notifications: {
     all: ['notifications'] as const,
     list: () => ['notifications', 'list'] as const,
     unread: (userId?: number) => ['notifications', 'unread', userId ?? 'all'] as const,
@@ -70,12 +91,12 @@ export const queryKeys = {
     templateDetail: (id: string | number) => ['evaluations', 'templates', id] as const,
   },
   geofenceEvents: {
-  all: ['geofence-events'] as const,
-  latest: () => ['geofence-events', 'latest'] as const,
-},
-timeLogs: {
-  all: ['time-logs'] as const,
-  list: () => ['time-logs', 'list'] as const,
-  detail: (id: number | string) => ['time-logs', 'detail', id] as const,
-},
+    all: ['geofence-events'] as const,
+    latest: () => ['geofence-events', 'latest'] as const,
+  },
+  timeLogs: {
+    all: ['time-logs'] as const,
+    list: () => ['time-logs', 'list'] as const,
+    detail: (id: number | string) => ['time-logs', 'detail', id] as const,
+  },
 }

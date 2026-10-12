@@ -1,6 +1,6 @@
 import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, Star, User, Calendar, GraduationCap, Award, Building2, UserCheck } from "lucide-react";
+import { X, User, Calendar, GraduationCap, Award, Building2, UserCheck, CalendarDays } from "lucide-react";
 import type { EvaluationSubmission } from "@/lib/queries/evaluation";
 
 interface EvaluationReviewModalProps {
@@ -89,6 +89,12 @@ export const EvaluationReviewModal: React.FC<EvaluationReviewModalProps> = ({
                                             <GraduationCap size={13} />
                                             {submission.course_code}
                                             {submission.section_code ? ` (${submission.section_code})` : ""}
+                                        </span>
+                                    )}
+                                    {submission.school_year && (
+                                        <span className="flex items-center gap-1 rounded bg-amber-100/80 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                                            <CalendarDays size={13} />
+                                            S.Y. {submission.school_year}
                                         </span>
                                     )}
                                 </div>

@@ -4,7 +4,7 @@ import { NavLink, Outlet, useLocation, matchPath } from "react-router-dom";
 import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/context/ThemeContext'
 import OCCLOGO from '@/assets/OCC logo.webp'
-import { Calendar1Icon, UserIcon, Settings, BuildingIcon, FolderIcon, FolderCheckIcon, Building2Icon, History, CalendarDays, Loader2 } from 'lucide-react'
+import { Calendar1Icon, UserIcon, Settings, BuildingIcon, FolderIcon, FolderCheckIcon, Building2Icon, CalendarDays, Loader2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { apiRequest } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
@@ -69,15 +69,6 @@ const navItems: NavItem[] = [
     section: 'academic',
     roles: ["dean", "super_admin"],
   },
-  {
-    to: "/history",
-    label: "History",
-    end: false,
-    icon: History,
-    section: 'academic',
-    roles: ["dean", "coordinator"],
-  },
-
   // People
   {
     to: "/administrator",
@@ -182,7 +173,6 @@ const pageTitles: Array<{ path: string; title: string; end?: boolean }> = [
   { path: "/school-year-section", title: "Year & Section" },
   { path: "/coordinators", title: "Coordinators" },
   { path: "/students", title: "Students" },
-  { path: "/history", title: "History Archive" },
   { path: "/school-year/:id", title: "School Year Details" },
   { path: "/supervisor/company-info", title: "Company Info", end: true },
   { path: "/supervisor/interns", title: "Interns", end: true },
@@ -364,7 +354,7 @@ export function AppShell() {
         </div>
 
         <nav className={`flex flex-1 flex-col min-h-0 ${sidebarOpen ? 'px-3' : 'items-center px-2'}`}>
-          <div className={`flex flex-col flex-1 overflow-y-auto min-h-0 pb-2 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent ${!sidebarOpen ? 'items-center w-full' : ''}`}>
+          <div className={`flex flex-col flex-1 overflow-y-auto min-h-0 pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${!sidebarOpen ? 'items-center w-full' : ''}`}>
             {groupedNav.map((group, groupIndex) => (
               <div
                 key={group.key}

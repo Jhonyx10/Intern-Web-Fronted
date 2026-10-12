@@ -98,7 +98,7 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
   // Template meta
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [isActive, setIsActive] = useState(true);
+  const [isActive, setIsActive] = useState(false);
 
   // Questionnaire items
   const [items, setItems] = useState<FormItem[]>([

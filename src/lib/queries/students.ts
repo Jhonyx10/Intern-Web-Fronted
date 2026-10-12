@@ -1,4 +1,5 @@
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -41,6 +42,16 @@ export type ImportStudentsResult = {
   failures: ImportFailure[]
 }
 
+export type StudentFilters = {
+  unassigned?: boolean
+  perPage?: number
+  search?: string
+  status?: 'pending' | 'ongoing' | 'completed'
+  company_id?: string
+  course_id?: string
+  school_year_id?: string
+}
+
 // Anything that shows student lists or per-section / per-course student counts
 // (students page, section details, course details, school year views).
 function invalidateStudentRelated(queryClient: QueryClient) {
@@ -53,15 +64,17 @@ function invalidateStudentRelated(queryClient: QueryClient) {
 export async function fetchStudents(
   token: string,
   page: number = 1,
-  filters?: { unassigned?: boolean; perPage?: number },
+  filters?: StudentFilters,
 ): Promise<PaginatedStudents> {
   const params = new URLSearchParams({ page: String(page) })
-  if (filters?.unassigned) {
-    params.set('unassigned', '1')
-  }
-  if (filters?.perPage != null) {
-    params.set('per_page', String(filters.perPage))
-  }
+  if (filters?.unassigned) params.set('unassigned', '1')
+  if (filters?.perPage != null) params.set('per_page', String(filters.perPage))
+  if (filters?.search) params.set('search', filters.search)
+  if (filters?.status) params.set('status', filters.status)
+  if (filters?.company_id) params.set('company_id', filters.company_id)
+  if (filters?.course_id) params.set('course_id', filters.course_id)
+  if (filters?.school_year_id) params.set('school_year_id', filters.school_year_id)
+
   const response = await apiRequest<{ data: PaginatedStudents }>(`/students?${params}`, { token })
   return response.data
 }
@@ -77,7 +90,7 @@ export async function createStudent(token: string, body: CreateStudentInput): Pr
 
 export function useStudents(
   page: number = 1,
-  filters?: { unassigned?: boolean; perPage?: number },
+  filters?: StudentFilters,
   options?: { enabled?: boolean },
 ) {
   const { token } = useAuth()
@@ -86,6 +99,7 @@ export function useStudents(
     queryKey: queryKeys.students.list(page, filters),
     queryFn: () => fetchStudents(token!, page, filters),
     enabled: Boolean(token) && (options?.enabled ?? true),
+    placeholderData: keepPreviousData, // keeps old rows visible while a filter refetches
   })
 }
 

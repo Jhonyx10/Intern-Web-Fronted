@@ -9,6 +9,8 @@ import {
   Plus,
   Search,
   X,
+  Layers,
+  CalendarDays,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import {
@@ -18,8 +20,10 @@ import {
   useCourseThemes,
 } from "@/lib/queries/documents";
 import { useCourses } from "@/lib/queries/courses";
+import { useCurrentSchoolYear } from "@/lib/queries/school-year";
 import { CreateRequirementModal } from "@/components/modal/CreateRequirementModal";
 import { AssignRequirementsModal } from "@/components/modal/AssignRequirementsModal";
+import { CommonDocumentsModal } from "@/components/modal/CommonDocumentsModal";
 import { DepartmentRequirementCards } from "@/components/cards/DepartmentRequirementCard";
 import type { Program } from "@/types";
 
@@ -45,7 +49,7 @@ export default function DocumentPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isSuperAdmin = user?.role?.name === "super_admin";
-  const isDean = user?.role?.name === "dean";
+  const isDean = user?.role?.name === "dean" || user?.role?.name === 'coordinator';
   const courseId = user?.course?.id as number | undefined;
 
   // Deans only ever have one department — redirect straight to its details page.
@@ -57,8 +61,12 @@ export default function DocumentPage() {
 
   const [search, setSearch] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCommonModal, setShowCommonModal] = useState(false);
   // Super admin: the department whose requirements are being assigned
   const [assignCourseId, setAssignCourseId] = useState<number | null>(null);
+
+  // Active school year
+  const { data: currentSchoolYear } = useCurrentSchoolYear();
 
   // Master courses list (super admin filter + department picker + cards)
   const { data: courses } = useCourses();
@@ -103,6 +111,14 @@ export default function DocumentPage() {
   const totalRequirements = requirements?.length ?? 0;
   const activeRequirements = requirements?.filter((r) => r.is_active).length ?? 0;
   const inactiveRequirements = totalRequirements - activeRequirements;
+
+  const commonRequirementsCount = useMemo(
+    () =>
+      (allRequirements ?? []).filter(
+        (r) => r.document_type === "common" || !r.document_type
+      ).length,
+    [allRequirements]
+  );
 
   // Show a brief loading state while the redirect fires for deans
   if (isDean && courseId) {
@@ -150,9 +166,20 @@ export default function DocumentPage() {
           className="flex flex-wrap items-start justify-between gap-4"
         >
           <div>
-            <p className="text-[11px] font-semibold tracking-[0.2em] text-[var(--color-accent)] uppercase">
-              Document Management
-            </p>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <p className="text-[11px] font-semibold tracking-[0.2em] text-[var(--color-accent)] uppercase">
+                Document Management
+              </p>
+              {currentSchoolYear && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 shadow-2xs">
+                  <CalendarDays size={12} className="text-amber-600" />
+                  S.Y. {currentSchoolYear.name}
+                  {currentSchoolYear.semester && (
+                    <span className="font-normal text-amber-700">· {currentSchoolYear.semester}</span>
+                  )}
+                </span>
+              )}
+            </div>
             <h2 className="mt-2 text-3xl font-semibold tracking-tight">
               {isDean ? "Your Program Requirements" : "Document Requirements"}
             </h2>
@@ -166,6 +193,17 @@ export default function DocumentPage() {
           <div className="flex flex-wrap items-center gap-3">
             {isSuperAdmin && (
               <>
+                <button
+                  type="button"
+                  onClick={() => setShowCommonModal(true)}
+                  className="flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-sm font-medium text-[var(--color-ink)] shadow-xs transition hover:bg-slate-50 hover:border-[var(--color-accent)]"
+                >
+                  <Layers size={15} className="text-[var(--color-accent)]" /> Common Documents
+                  <span className="rounded-full bg-[var(--color-accent-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--color-accent)]">
+                    {commonRequirementsCount}
+                  </span>
+                </button>
+
                 {/* Pick a department to assign requirements and a deadline */}
                 <select
                   value=""
@@ -293,6 +331,7 @@ export default function DocumentPage() {
                 results={deptResults}
                 themes={themes}
                 search={search}
+                schoolYear={currentSchoolYear?.name}
                 onManage={setAssignCourseId}
               />
             )}
@@ -304,12 +343,21 @@ export default function DocumentPage() {
           <DepartmentRequirementCards
             courses={[deanCourse]}
             results={[deanQuery]}
+            schoolYear={currentSchoolYear?.name}
           />
         )}
       </motion.section>
 
       {/* ── Modals ─────────────────────────────────────────── */}
       <AnimatePresence>
+        {showCommonModal && (
+          <CommonDocumentsModal
+            key="common-documents-modal"
+            visible={showCommonModal}
+            onClose={() => setShowCommonModal(false)}
+            requirements={allRequirements ?? []}
+          />
+        )}
         {isSuperAdmin && showCreateModal && (
           <CreateRequirementModal
             key="create-requirement"

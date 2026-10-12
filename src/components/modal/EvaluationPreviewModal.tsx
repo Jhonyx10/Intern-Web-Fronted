@@ -111,8 +111,8 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
                                     {template && (
                                         <span
                                             className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${template.is_active
-                                                    ? "bg-emerald-100 text-emerald-700"
-                                                    : "bg-gray-100 text-gray-500"
+                                                ? "bg-emerald-100 text-emerald-700"
+                                                : "bg-gray-100 text-gray-500"
                                                 }`}
                                         >
                                             {template.is_active ? "Active" : "Inactive"}
@@ -122,6 +122,25 @@ export const EvaluationPreviewModal: React.FC<EvaluationPreviewModalProps> = ({
 
                                 {template && (
                                     <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                                        {(template.used_in_school_years && template.used_in_school_years.length > 0) ? (
+                                            <div className="flex flex-wrap items-center gap-1">
+                                                {template.used_in_school_years.map((sy) => (
+                                                    <span
+                                                        key={sy}
+                                                        className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800"
+                                                    >
+                                                        <Calendar className="w-3 h-3 text-amber-600" />
+                                                        S.Y. {sy}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        ) : template.created_school_year ? (
+                                            <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                                                <Calendar className="w-3 h-3 text-amber-600" />
+                                                S.Y. {template.created_school_year}
+                                            </span>
+                                        ) : null}
+
                                         {template.creator?.name && (
                                             <span className="flex items-center gap-1">
                                                 <User className="w-3.5 h-3.5 text-indigo-500" />

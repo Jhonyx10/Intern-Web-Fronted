@@ -41,14 +41,10 @@ export function AssignRequirementsModal({
   };
 
   const handleSave = async () => {
-    if (selected.size > 0 && !deadline) {
-      setError("Please set a deadline for the selected requirements.");
-      return;
-    }
     try {
       await syncRequirements.mutateAsync({
         document_requirement_ids: Array.from(selected),
-        deadline_at: deadline,
+        deadline_at: deadline ? deadline : null,
       });
       onClose();
     } catch (err) {
@@ -104,7 +100,7 @@ export function AssignRequirementsModal({
 
             <div className="shrink-0 border-b border-[var(--color-line)] px-6 py-4">
               <label className="text-xs font-medium text-[var(--color-ink)]">
-                Deadline for selected requirements
+                Deadline for selected requirements <span className="text-[var(--color-muted)] font-normal">(optional)</span>
               </label>
               <input
                 type="date"
