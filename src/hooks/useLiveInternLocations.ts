@@ -1,49 +1,77 @@
-import { useEffect, useState } from 'react';
-import { echo, type LiveLocationPayload } from '@/lib/echo';
+import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { apiRequest } from '@/lib/api'
+import { useAuth } from '@/lib/auth'
+import { echo, type LiveLocationPayload } from '@/lib/echo'
 
-/**
- * Subscribes to one Pusher private channel per company and maintains a
- * last-known live position for every intern currently broadcasting.
- *
- * Channel:  private-company.{companyId}.locations
- * Event:    .location.updated  (Laravel broadcasts with broadcastAs())
- *
- * Each new ping for the same intern overwrites the previous one so the
- * map always shows the *latest* coordinate, not a trail.
- */
+const STALE_MS = 5 * 60 * 1000
+const EMPTY: LiveLocationPayload[] = []
+
 export function useLiveInternLocations(companyIds: number[]) {
-    // keyed by intern_id → most-recent payload
-    const [liveLocations, setLiveLocations] = useState<Map<number, LiveLocationPayload>>(
-        () => new Map()
-    );
+  const { token } = useAuth()
+  const key = companyIds.join(',')
 
-    useEffect(() => {
-        if (companyIds.length === 0) return;
+  // live pings received over the websocket, keyed by intern_id
+  const [live, setLive] = useState<Map<number, LiveLocationPayload>>(() => new Map())
+  // ticks so stale interns drop off the map even if no new event arrives
+  const [now, setNow] = useState(() => Date.now())
 
-        const channelNames = companyIds.map((id) => `company.${id}.locations`);
+  // 1) one-time load from the database (no refetchInterval)
+  const { data: initial = EMPTY } = useQuery({
+    queryKey: ['intern-locations', key],
+    queryFn: async () => {
+      const params = new URLSearchParams()
+      companyIds.forEach((id) => params.append('company_ids[]', String(id)))
+      const res = await apiRequest<{ data: LiveLocationPayload[] }>(
+        `/intern-locations?${params.toString()}`,
+        { token: token! }
+      )
+      return res.data
+    },
+    enabled: Boolean(token) && companyIds.length > 0,
+    refetchOnWindowFocus: true, // re-sync if the tab was asleep and missed events
+  })
 
-        for (const channelName of channelNames) {
-            echo
-                .private(channelName)
-                .listen('.location.updated', (payload: LiveLocationPayload) => {
-                    setLiveLocations((prev) => {
-                        const next = new Map(prev);
-                        next.set(payload.intern_id, payload);
-                        return next;
-                    });
-                });
-        }
+  // 2) live updates over Pusher
+  useEffect(() => {
+    if (companyIds.length === 0) return
 
-        return () => {
-            for (const channelName of channelNames) {
-                echo.leave(channelName);
-            }
-            // Clear stale positions when we stop listening (e.g. page unmount)
-            setLiveLocations(new Map());
-        };
-        // Re-subscribe whenever the set of companies changes
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [companyIds.join(',')]);
+    const channelNames = companyIds.map((id) => `company.${id}.locations`)
 
-    return Array.from(liveLocations.values());
+    for (const name of channelNames) {
+      echo.private(name).listen('.location.updated', (payload: LiveLocationPayload) => {
+        setLive((prev) => {
+          const next = new Map(prev)
+          next.set(payload.intern_id, payload)
+          return next
+        })
+      })
+    }
+
+    return () => {
+      for (const name of channelNames) echo.leave(name)
+      setLive(new Map())
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  // 3) merge: DB snapshot as the base, newer live pings override it
+  return useMemo(() => {
+    const merged = new Map<number, LiveLocationPayload>()
+    for (const loc of initial) merged.set(loc.intern_id, loc)
+    for (const loc of live.values()) {
+      const existing = merged.get(loc.intern_id)
+      if (!existing || loc.recorded_at >= existing.recorded_at) {
+        merged.set(loc.intern_id, loc)
+      }
+    }
+    return Array.from(merged.values()).filter(
+      (loc) => now - new Date(loc.recorded_at).getTime() < STALE_MS
+    )
+  }, [initial, live, now])
 }

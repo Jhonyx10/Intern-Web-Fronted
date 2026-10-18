@@ -235,7 +235,7 @@ export function DocumentPreviewModal({
   const isApproved = normalizedStatus === "approved";
   const isRejected = normalizedStatus === "rejected";
   const isDecided = isApproved || isRejected;
-  const isAdmin = user?.role?.name === "admin" || user?.role?.name === "super_admin"
+  const isCoordinator = user?.role?.name === "coordinator" 
   const canReview = !!(onApprove || onReject);
 
   return (
@@ -279,7 +279,7 @@ export function DocumentPreviewModal({
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
-                  {!isAdmin && canReview && !isDecided && (
+                  {isCoordinator && canReview && !isDecided && (
                     <div className="relative" ref={menuRef}>
                       <button
                         type="button"

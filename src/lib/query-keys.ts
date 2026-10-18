@@ -79,6 +79,12 @@ export const queryKeys = {
     bySchoolYear: (syId: string | number) => ['sections', 'school-year', syId] as const,
     detail: (id: string | number) => ['sections', 'detail', id] as const,
   },
+  // These mirror the literal keys used in lib/queries/documents.ts
+  documents: {
+    submitted: ['submitted-documents'] as const,
+    requirements: ['document-requirements'] as const,
+    courseRequirements: ['course-document-requirements'] as const,
+  },
   notifications: {
     all: ['notifications'] as const,
     list: () => ['notifications', 'list'] as const,

@@ -78,7 +78,8 @@ export default function AssignStudentModal({
                         aria-label="Assign students"
                         className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]"
                     >
-                        <div className="flex items-center justify-between border-b border-[var(--color-line)] px-5 py-4">
+                        {/* Header (fixed) */}
+                        <div className="flex shrink-0 items-center justify-between border-b border-[var(--color-line)] px-5 py-4">
                             <div>
                                 <h2 className="text-base font-semibold text-[var(--color-ink)]">Assign Students</h2>
                                 <p className="text-xs text-[var(--color-muted)]">Select unassigned students to place at this company.</p>
@@ -88,7 +89,8 @@ export default function AssignStudentModal({
                             </button>
                         </div>
 
-                        <div className="border-b border-[var(--color-line)] p-4">
+                        {/* Search + warning (fixed) */}
+                        <div className="shrink-0 border-b border-[var(--color-line)] p-4">
                             <div className="relative">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]" size={16} />
                                 <input
@@ -109,7 +111,8 @@ export default function AssignStudentModal({
                             )}
                         </div>
 
-                        <div className="flex-1 overflow-y-auto px-5 py-4 min-h-[300px]">
+                        {/* Student list (the only part that scrolls) */}
+                        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
                             {isLoadingStudents ? (
                                 <div className="flex justify-center p-8">
                                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent"></div>
@@ -153,7 +156,8 @@ export default function AssignStudentModal({
                             )}
                         </div>
 
-                        <div className="flex items-center justify-between border-t border-[var(--color-line)] px-5 py-4">
+                        {/* Footer (fixed, always visible) */}
+                        <div className="flex shrink-0 items-center justify-between border-t border-[var(--color-line)] bg-white px-5 py-4">
                             <p className="text-xs text-[var(--color-muted)]">{selectedIds.length} selected</p>
                             <div className="flex gap-2">
                                 <button

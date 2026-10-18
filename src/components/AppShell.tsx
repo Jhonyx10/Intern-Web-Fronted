@@ -10,6 +10,7 @@ import { apiRequest } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import StudentLiveTracker from '@/pages/coordinator/StudentLiveTracker'
 import CourseDetailsPage from '@/pages/details/CourseDetails';
+import NotificationBell from '@/components/NotificationBell'
 
 type Role = 'super_admin' | 'supervisor' | 'dean' | 'admin' | 'coordinator' | 'student'
 
@@ -461,71 +462,75 @@ export function AppShell() {
               </AnimatePresence>
             </div>
 
-            <div ref={profileMenuRef} className="relative shrink-0">
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setProfileOpen((open) => !open)}
-                aria-expanded={profileOpen}
-                aria-haspopup="menu"
-                className="flex min-w-0 items-center gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-white/70"
-              >
-                <div
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--color-accent)] text-xs font-semibold text-white"
-                  title={user?.name}
-                >
-                  {initials}
-                </div>
-                <div className="min-w-0 hidden text-left sm:block">
-                  <p className="truncate text-sm font-semibold">{user?.name}</p>
-                  <p className="truncate text-xs text-[var(--color-muted)]">{user?.role?.label}</p>
-                </div>
-                <span
-                  className={`hidden text-[var(--color-muted)] transition-transform sm:block ${profileOpen ? 'rotate-180' : ''
-                    }`}
-                >
-                  <ChevronDownIcon />
-                </span>
-              </motion.button>
+            <div className="flex shrink-0 items-center gap-2">
+              <NotificationBell />
 
-              <AnimatePresence>
-                {profileOpen ? (
-                  <motion.div
-                    key="profile-menu"
-                    role="menu"
-                    initial={{ opacity: 0, y: -6, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -4, scale: 0.98 }}
-                    transition={{ duration: 0.16 }}
-                    className="absolute right-0 mt-2 w-48 overflow-hidden rounded-xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]"
+              <div ref={profileMenuRef} className="relative shrink-0">
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setProfileOpen((open) => !open)}
+                  aria-expanded={profileOpen}
+                  aria-haspopup="menu"
+                  className="flex min-w-0 items-center gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-white/70"
+                >
+                  <div
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--color-accent)] text-xs font-semibold text-white"
+                    title={user?.name}
                   >
-                    <div className="border-b border-[var(--color-line)] px-3 py-2.5 sm:hidden">
-                      <p className="truncate text-sm font-semibold">{user?.name}</p>
-                      <p className="truncate text-xs text-[var(--color-muted)]">{user?.role?.label}</p>
-                    </div>
-                    <NavLink
-                      to="/settings"
-                      onClick={() => setProfileOpen(false)}
-                      className="flex w-full items-center gap-2 border-b border-[var(--color-line)] px-3 py-2.5 text-left text-sm font-medium text-[var(--color-ink)] transition-colors hover:bg-slate-50"
+                    {initials}
+                  </div>
+                  <div className="min-w-0 hidden text-left sm:block">
+                    <p className="truncate text-sm font-semibold">{user?.name}</p>
+                    <p className="truncate text-xs text-[var(--color-muted)]">{user?.role?.label}</p>
+                  </div>
+                  <span
+                    className={`hidden text-[var(--color-muted)] transition-transform sm:block ${profileOpen ? 'rotate-180' : ''
+                      }`}
+                  >
+                    <ChevronDownIcon />
+                  </span>
+                </motion.button>
+
+                <AnimatePresence>
+                  {profileOpen ? (
+                    <motion.div
+                      key="profile-menu"
+                      role="menu"
+                      initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                      transition={{ duration: 0.16 }}
+                      className="absolute right-0 mt-2 w-48 overflow-hidden rounded-xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]"
                     >
-                      <Settings size={16} />
-                      Settings
-                    </NavLink>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setProfileOpen(false)
-                        void logout()
-                      }}
-                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
-                    >
-                      <LogoutIcon />
-                      Log out
-                    </button>
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
+                      <div className="border-b border-[var(--color-line)] px-3 py-2.5 sm:hidden">
+                        <p className="truncate text-sm font-semibold">{user?.name}</p>
+                        <p className="truncate text-xs text-[var(--color-muted)]">{user?.role?.label}</p>
+                      </div>
+                      <NavLink
+                        to="/settings"
+                        onClick={() => setProfileOpen(false)}
+                        className="flex w-full items-center gap-2 border-b border-[var(--color-line)] px-3 py-2.5 text-left text-sm font-medium text-[var(--color-ink)] transition-colors hover:bg-slate-50"
+                      >
+                        <Settings size={16} />
+                        Settings
+                      </NavLink>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setProfileOpen(false)
+                          void logout()
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
+                      >
+                        <LogoutIcon />
+                        Log out
+                      </button>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
         </header>

@@ -85,7 +85,7 @@ function RequirementModal({ requirementTitle, docs, onClose, onPreview }: Requir
                 exit={{ opacity: 0, scale: 0.95, y: 16 }}
                 transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
                 onClick={(e) => e.stopPropagation()}
-                className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl border border-[var(--color-line)] bg-white shadow-2xl overflow-hidden"
+                className="w-full max-w-4xl max-h-[85vh] flex flex-col rounded-2xl border border-[var(--color-line)] bg-white shadow-2xl overflow-hidden"
             >
                 {/* Header */}
                 <div className="flex items-start justify-between gap-4 border-b border-[var(--color-line)] px-6 py-4">
@@ -142,7 +142,7 @@ function RequirementModal({ requirementTitle, docs, onClose, onPreview }: Requir
                         <table className="w-full min-w-[560px] border-collapse text-left">
                             <thead>
                                 <tr className="border-b border-[var(--color-line)] bg-slate-50/80">
-                                    {["Student", "Filename", "Submitted", "Status", ""].map((h) => (
+                                    {["Student", "Filename", "Submitted", "Status", "Action"].map((h) => (
                                         <th key={h} className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]">
                                             {h}
                                         </th>
