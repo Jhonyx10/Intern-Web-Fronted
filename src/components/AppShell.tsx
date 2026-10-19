@@ -19,6 +19,8 @@ type SectionKey = 'overview' | 'academic' | 'people' | 'internship'
 type NavItem = {
   to: string
   label: string
+  // Per-role label overrides; roles not listed fall back to `label`.
+  roleLabels?: Partial<Record<Role, string>>
   end: boolean
   icon: React.ElementType
   section: SectionKey
@@ -41,6 +43,7 @@ const navItems: NavItem[] = [
   {
     to: "/school-year-section",
     label: "School Year",
+    roleLabels: { dean: "Student Enroll" },
     end: false,
     icon: Calendar1Icon,
     section: 'academic',
@@ -279,16 +282,47 @@ export function AppShell() {
   // Add a `roles` array to a nav item to restrict it; omit `roles` to show it to everyone.
   const userRole = user?.role?.name as Role | undefined
 
-  // Visible items grouped into their sidebar sections (empty sections are dropped)
+  // Visible items grouped into their sidebar sections (empty sections are dropped).
+  // Labels are resolved per role here, so the JSX below just renders `label`.
   const groupedNav = useMemo(() => {
-    const visible = navItems.filter(
-      (item) => !item.roles || (userRole !== undefined && item.roles.includes(userRole))
-    )
+    const visible = navItems
+      .filter(
+        (item) => !item.roles || (userRole !== undefined && item.roles.includes(userRole))
+      )
+      .map((item) => ({
+        ...item,
+        label: (userRole && item.roleLabels?.[userRole]) ?? item.label,
+      }))
     return SECTIONS.map((section) => ({
       ...section,
       items: visible.filter((item) => item.section === section.key),
     })).filter((section) => section.items.length > 0)
   }, [userRole])
+
+  // Flat list of the nav items this role can see
+  const visibleItems = useMemo(
+    () => groupedNav.flatMap((group) => group.items),
+    [groupedNav]
+  )
+
+  // The highlighted nav item. Set once from the URL on first load,
+  // then only changed by clicking a sidenav item.
+  const [stickyNavTo, setStickyNavTo] = useState<string | null>(null)
+  const navInitialized = useRef(false)
+
+  useEffect(() => {
+    if (navInitialized.current || !userRole || visibleItems.length === 0) return
+    navInitialized.current = true
+
+    const path = location.pathname.replace(/\/$/, '') || '/'
+    const match = visibleItems
+      .filter((item) =>
+        item.end ? path === item.to : path === item.to || path.startsWith(item.to + '/')
+      )
+      .sort((a, b) => b.to.length - a.to.length)[0] // most specific match wins
+
+    setStickyNavTo(match?.to ?? null)
+  }, [visibleItems, userRole, location.pathname])
 
   // Super admin manages the list of school years; everyone else (e.g. dean)
   // goes straight to their own department, filtered to the current school year.
@@ -299,7 +333,7 @@ export function AppShell() {
     location.pathname.replace(/\/$/, '') === SCHOOL_YEAR_PATH && !isSuperAdmin
 
   const pageTitle = showCurrentSchoolYear
-    ? 'School Year'
+    ? 'Student Enroll'
     : resolvePageTitle(location.pathname)
 
   useEffect(() => {
@@ -373,58 +407,55 @@ export function AppShell() {
                 ) : null}
 
                 <div className={`flex flex-col gap-1 ${!sidebarOpen ? 'items-center w-full' : ''}`}>
-                  {group.items.map(({ to, label, end, icon: Icon }) => (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      end={end}
-                      className={({ isActive }) =>
-                        [
+                  {group.items.map(({ to, label, end, icon: Icon }) => {
+                    // Highlight follows the last sidenav click, not the current URL
+                    const isActive = stickyNavTo === to
+                    return (
+                      <NavLink
+                        key={to}
+                        to={to}
+                        end={end}
+                        onClick={() => setStickyNavTo(to)}
+                        className={[
                           'group relative flex items-center rounded-xl text-sm font-medium transition-colors shrink-0',
                           sidebarOpen ? 'gap-3 px-3 py-2.5' : 'justify-center p-2',
-                          isActive
-                            ? 'text-white'
-                            : 'text-white/70 hover:text-white',
-                        ].join(' ')
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          {isActive ? (
+                          isActive ? 'text-white' : 'text-white/70 hover:text-white',
+                        ].join(' ')}
+                      >
+                        {isActive ? (
+                          <motion.span
+                            layoutId="nav-active"
+                            className="absolute inset-0 rounded-xl bg-white/10"
+                            transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                          />
+                        ) : null}
+                        <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white shadow-sm ring-1 ring-white/10">
+                          <Icon />
+                        </span>
+                        <AnimatePresence initial={false}>
+                          {sidebarOpen ? (
                             <motion.span
-                              layoutId="nav-active"
-                              className="absolute inset-0 rounded-xl bg-white/10"
-                              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-                            />
-                          ) : null}
-                          <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white shadow-sm ring-1 ring-white/10">
-                            <Icon />
-                          </span>
-                          <AnimatePresence initial={false}>
-                            {sidebarOpen ? (
-                              <motion.span
-                                key="label"
-                                initial={{ opacity: 0, width: 0 }}
-                                animate={{ opacity: 1, width: 'auto' }}
-                                exit={{ opacity: 0, width: 0 }}
-                                transition={{ duration: 0.2 }}
-                                className="relative z-10 overflow-hidden whitespace-nowrap"
-                              >
-                                {label}
-                              </motion.span>
-                            ) : (
-                              <div
-                                className="absolute left-full ml-3 hidden items-center whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold tracking-wide text-white opacity-0 shadow-lg transition-all delay-75 duration-200 group-hover:flex group-hover:opacity-100 z-50"
-                                style={{ backgroundColor: themeColor || 'var(--color-accent)' }}
-                              >
-                                {label}
-                              </div>
-                            )}
-                          </AnimatePresence>
-                        </>
-                      )}
-                    </NavLink>
-                  ))}
+                              key="label"
+                              initial={{ opacity: 0, width: 0 }}
+                              animate={{ opacity: 1, width: 'auto' }}
+                              exit={{ opacity: 0, width: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="relative z-10 overflow-hidden whitespace-nowrap"
+                            >
+                              {label}
+                            </motion.span>
+                          ) : (
+                            <div
+                              className="absolute left-full ml-3 hidden items-center whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold tracking-wide text-white opacity-0 shadow-lg transition-all delay-75 duration-200 group-hover:flex group-hover:opacity-100 z-50"
+                              style={{ backgroundColor: themeColor || 'var(--color-accent)' }}
+                            >
+                              {label}
+                            </div>
+                          )}
+                        </AnimatePresence>
+                      </NavLink>
+                    )
+                  })}
                 </div>
               </div>
             ))}

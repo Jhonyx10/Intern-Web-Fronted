@@ -314,7 +314,6 @@ export const EvaluationPage: React.FC = () => {
                 <th className="px-4 py-3.5">School Year</th>
                 <th className="px-4 py-3.5">Questions</th>
                 <th className="px-4 py-3.5">Anchored Usage</th>
-                <th className="px-4 py-3.5">State</th>
                 <th className="px-6 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
@@ -383,33 +382,10 @@ export const EvaluationPage: React.FC = () => {
                         </td>
 
                         {/* Usage */}
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-1.5">
-                            <span className="inline-flex items-center justify-center rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-xs font-bold text-slate-700">
-                              {anchoredCount} {anchoredCount === 1 ? "school year" : "school years"}
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* State */}
-                        <td className="px-4 py-4">
-                          <div className="flex flex-col items-start gap-1">
-                            <span
-                              className={`inline-flex items-center gap-1.5 text-xs font-medium ${used ? "text-emerald-700" : "text-amber-700"
-                                }`}
-                            >
-                              <span
-                                className={`h-1.5 w-1.5 rounded-full ${used ? "bg-emerald-500" : "bg-amber-500"
-                                  }`}
-                              />
-                              {used ? "Used / locked" : "Editable"}
-                            </span>
-                            {!template.is_active && (
-                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-                                Inactive
-                              </span>
-                            )}
-                          </div>
+                        <td className="px-4 py-4 text-right">
+                          <span className="inline-flex items-center justify-center rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-xs font-bold text-slate-700">
+                            {anchoredCount}
+                          </span>
                         </td>
 
                         {/* Actions */}

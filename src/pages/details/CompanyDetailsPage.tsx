@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo, useEffect } from 'react'
+import { useRef, useState, useMemo, useEffect, type ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -7,25 +7,83 @@ import {
     type MapboxMapHandle,
     type MapMarker,
     type MapPolygonFeature,
+    type MapRouteInfo,
 } from '@/components/MapboxMap'
-import { useCompany } from '@/lib/queries/companies'
+import { useCompany, useAssignStudentToCompany, useCreateSupervisor, useToggleCompanyActive } from '@/lib/queries/companies'
 import { formatDistance, formatDuration, haversineMeters, OCC_CENTER, OCC_NAME } from '@/lib/geo'
-import { type MapRouteInfo } from '@/components/MapboxMap'
-import { Building2, MapPin, Phone, Mail, User2, Users2, Shield, ShieldOff, Navigation, ArrowLeft, MoreVertical, Calendar } from 'lucide-react'
+import { Building2, MapPin, Phone, Mail, User2, Users2, Shield, ShieldOff, Navigation, ArrowLeft, MoreVertical, History } from 'lucide-react'
 import AssignStudentModal from '@/components/modal/AssignStudentModal'
 import AddSupervisorModal from '@/components/modal/AddSupervisorModal'
-import { useAssignStudentToCompany, useCreateSupervisor, useToggleCompanyActive } from '@/lib/queries/companies'
+import { DeploymentHistoryModal } from '@/components/modal/CompanyDeploymentModal'
 import { useAuth } from '@/lib/auth'
+
+const COLORS = ['#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#6366f1']
+const MAIN_COLOR = '#0b6e4f'
+
+/** Shared card shell: title row + body */
+function Card({
+    title,
+    icon,
+    count,
+    action,
+    children,
+}: {
+    title: string
+    icon: ReactNode
+    count?: number
+    action?: ReactNode
+    children: ReactNode
+}) {
+    return (
+        <div className="rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--color-line)] px-5 py-3.5">
+                <h2 className="flex items-center gap-2 text-base font-semibold text-[var(--color-ink)]">
+                    <span className="text-[var(--color-muted)]">{icon}</span>
+                    {title}
+                    {count !== undefined && (
+                        <span className="text-sm font-normal text-[var(--color-muted)]">{count}</span>
+                    )}
+                </h2>
+                {action}
+            </div>
+            {children}
+        </div>
+    )
+}
+
+function StatusPill({ active }: { active?: boolean }) {
+    return active ? (
+        <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+            Active
+        </span>
+    ) : (
+        <span className="rounded-full bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/10">
+            Inactive
+        </span>
+    )
+}
+
+function EmptyRow({ children }: { children: ReactNode }) {
+    return <p className="px-5 py-8 text-center text-sm text-[var(--color-muted)]">{children}</p>
+}
 
 export function CompanyDetailsPage() {
     const { id } = useParams()
     const navigate = useNavigate()
     const mapRef = useRef<MapboxMapHandle>(null)
+    const actionsMenuRef = useRef<HTMLDivElement>(null)
+    const { user } = useAuth()
+
     const { data: company, isLoading, error } = useCompany(id)
+    const { mutate: assignStudent, isPending: isAssigning } = useAssignStudentToCompany()
+    const { mutate: createSupervisor, isPending: isCreatingSupervisor } = useCreateSupervisor()
+    const toggleActive = useToggleCompanyActive()
+
     const [routeInfo, setRouteInfo] = useState<MapRouteInfo | null>(null)
     const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
+    const [isSupervisorModalOpen, setIsSupervisorModalOpen] = useState(false)
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false)
     const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false)
-    const actionsMenuRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -36,15 +94,9 @@ export function CompanyDetailsPage() {
         document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
-    const [isSupervisorModalOpen, setIsSupervisorModalOpen] = useState(false)
-    const { mutate: assignStudent, isPending: isAssigning } = useAssignStudentToCompany()
-    const { mutate: createSupervisor, isPending: isCreatingSupervisor } = useCreateSupervisor()
-    const toggleActive = useToggleCompanyActive()
-    const { user } = useAuth()
 
     const markers = useMemo<MapMarker[]>(() => {
         const marks: MapMarker[] = []
-        const colors = ['#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#6366f1']
 
         if (company?.latitude && company?.longitude) {
             marks.push({
@@ -53,48 +105,43 @@ export function CompanyDetailsPage() {
                 longitude: company.longitude,
                 title: company.name,
                 color: 'accent',
-                hexColor: '#0b6e4f',
-                popupHtml: `<strong>${company.name}</strong><br/>${company.address ?? 'Main HQ'}`
+                hexColor: MAIN_COLOR,
+                popupHtml: `<strong>${company.name}</strong><br/>${company.address ?? 'Main HQ'}`,
             })
         }
 
-        if (company?.buildings) {
-            company.buildings.forEach((b, index) => {
-                if (b.latitude && b.longitude) {
-                    marks.push({
-                        id: `building-marker-${b.id}`,
-                        latitude: b.latitude,
-                        longitude: b.longitude,
-                        title: b.name || 'Unnamed Building',
-                        color: 'accent',
-                        hexColor: colors[index % colors.length],
-                        popupHtml: `<strong>${b.name || 'Unnamed Building'}</strong>`
-                    })
-                }
-            })
-        }
+        company?.buildings?.forEach((b, index) => {
+            if (b.latitude && b.longitude) {
+                marks.push({
+                    id: `building-marker-${b.id}`,
+                    latitude: b.latitude,
+                    longitude: b.longitude,
+                    title: b.name || 'Unnamed Building',
+                    color: 'accent',
+                    hexColor: COLORS[index % COLORS.length],
+                    popupHtml: `<strong>${b.name || 'Unnamed Building'}</strong>`,
+                })
+            }
+        })
         return marks
     }, [company])
 
     const polygons = useMemo<MapPolygonFeature[]>(() => {
         const features: MapPolygonFeature[] = []
-        const colors = ['#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#6366f1']
 
         if (company?.geofence_polygon) {
-            features.push({ id: company.id, name: company.name, polygon: company.geofence_polygon, color: '#0b6e4f' })
+            features.push({ id: company.id, name: company.name, polygon: company.geofence_polygon, color: MAIN_COLOR })
         }
-        if (company?.buildings) {
-            company.buildings.forEach((b, index) => {
-                if (b.geofence_polygon?.type === 'Polygon') {
-                    features.push({
-                        id: `building-${b.id}`,
-                        name: b.name || 'Unnamed Building',
-                        polygon: b.geofence_polygon,
-                        color: colors[index % colors.length]
-                    })
-                }
-            })
-        }
+        company?.buildings?.forEach((b, index) => {
+            if (b.geofence_polygon?.type === 'Polygon') {
+                features.push({
+                    id: `building-${b.id}`,
+                    name: b.name || 'Unnamed Building',
+                    polygon: b.geofence_polygon,
+                    color: COLORS[index % COLORS.length],
+                })
+            }
+        })
         return features
     }, [company?.geofence_polygon, company?.buildings])
 
@@ -118,52 +165,74 @@ export function CompanyDetailsPage() {
         )
     }
 
+    // Main location + each building as one flat list
+    const geofences = [
+        {
+            key: 'main',
+            name: 'Main location',
+            color: MAIN_COLOR,
+            enabled: Boolean(company.geofence_enabled),
+            radius: company.geofence_radius_meters,
+            hasPolygon: Boolean(company.geofence_polygon),
+        },
+        ...(company.buildings ?? []).map((b, index) => ({
+            key: `building-${b.id}`,
+            name: b.name || 'Unnamed building',
+            color: COLORS[index % COLORS.length],
+            enabled: Boolean(b.geofence_enabled),
+            radius: b.geofence_radius_meters,
+            hasPolygon: Boolean(b.geofence_polygon),
+        })),
+    ]
+
+    const hasContact = company.contact_person || company.contact_email || company.contact_phone
+    const hasLocation = Boolean(company.latitude && company.longitude)
+    const activeYears = company.active_school_years ?? []
+    const partnerYears = company.total_school_years_count ?? 0
+
     return (
-        <section className="space-y-6">
+        <section className="space-y-5">
             {/* Header */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
                     <button
                         onClick={() => navigate(-1)}
-                        className="rounded-full p-2 text-[var(--color-muted)] hover:bg-slate-100 hover:text-[var(--color-ink)] transition"
-                        title="Back to map"
+                        className="mt-1 rounded-full p-2 text-[var(--color-muted)] transition hover:bg-slate-100 hover:text-[var(--color-ink)]"
+                        title="Back"
+                        aria-label="Back"
                     >
                         <ArrowLeft size={20} />
                     </button>
                     <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-[11px] font-semibold tracking-[0.2em] text-[var(--color-accent)] uppercase">
-                                Companies
-                            </p>
-                            {company.active_school_years && company.active_school_years.length > 0 && (
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                    {company.active_school_years.map((syName) => (
-                                        <span key={syName} className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800">
-                                            <Calendar size={11} />
-                                            S.Y. {syName}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-                            {company.total_school_years_count != null && company.total_school_years_count > 0 && (
-                                <span className="rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
-                                    Partnered for {company.total_school_years_count} {company.total_school_years_count === 1 ? 'school year' : 'school years'}
-                                </span>
-                            )}
-                        </div>
                         <h2 className="text-3xl font-semibold tracking-tight">{company.name}</h2>
                         {company.address && (
                             <p className="mt-1 flex items-center gap-1.5 text-sm text-[var(--color-muted)]">
                                 <MapPin size={13} /> {company.address}
                             </p>
                         )}
+                        {(activeYears.length > 0 || partnerYears > 0) && (
+                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-[var(--color-muted)]">
+                                {activeYears.length > 0 && (
+                                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 font-semibold text-amber-800">
+                                        S.Y. {activeYears.join(', ')}
+                                    </span>
+                                )}
+                                {partnerYears > 0 && (
+                                    <span>
+                                        Partnered for {partnerYears} {partnerYears === 1 ? 'school year' : 'school years'}
+                                    </span>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
+
                 {user?.role?.name === 'super_admin' && (
                     <div className="relative" ref={actionsMenuRef}>
                         <button
                             onClick={() => setIsActionsMenuOpen((p) => !p)}
-                            className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--color-line)] bg-white/80 text-[var(--color-ink)] transition hover:bg-slate-50 hover:border-[var(--color-ink)]"
+                            aria-label="Company actions"
+                            className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--color-line)] bg-white text-[var(--color-ink)] transition hover:bg-slate-50"
                         >
                             <MoreVertical size={20} />
                         </button>
@@ -175,252 +244,192 @@ export function CompanyDetailsPage() {
                                     animate={{ opacity: 1, scale: 1, y: 0 }}
                                     exit={{ opacity: 0, scale: 0.95, y: 8 }}
                                     transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-                                    className="absolute right-0 top-full mt-2 w-56 max-w-sm rounded-xl border border-[var(--color-line)] bg-white p-2 shadow-lg z-50"
+                                    className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-[var(--color-line)] bg-white p-2 shadow-lg"
                                 >
-                                    <div className="flex flex-col gap-1">
-                                        {/* Activate / Deactivate Toggle */}
-                                        <div className="flex items-center justify-between rounded-lg px-3 py-2.5 transition hover:bg-slate-50">
-                                            <span className="text-sm font-medium text-[var(--color-ink)] pointer-events-none">
-                                                Active Status
-                                            </span>
-                                            <div
-                                                role="switch"
-                                                aria-checked={company.is_active !== false}
-                                                onClick={() => {
-                                                    if (!toggleActive.isPending) {
-                                                        toggleActive.mutate(company.id)
-                                                    }
-                                                }}
-                                                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${company.is_active !== false ? 'bg-[var(--color-accent)]' : 'bg-slate-300'
-                                                    } ${toggleActive.isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                            >
-                                                <span
-                                                    aria-hidden="true"
-                                                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${company.is_active !== false ? 'translate-x-4' : 'translate-x-0.5'
-                                                        }`}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="my-1 h-px w-full bg-[var(--color-line)]" />
+                                    <div className="flex items-center justify-between rounded-lg px-3 py-2.5">
+                                        <span className="text-sm font-medium text-[var(--color-ink)]">Active status</span>
                                         <button
-                                            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:bg-slate-50"
-                                            onClick={() => {
-                                                setIsSupervisorModalOpen(true)
-                                                setIsActionsMenuOpen(false)
-                                            }}
+                                            type="button"
+                                            role="switch"
+                                            aria-checked={company.is_active !== false}
+                                            disabled={toggleActive.isPending}
+                                            onClick={() => toggleActive.mutate(company.id)}
+                                            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${company.is_active !== false ? 'bg-[var(--color-accent)]' : 'bg-slate-300'}`}
                                         >
-                                            <User2 size={16} /> Add Supervisor
+                                            <span
+                                                aria-hidden="true"
+                                                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${company.is_active !== false ? 'translate-x-4' : 'translate-x-0.5'}`}
+                                            />
                                         </button>
                                     </div>
+                                    <div className="my-1 h-px w-full bg-[var(--color-line)]" />
+                                    <button
+                                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:bg-slate-50"
+                                        onClick={() => {
+                                            setIsSupervisorModalOpen(true)
+                                            setIsActionsMenuOpen(false)
+                                        }}
+                                    >
+                                        <User2 size={16} /> Add supervisor
+                                    </button>
                                 </motion.div>
                             )}
                         </AnimatePresence>
                     </div>
                 )}
 
-                {/* Coordinators get a dedicated button instead of the actions menu */}
                 {user?.role?.name === 'coordinator' && (
                     <button
                         type="button"
                         onClick={() => setIsAssignModalOpen(true)}
                         className="inline-flex h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
                     >
-                        <Users2 size={16} /> Assign Student
+                        <Users2 size={16} /> Assign student
                     </button>
                 )}
             </div>
 
             <MapTokenWarning />
 
-            <div className="space-y-6">
-                {/* Map — full width */}
-                <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white/80 shadow-[var(--shadow-soft)] backdrop-blur">
-                    <MapboxMap
-                        ref={mapRef}
-                        heightClassName="h-[420px]"
-                        center={company?.longitude && company?.latitude ? [company.longitude, company.latitude] : undefined}
-                        zoom={17}
-                        markers={markers}
-                        polygons={polygons}
-                        fitMarkers={false}
-                        fitRouteBounds={false}
-                        routeTo={routeTo}
-                        onRouteInfo={setRouteInfo}
-                    />
-                </div>
+            {/* Map */}
+            <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
+                <MapboxMap
+                    ref={mapRef}
+                    heightClassName="h-[380px]"
+                    center={company.longitude && company.latitude ? [company.longitude, company.latitude] : undefined}
+                    zoom={17}
+                    markers={markers}
+                    polygons={polygons}
+                    fitMarkers={false}
+                    fitRouteBounds={false}
+                    routeTo={routeTo}
+                    onRouteInfo={setRouteInfo}
+                />
+            </div>
 
-                {/* Info panels — horizontal row */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                    {/* Contact info */}
-                    <div className="rounded-2xl border border-[var(--color-line)] bg-white/80 p-5 shadow-[var(--shadow-soft)] backdrop-blur">
-                        <p className="text-[11px] font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase mb-3">
-                            Contact information
-                        </p>
-                        <div className="space-y-3">
+            {/* Contact + location in one card */}
+            <div className="grid gap-6 rounded-2xl border border-[var(--color-line)] bg-white p-5 shadow-[var(--shadow-soft)] sm:grid-cols-2">
+                <div>
+                    <h3 className="mb-3 text-sm font-semibold text-[var(--color-ink)]">Contact</h3>
+                    {hasContact ? (
+                        <div className="space-y-2.5 text-sm text-[var(--color-ink)]">
                             {company.contact_person && (
-                                <div className="flex items-start gap-2.5 text-sm text-[var(--color-ink)]">
-                                    <User2 size={14} className="mt-0.5 shrink-0 text-[var(--color-muted)]" />
-                                    <span>{company.contact_person}</span>
-                                </div>
+                                <p className="flex items-center gap-2.5">
+                                    <User2 size={14} className="shrink-0 text-[var(--color-muted)]" />
+                                    {company.contact_person}
+                                </p>
                             )}
                             {company.contact_email && (
-                                <div className="flex items-start gap-2.5 text-sm text-[var(--color-ink)]">
-                                    <Mail size={14} className="mt-0.5 shrink-0 text-[var(--color-muted)]" />
-                                    <a
-                                        href={`mailto:${company.contact_email}`}
-                                        className="hover:text-[var(--color-accent)] transition"
-                                    >
+                                <p className="flex items-center gap-2.5">
+                                    <Mail size={14} className="shrink-0 text-[var(--color-muted)]" />
+                                    <a href={`mailto:${company.contact_email}`} className="transition hover:text-[var(--color-accent)]">
                                         {company.contact_email}
                                     </a>
-                                </div>
+                                </p>
                             )}
                             {company.contact_phone && (
-                                <div className="flex items-start gap-2.5 text-sm text-[var(--color-ink)]">
-                                    <Phone size={14} className="mt-0.5 shrink-0 text-[var(--color-muted)]" />
-                                    <a
-                                        href={`tel:${company.contact_phone}`}
-                                        className="hover:text-[var(--color-accent)] transition"
-                                    >
+                                <p className="flex items-center gap-2.5">
+                                    <Phone size={14} className="shrink-0 text-[var(--color-muted)]" />
+                                    <a href={`tel:${company.contact_phone}`} className="transition hover:text-[var(--color-accent)]">
                                         {company.contact_phone}
                                     </a>
-                                </div>
-                            )}
-                            {!company.contact_person && !company.contact_email && !company.contact_phone && (
-                                <p className="text-sm text-[var(--color-muted)]">No contact info available.</p>
+                                </p>
                             )}
                         </div>
-                    </div>
+                    ) : (
+                        <p className="text-sm text-[var(--color-muted)]">No contact info available.</p>
+                    )}
+                </div>
 
-                    {/* Location info */}
-                    {company.latitude && company.longitude && (
-                        <div className="rounded-2xl border border-[var(--color-line)] bg-white/80 p-5 shadow-[var(--shadow-soft)] backdrop-blur">
-                            <p className="text-[11px] font-semibold tracking-[0.14em] text-[var(--color-muted)] uppercase mb-3">
-                                Location
+                <div>
+                    <h3 className="mb-3 text-sm font-semibold text-[var(--color-ink)]">Location</h3>
+                    {hasLocation ? (
+                        <div className="space-y-2.5 text-sm text-[var(--color-ink)]">
+                            <p className="flex items-center gap-2.5">
+                                <Building2 size={14} className="shrink-0 text-[var(--color-muted)]" />
+                                <span className="font-mono text-xs">
+                                    {company.latitude!.toFixed(5)}, {company.longitude!.toFixed(5)}
+                                </span>
                             </p>
-                            <div className="space-y-2 text-sm text-[var(--color-ink)]">
-                                <div className="flex items-center gap-2">
-                                    <Building2 size={14} className="text-[var(--color-muted)]" />
-                                    <span className="font-mono text-xs">
-                                        {company.latitude.toFixed(5)}, {company.longitude.toFixed(5)}
-                                    </span>
+                            {distanceMeters !== null && (
+                                <div>
+                                    <p className="font-medium">
+                                        {routeInfo
+                                            ? formatDistance(routeInfo.distanceMeters)
+                                            : `${formatDistance(distanceMeters)} (straight line)`}{' '}
+                                        <span className="font-normal text-[var(--color-muted)]">from {OCC_NAME}</span>
+                                    </p>
+                                    <p className="mt-0.5 flex items-center gap-1 text-xs text-[var(--color-muted)]">
+                                        <Navigation size={11} />
+                                        {routeInfo
+                                            ? `Driving, about ${formatDuration(routeInfo.durationSeconds)}`
+                                            : 'Loading driving route…'}
+                                    </p>
                                 </div>
-                                {distanceMeters !== null && (
-                                    <div className="mt-3 space-y-1 rounded-xl border border-[var(--color-line)] bg-slate-50/80 px-3 py-3">
-                                        <p className="text-[11px] font-semibold tracking-[0.12em] text-[var(--color-muted)] uppercase">
-                                            Distance from {OCC_NAME}
-                                        </p>
-                                        <p className="text-sm font-medium text-[var(--color-ink)]">
-                                            {routeInfo
-                                                ? formatDistance(routeInfo.distanceMeters)
-                                                : `${formatDistance(distanceMeters)} (straight line)`}
-                                        </p>
-                                        {routeInfo ? (
-                                            <p className="flex items-center gap-1 text-xs text-[var(--color-muted)]">
-                                                <Navigation size={11} />
-                                                Driving · about {formatDuration(routeInfo.durationSeconds)}
-                                            </p>
-                                        ) : (
-                                            <p className="text-xs text-[var(--color-muted)]">Loading driving route…</p>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
+                            )}
                         </div>
+                    ) : (
+                        <p className="text-sm text-[var(--color-muted)]">No location set.</p>
                     )}
                 </div>
             </div>
 
-            {/* Buildings & Geofences Section */}
-            <div className="rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
-                <div className="border-b border-[var(--color-line)] px-6 py-4 flex items-center justify-between">
-                    <h2 className="text-lg font-semibold flex items-center gap-2">
-                        <MapPin size={18} className="text-[var(--color-muted)]" />
-                        Buildings & Geofences
-                    </h2>
-                </div>
-                <div className="p-6">
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {/* Main Company Location */}
-                        <div className="rounded-xl border border-[var(--color-line)] bg-slate-50/50 p-4 border-l-4 border-l-[#0b6e4f]">
-                            <div className="mb-2 flex items-center justify-between">
-                                <h3 className="font-semibold text-sm text-[var(--color-ink)]">Main Config / General</h3>
-                                <div className={`flex items-center gap-1.5 text-xs font-medium ${company.geofence_enabled ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]'}`}>
-                                    {company.geofence_enabled ? <><Shield size={12} /> Enabled</> : <><ShieldOff size={12} /> Disabled</>}
-                                </div>
-                            </div>
-                            <div className="space-y-1 mt-3 text-xs text-[var(--color-muted)]">
-                                {company.geofence_radius_meters && <p>Radius: <strong>{company.geofence_radius_meters} m</strong></p>}
-                                <p>Polygon Map: {company.geofence_polygon ? <strong className="text-green-600">Defined</strong> : 'None'}</p>
-                            </div>
-                        </div>
+            {/* Geofences */}
+            <Card title="Geofences" icon={<MapPin size={17} />} count={geofences.length}>
+                <ul className="divide-y divide-[var(--color-line)]">
+                    {geofences.map((g) => (
+                        <li key={g.key} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 text-sm">
+                            <span
+                                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                style={{ backgroundColor: g.color }}
+                                aria-hidden="true"
+                            />
+                            <span className="min-w-0 flex-1 truncate font-medium text-[var(--color-ink)]">{g.name}</span>
+                            <span className="text-xs text-[var(--color-muted)]">
+                                {g.radius ? `${g.radius} m radius` : 'No radius'}
+                                {g.hasPolygon ? ', polygon set' : ''}
+                            </span>
+                            <span
+                                className={`flex w-20 items-center gap-1.5 text-xs font-medium ${g.enabled ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]'}`}
+                            >
+                                {g.enabled ? <Shield size={12} /> : <ShieldOff size={12} />}
+                                {g.enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                        </li>
+                    ))}
+                </ul>
+            </Card>
 
-                        {/* Buildings */}
-                        {company.buildings?.map((b, index) => {
-                            const colors = ['#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#6366f1']
-                            const buildingColor = colors[index % colors.length]
-                            return (
-                                <div key={b.id} className="rounded-xl border border-[var(--color-line)] bg-slate-50/50 p-4 border-l-4" style={{ borderLeftColor: buildingColor }}>
-                                    <div className="mb-2 flex items-center justify-between">
-                                        <h3 className="font-semibold text-sm text-[var(--color-ink)] text-ellipsis whitespace-nowrap overflow-hidden pr-2">{b.name}</h3>
-                                        <div className={`flex items-center gap-1.5 text-xs font-medium ${b.geofence_enabled ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)]'}`}>
-                                            {b.geofence_enabled ? <><Shield size={12} /> Enabled</> : <><ShieldOff size={12} /> Disabled</>}
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1 mt-3 text-xs text-[var(--color-muted)]">
-                                        {b.latitude && b.longitude && (
-                                            <p className="flex items-center gap-1">
-                                                <Building2 size={10} /> {b.latitude.toFixed(5)}, {b.longitude.toFixed(5)}
-                                            </p>
-                                        )}
-                                        {b.geofence_radius_meters && <p>Radius: <strong>{b.geofence_radius_meters} m</strong></p>}
-                                        <p>Polygon Map: {b.geofence_polygon ? <strong className="text-green-600">Defined</strong> : 'None'}</p>
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
-                </div>
-            </div>
-
+            {/* Supervisors */}
             {company.supervisors && (
-                <div className="rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
-                    <div className="border-b border-[var(--color-line)] px-6 py-4">
-                        <h2 className="text-lg font-semibold flex items-center gap-2">
-                            <User2 size={18} className="text-[var(--color-muted)]" />
-                            Supervisors <span className="text-sm font-normal text-[var(--color-muted)]">({company.supervisors.length})</span>
-                        </h2>
-                    </div>
+                <Card title="Supervisors" icon={<User2 size={17} />} count={company.supervisors.length}>
                     {company.supervisors.length > 0 ? (
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm text-[var(--color-muted)]">
-                                <thead className="bg-slate-50/50 text-xs uppercase text-[var(--color-muted)]">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-slate-50/60 text-xs text-[var(--color-muted)]">
                                     <tr>
-                                        <th className="px-6 py-3 font-medium">Name</th>
-                                        <th className="px-6 py-3 font-medium">Email</th>
-                                        <th className="px-6 py-3 font-medium">Position</th>
-                                        <th className="px-6 py-3 font-medium">Status</th>
+                                        <th className="px-5 py-2.5 font-medium">Name</th>
+                                        <th className="px-5 py-2.5 font-medium">Email</th>
+                                        <th className="px-5 py-2.5 font-medium">Position</th>
+                                        <th className="px-5 py-2.5 font-medium">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
-                                    {company.supervisors.map((supervisor) => (
-                                        <tr key={supervisor.id} className="transition-colors hover:bg-slate-50/50">
-                                            <td className="px-6 py-4 font-medium">
-                                                {supervisor.user?.name ?? '—'}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {supervisor.user?.email
-                                                    ? <a href={`mailto:${supervisor.user.email}`} className="hover:text-[var(--color-accent)] transition">{supervisor.user.email}</a>
-                                                    : '—'}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {supervisor.position_title ?? <span className="italic text-[var(--color-muted)]">Not set</span>}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {supervisor.is_active ? (
-                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">Active</span>
+                                    {company.supervisors.map((s) => (
+                                        <tr key={s.id}>
+                                            <td className="px-5 py-3 font-medium">{s.user?.name ?? '—'}</td>
+                                            <td className="px-5 py-3">
+                                                {s.user?.email ? (
+                                                    <a href={`mailto:${s.user.email}`} className="transition hover:text-[var(--color-accent)]">
+                                                        {s.user.email}
+                                                    </a>
                                                 ) : (
-                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">Inactive</span>
+                                                    '—'
                                                 )}
+                                            </td>
+                                            <td className="px-5 py-3 text-[var(--color-muted)]">{s.position_title ?? 'Not set'}</td>
+                                            <td className="px-5 py-3">
+                                                <StatusPill active={s.is_active} />
                                             </td>
                                         </tr>
                                     ))}
@@ -428,103 +437,109 @@ export function CompanyDetailsPage() {
                             </table>
                         </div>
                     ) : (
-                        <div className="p-8 text-center text-sm text-[var(--color-muted)]">
-                            No supervisors have been added to this company yet.
-                        </div>
+                        <EmptyRow>No supervisors added yet.</EmptyRow>
                     )}
-                </div>
+                </Card>
             )}
 
+            {/* Deployed students */}
             {company.students && (
-                <div className="rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
-                    <div className="border-b border-[var(--color-line)] px-6 py-4">
-                        <h2 className="text-lg font-semibold flex items-center gap-2">
-                            <Users2 size={18} className="text-[var(--color-muted)]" />
-                            Deployed Students <span className="text-sm font-normal text-[var(--color-muted)]">({company.students.length})</span>
-                        </h2>
-                    </div>
+                <Card
+                    title="Deployed students"
+                    icon={<Users2 size={17} />}
+                    count={company.students.length}
+                    action={
+                        <button
+                            type="button"
+                            onClick={() => setIsHistoryOpen(true)}
+                            className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--color-line)] bg-white px-3 text-sm font-medium text-[var(--color-ink)] transition hover:bg-slate-50"
+                        >
+                            <History size={15} /> Deployment history
+                        </button>
+                    }
+                >
                     {company.students.length > 0 ? (
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm text-[var(--color-muted)]">
-                                <thead className="bg-slate-50/50 text-xs uppercase text-[var(--color-muted)]">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-slate-50/60 text-xs text-[var(--color-muted)]">
                                     <tr>
-                                        <th className="px-6 py-3 font-medium">Student No.</th>
-                                        <th className="px-6 py-3 font-medium">Name</th>
-                                        <th className="px-6 py-3 font-medium">Section / S.Y.</th>
-                                        <th className="px-6 py-3 font-medium">Status</th>
+                                        <th className="px-5 py-2.5 font-medium">Student no.</th>
+                                        <th className="px-5 py-2.5 font-medium">Name</th>
+                                        <th className="px-5 py-2.5 font-medium">Section / S.Y.</th>
+                                        <th className="px-5 py-2.5 font-medium">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
-                                    {company.students.map((student) => (
-                                        <tr key={student.id} className="transition-colors hover:bg-slate-50/50">
-                                            <td className="whitespace-nowrap px-6 py-4 font-medium">
-                                                {student.student_number}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {student.last_name}, {student.first_name} {student.middle_name || ''}
-                                            </td>
-                                            <td className="px-6 py-4 text-xs">
-                                                {student.section?.name ? (
-                                                    <div>
-                                                        <p className="font-medium text-[var(--color-ink)]">{student.section.name}</p>
-                                                        {(student.section.school_year?.name || student.section.schoolYear?.name) && (
-                                                            <p className="text-amber-700 font-medium">
-                                                                S.Y. {student.section.school_year?.name ?? student.section.schoolYear?.name}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-[var(--color-muted)]">—</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {student.is_active ? (
-                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
-                                                        Active
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10">
-                                                        Inactive
-                                                    </span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {company.students.map((student) => {
+                                        const syName =
+                                            student.section?.school_year?.name ?? student.section?.schoolYear?.name
+                                        return (
+                                            <tr key={student.id}>
+                                                <td className="whitespace-nowrap px-5 py-3 font-medium">
+                                                    {student.student_number}
+                                                </td>
+                                                <td className="px-5 py-3">
+                                                    {student.last_name}, {student.first_name} {student.middle_name || ''}
+                                                </td>
+                                                <td className="px-5 py-3">
+                                                    {student.section?.name ? (
+                                                        <>
+                                                            <p>{student.section.name}</p>
+                                                            {syName && (
+                                                                <p className="text-xs text-[var(--color-muted)]">S.Y. {syName}</p>
+                                                            )}
+                                                        </>
+                                                    ) : (
+                                                        <span className="text-[var(--color-muted)]">—</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-5 py-3">
+                                                    <StatusPill active={student.is_active} />
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
                                 </tbody>
                             </table>
                         </div>
                     ) : (
-                        <div className="p-8 text-center text-sm text-[var(--color-muted)]">
-                            No students are currently assigned to this company.
-                        </div>
+                        <EmptyRow>No students are currently assigned to this company.</EmptyRow>
                     )}
-                </div>
+                </Card>
             )}
 
-            {company && (
-                <>
-                    <AssignStudentModal
-                        open={isAssignModalOpen}
-                        onClose={() => setIsAssignModalOpen(false)}
-                        isLoading={isAssigning}
-                        onAssign={(studentIds) => {
-                            assignStudent({ companyId: company.id, studentIds }, {
-                                onSuccess: () => setIsAssignModalOpen(false),
-                            })
-                        }}
+            <AssignStudentModal
+                open={isAssignModalOpen}
+                onClose={() => setIsAssignModalOpen(false)}
+                isLoading={isAssigning}
+                onAssign={(studentIds) => {
+                    assignStudent(
+                        { companyId: company.id, studentIds },
+                        { onSuccess: () => setIsAssignModalOpen(false) }
+                    )
+                }}
+            />
+            <AddSupervisorModal
+                open={isSupervisorModalOpen}
+                onClose={() => setIsSupervisorModalOpen(false)}
+                isLoading={isCreatingSupervisor}
+                onAdd={(formData) => {
+                    createSupervisor(
+                        { companyId: company.id, input: formData },
+                        { onSuccess: () => setIsSupervisorModalOpen(false) }
+                    )
+                }}
+            />
+
+            <AnimatePresence>
+                {isHistoryOpen && (
+                    <DeploymentHistoryModal
+                        companyId={company.id}
+                        companyName={company.name}
+                        onClose={() => setIsHistoryOpen(false)}
                     />
-                    <AddSupervisorModal
-                        open={isSupervisorModalOpen}
-                        onClose={() => setIsSupervisorModalOpen(false)}
-                        isLoading={isCreatingSupervisor}
-                        onAdd={(formData) => {
-                            createSupervisor({ companyId: company.id, input: formData }, {
-                                onSuccess: () => setIsSupervisorModalOpen(false),
-                            })
-                        }}
-                    />
-                </>
-            )}
+                )}
+            </AnimatePresence>
         </section>
     )
 }

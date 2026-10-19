@@ -176,18 +176,28 @@ export interface SubmittedDocument {
   reviewed_by?: { id: number; name: string }
 }
 
-export function useSubmittedDocuments(params?: { course_id?: number | string; search?: string }) {
+export function useSubmittedDocuments(params?: {
+  course_id?: number | string
+  school_year_id?: number | string
+  search?: string
+}) {
   const { user, token } = useAuth()
 
   const queryParams = new URLSearchParams()
   if (params?.course_id) queryParams.append('course_id', String(params.course_id))
+  if (params?.school_year_id) queryParams.append('school_year_id', String(params.school_year_id))
   if (params?.search) queryParams.append('search', params.search)
 
   const queryString = queryParams.toString()
   const url = `/submitted-documents${queryString ? `?${queryString}` : ''}`
 
   return useQuery({
-    queryKey: ['submitted-documents', params?.course_id, params?.search],
+    queryKey: [
+      'submitted-documents',
+      params?.course_id,
+      params?.school_year_id,
+      params?.search,
+    ],
     queryFn: () => apiRequest<SubmittedDocument[]>(url, { token }),
     enabled: !!user,
   })

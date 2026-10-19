@@ -49,7 +49,7 @@ export default function DocumentPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isSuperAdmin = user?.role?.name === "super_admin";
-  const isDean = user?.role?.name === "dean" || user?.role?.name === 'coordinator';
+  const isDean = user?.role?.name === "dean" || user?.role?.name === "coordinator";
   const courseId = user?.course?.id as number | undefined;
 
   // Deans only ever have one department — redirect straight to its details page.
@@ -65,10 +65,7 @@ export default function DocumentPage() {
   // Super admin: the department whose requirements are being assigned
   const [assignCourseId, setAssignCourseId] = useState<number | null>(null);
 
-  // Active school year
   const { data: currentSchoolYear } = useCurrentSchoolYear();
-
-  // Master courses list (super admin filter + department picker + cards)
   const { data: courses } = useCourses();
 
   const courseIds = useMemo(
@@ -76,21 +73,11 @@ export default function DocumentPage() {
     [courses]
   );
 
-  // Requirements assigned to each department (one request per department).
-  // Super admin only; deans and admins make no extra requests.
   const deptResults = useDepartmentRequirements(isSuperAdmin ? courseIds : []);
-
-  // Per-course theme colors from the settings table (super admin only)
   const { data: themes } = useCourseThemes(isSuperAdmin);
 
-  // Master requirements list — used for the stat cards and as the checklist
-  // source in the assign modal.
-  const {
-    data: allRequirements,
-    isError: errorAll,
-  } = useDocumentRequirements();
+  const { data: allRequirements, isError: errorAll } = useDocumentRequirements();
 
-  // Dean's read-only, course-scoped view
   const deanQuery = useCourseDocumentRequirements(isDean ? courseId : undefined);
   const courseRequirements = deanQuery.data;
   const errorCourse = deanQuery.isError;
@@ -99,13 +86,13 @@ export default function DocumentPage() {
     (courses ?? []).find((c) => Number(c.id) === Number(courseId)) ??
     (user?.course as Program | undefined);
 
-  // Requirements currently assigned to the department the super admin picked.
-  // The modal only mounts once this has loaded so its checkboxes start correct.
   const { data: assignTarget } = useCourseDocumentRequirements(
     isSuperAdmin ? assignCourseId ?? undefined : undefined
   );
 
-  const requirements = isDean ? courseRequirements : allRequirements;
+  const requirements: { is_active: boolean }[] | undefined = isDean
+    ? courseRequirements
+    : allRequirements;
   const isErrorRequirements = isDean ? errorCourse : errorAll;
 
   const totalRequirements = requirements?.length ?? 0;
@@ -120,7 +107,6 @@ export default function DocumentPage() {
     [allRequirements]
   );
 
-  // Show a brief loading state while the redirect fires for deans
   if (isDean && courseId) {
     return (
       <div className="flex h-60 items-center justify-center">
@@ -129,7 +115,6 @@ export default function DocumentPage() {
     );
   }
 
-  // Dean with no assigned course
   if (isDean && !courseId) {
     return (
       <motion.section
@@ -193,18 +178,6 @@ export default function DocumentPage() {
           <div className="flex flex-wrap items-center gap-3">
             {isSuperAdmin && (
               <>
-                <button
-                  type="button"
-                  onClick={() => setShowCommonModal(true)}
-                  className="flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-sm font-medium text-[var(--color-ink)] shadow-xs transition hover:bg-slate-50 hover:border-[var(--color-accent)]"
-                >
-                  <Layers size={15} className="text-[var(--color-accent)]" /> Common Documents
-                  <span className="rounded-full bg-[var(--color-accent-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--color-accent)]">
-                    {commonRequirementsCount}
-                  </span>
-                </button>
-
-                {/* Pick a department to assign requirements and a deadline */}
                 <select
                   value=""
                   onChange={(e) =>
@@ -253,8 +226,7 @@ export default function DocumentPage() {
               label: isDean ? "Assigned" : "Total requirements",
               value: totalRequirements,
               icon: FileText,
-              color:
-                "text-[var(--color-accent)] bg-[var(--color-accent-soft)]",
+              color: "text-[var(--color-accent)] bg-[var(--color-accent-soft)]",
             },
             {
               label: "Active",
@@ -301,29 +273,42 @@ export default function DocumentPage() {
           </motion.div>
         )}
 
-        {/* ── Requirements: department cards ───────────────── */}
-        {/* Super admin: one themed card per department */}
+        {/* ── Super admin: department cards ────────────────── */}
         {isSuperAdmin && (
           <motion.div variants={row} className="space-y-4">
-            <label className="flex max-w-md items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-muted)] transition focus-within:border-[var(--color-accent)] focus-within:ring-2 focus-within:ring-[var(--color-accent)]/20">
-              <Search size={14} />
-              <input
-                type="search"
-                placeholder="Search departments…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 bg-transparent text-[var(--color-ink)] outline-none placeholder:text-[var(--color-muted)]"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </label>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex min-w-[220px] max-w-md flex-1 items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-muted)] transition focus-within:border-[var(--color-accent)] focus-within:ring-2 focus-within:ring-[var(--color-accent)]/20">
+                <Search size={14} />
+                <input
+                  type="search"
+                  placeholder="Search departments…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="flex-1 bg-transparent text-[var(--color-ink)] outline-none placeholder:text-[var(--color-muted)]"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setShowCommonModal(true)}
+                className="flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-sm font-medium text-[var(--color-ink)] shadow-xs transition hover:border-[var(--color-accent)] hover:bg-slate-50"
+              >
+                <Layers size={15} className="text-[var(--color-accent)]" />
+                Common Documents
+                <span className="rounded-full bg-[var(--color-accent-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--color-accent)]">
+                  {commonRequirementsCount}
+                </span>
+              </button>
+            </div>
 
             {courses && (
               <DepartmentRequirementCards
