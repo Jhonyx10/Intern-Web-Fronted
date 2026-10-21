@@ -10,7 +10,7 @@ import { useLatestGeofenceEvents } from "@/lib/queries/geofenceEvents";
 import { useLiveInternLocations } from "@/hooks/useLiveInternLocations";
 import { useTheme } from "@/context/ThemeContext"; // adjust path as needed
 import type { Company } from "@/types";
-import { MapPin, X, Building2, User } from "lucide-react";
+import { MapPin, X, Building2, User, Navigation } from "lucide-react";
 
 type LocatedCompany = Company & { latitude: number; longitude: number };
 
@@ -112,6 +112,43 @@ const StudentLiveTracker = () => {
     return null;
   }, [selectedIntern, approvedCompanies]);
 
+  // Geofence status for every visible intern
+  type GeofenceStatus = { inside: boolean; locationName: string | null };
+  const internGeofenceStatuses = useMemo<Map<number | string, GeofenceStatus>>(() => {
+    const map = new Map<number | string, GeofenceStatus>();
+    for (const loc of liveLocations) {
+      const point: [number, number] = [loc.longitude, loc.latitude];
+      let found: GeofenceStatus | null = null;
+
+      outer: for (const company of approvedCompanies) {
+        // Check company-level polygon first
+        if (company.geofence_enabled && company.geofence_polygon?.coordinates?.[0]) {
+          if (isPointInPolygon(point, company.geofence_polygon.coordinates[0])) {
+            found = { inside: true, locationName: company.name };
+            break outer;
+          }
+        }
+        // Check building polygons
+        if (company.buildings) {
+          for (const b of company.buildings) {
+            if (b.geofence_polygon?.type === "Polygon" && b.geofence_polygon.coordinates?.[0]) {
+              if (isPointInPolygon(point, b.geofence_polygon.coordinates[0])) {
+                found = {
+                  inside: true,
+                  locationName: `${b.name || "Unnamed Building"} — ${company.name}`,
+                };
+                break outer;
+              }
+            }
+          }
+        }
+      }
+
+      map.set(loc.intern_id, found ?? { inside: false, locationName: null });
+    }
+    return map;
+  }, [liveLocations, approvedCompanies]);
+
   const companyMarkers: MapMarker[] = useMemo(
     () =>
       approvedCompanies.map((company) => ({
@@ -121,9 +158,8 @@ const StudentLiveTracker = () => {
         title: company.name,
         color: "danger",
         shape: "pin",
-        popupHtml: `<strong>${company.name}</strong>${
-          company.address ? `<br/>${company.address}` : ""
-        }`,
+        popupHtml: `<strong>${company.name}</strong>${company.address ? `<br/>${company.address}` : ""
+          }`,
       })),
     [approvedCompanies]
   );
@@ -232,6 +268,9 @@ const StudentLiveTracker = () => {
                 <tr>
                   <th className="px-4 py-2 font-medium">Student</th>
                   <th className="px-4 py-2 font-medium">Last Seen</th>
+                  <th className="px-4 py-2 font-medium">Latitude</th>
+                  <th className="px-4 py-2 font-medium">Longitude</th>
+                  <th className="px-4 py-2 font-medium">Status</th>
                   <th className="px-4 py-2 font-medium text-right">Area</th>
                 </tr>
               </thead>
@@ -239,9 +278,8 @@ const StudentLiveTracker = () => {
                 {liveLocations.map((loc) => (
                   <tr
                     key={loc.intern_id}
-                    className={`cursor-pointer transition-colors hover:bg-slate-50 ${
-                      selectedInternId === loc.intern_id ? "bg-blue-50" : ""
-                    }`}
+                    className={`cursor-pointer transition-colors hover:bg-slate-50 ${selectedInternId === loc.intern_id ? "bg-blue-50" : ""
+                      }`}
                     onClick={() => handleSelect(loc)}
                   >
                     <td className="px-4 py-3 font-medium text-slate-700">
@@ -249,6 +287,29 @@ const StudentLiveTracker = () => {
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-400">
                       {new Date(loc.recorded_at).toLocaleTimeString()}
+                    </td>
+                    <td className="px-4 py-3 text-xs font-mono text-slate-500">
+                      {loc.latitude.toFixed(6)}
+                    </td>
+                    <td className="px-4 py-3 text-xs font-mono text-slate-500">
+                      {loc.longitude.toFixed(6)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const status = internGeofenceStatuses.get(loc.intern_id);
+                        if (!status) return null;
+                        return status.inside ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            Inside
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">
+                            <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                            Outside
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
@@ -346,6 +407,32 @@ const StudentLiveTracker = () => {
                     </span>
                   </div>
                 )}
+                <div className="flex items-center gap-2">
+                  <Navigation className="h-3.5 w-3.5 text-slate-400" />
+                  <span className="font-mono">
+                    {selectedIntern.latitude.toFixed(6)},&nbsp;
+                    {selectedIntern.longitude.toFixed(6)}
+                  </span>
+                </div>
+                {(() => {
+                  const status = internGeofenceStatuses.get(selectedIntern.intern_id);
+                  if (!status) return null;
+                  return (
+                    <div className="flex items-center gap-2">
+                      {status.inside ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          Inside geofence{status.locationName ? ` — ${status.locationName}` : ""}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-600">
+                          <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                          Outside geofence
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div className="text-[11px] text-slate-400">
                   Last seen{" "}
                   {new Date(selectedIntern.recorded_at).toLocaleTimeString()}

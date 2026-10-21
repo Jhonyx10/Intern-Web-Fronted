@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   Loader2,
   ClipboardList,
+  CalendarDays,
 } from "lucide-react";
 import {
   useEvaluationTemplates,
@@ -17,6 +18,7 @@ import {
   type EvaluationTemplateDetail,
 } from "@/lib/queries/evaluation";
 import { useAuth } from "@/lib/auth";
+import { useCurrentSchoolYear } from "@/lib/queries/school-year";
 import { EvaluationPreviewModal } from "@/components/modal/EvaluationPreviewModal";
 
 type QuickFilter = "all" | "editable" | "locked";
@@ -147,14 +149,23 @@ export const EvaluationPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isSuperAdmin = user?.role?.name === "super_admin";
+  const { data: currentSchoolYear } = useCurrentSchoolYear();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [yearFilter, setYearFilter] = useState<string>("all");
   const [previewTemplateId, setPreviewTemplateId] = useState<number | string | null>(null);
 
   const { data: templates = [], isLoading } = useEvaluationTemplates();
   const duplicateMutation = useDuplicateEvaluationTemplate();
+
+  // Every school year that at least one template is anchored to
+  const schoolYearOptions = Array.from(
+    new Set(templates.flatMap((t) => t.used_in_school_years ?? []))
+  )
+    .sort()
+    .reverse();
 
   const editableCount = templates.filter((t) => !t.is_used).length;
   const lockedCount = templates.filter((t) => t.is_used).length;
@@ -165,6 +176,11 @@ export const EvaluationPage: React.FC = () => {
     if (quickFilter === "locked" && !template.is_used) return false;
     if (statusFilter === "active" && !template.is_active) return false;
     if (statusFilter === "inactive" && template.is_active) return false;
+    if (
+      yearFilter !== "all" &&
+      !(template.used_in_school_years ?? []).includes(yearFilter)
+    )
+      return false;
 
     const query = searchTerm.trim().toLowerCase();
     if (!query) return true;
@@ -200,9 +216,20 @@ export const EvaluationPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--color-muted)]">
-            Evaluation setup / Templates
-          </p>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--color-muted)]">
+              Evaluation setup / Templates
+            </p>
+            {currentSchoolYear && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 shadow-2xs">
+                <CalendarDays size={12} className="text-amber-600" />
+                S.Y. {currentSchoolYear.name}
+                {currentSchoolYear.semester && (
+                  <span className="font-normal text-amber-700">· {currentSchoolYear.semester}</span>
+                )}
+              </span>
+            )}
+          </div>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--color-ink)]">
             Evaluation library
           </h1>
@@ -302,6 +329,20 @@ export const EvaluationPage: React.FC = () => {
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
             </select>
+
+            <select
+              value={yearFilter}
+              onChange={(e) => setYearFilter(e.target.value)}
+              aria-label="Filter by school year"
+              className="rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-sm text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)] sm:w-52"
+            >
+              <option value="all">All school years</option>
+              {schoolYearOptions.map((sy) => (
+                <option key={sy} value={sy}>
+                  S.Y. {sy}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -311,7 +352,7 @@ export const EvaluationPage: React.FC = () => {
             <thead>
               <tr className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
                 <th className="px-6 py-3.5">Template</th>
-                <th className="px-4 py-3.5">School Year</th>
+                <th className="px-4 py-3.5">School Year / Semester</th>
                 <th className="px-4 py-3.5">Questions</th>
                 <th className="px-4 py-3.5">Anchored Usage</th>
                 <th className="px-6 py-3.5 text-right">Actions</th>
@@ -320,7 +361,7 @@ export const EvaluationPage: React.FC = () => {
             <tbody className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-14 text-center">
+                  <td colSpan={5} className="px-6 py-14 text-center">
                     <Loader2
                       className="mx-auto animate-spin text-[var(--color-accent)]"
                       size={24}
@@ -338,6 +379,7 @@ export const EvaluationPage: React.FC = () => {
                     const submittedCount = template.submitted_count;
                     const anchoredCount = template.anchored_school_years_count ?? schoolYears.length;
                     const createdSchoolYear = template.created_school_year || (schoolYears[0] ?? "—");
+                    const createdSemester = template.created_semester ?? null;
 
                     return (
                       <motion.tr
@@ -366,11 +408,18 @@ export const EvaluationPage: React.FC = () => {
                           )}
                         </td>
 
-                        {/* School Year */}
+                        {/* School Year / Semester */}
                         <td className="px-4 py-4 whitespace-nowrap">
-                          <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
-                            S.Y. {createdSchoolYear}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                              S.Y. {createdSchoolYear}
+                            </span>
+                            {createdSemester && (
+                              <span className="inline-flex items-center rounded-md border border-[var(--color-line)] bg-slate-50 px-2.5 py-1 text-xs font-medium text-[var(--color-ink)]">
+                                {createdSemester}
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Questions */}
@@ -383,7 +432,14 @@ export const EvaluationPage: React.FC = () => {
 
                         {/* Usage */}
                         <td className="px-4 py-4 text-right">
-                          <span className="inline-flex items-center justify-center rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-xs font-bold text-slate-700">
+                          <span
+                            title={
+                              schoolYears.length > 0
+                                ? `Used in S.Y. ${schoolYears.join(", ")}`
+                                : "Not used yet"
+                            }
+                            className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700"
+                          >
                             {anchoredCount}
                           </span>
                         </td>

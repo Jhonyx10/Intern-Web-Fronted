@@ -7,7 +7,7 @@ import { format, parseISO } from 'date-fns'
 export type WeeklyReportRow = {
   /** 'YYYY-MM-DD' string or Date */
   date: string | Date
-  accomplishment: string
+  task_note: string
   hours: number
   /** Optional attachment photo (URL or data URL) */
   photoUrl?: string | null
@@ -180,7 +180,7 @@ export async function exportWeeklyReportPdf(options: WeeklyReportOptions): Promi
     head: [['DATE', 'Accomplishments', 'No. of Hours', 'Attachments']],
     body: rows.map((r) => [
       format(typeof r.date === 'string' ? parseISO(r.date) : r.date, 'MM/dd/yyyy'),
-      r.accomplishment,
+      r.task_note,
       `${r.hours}hrs`,
       '',
     ]),

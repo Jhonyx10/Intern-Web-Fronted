@@ -36,6 +36,7 @@ export function DepartmentRequirementCards({
   themes = [],
   search = "",
   schoolYear,
+  schoolYearId,
   onManage,
 }: {
   courses: Program[];
@@ -46,11 +47,17 @@ export function DepartmentRequirementCards({
   search?: string;
   /** Active school year name */
   schoolYear?: string;
+  /** Active school year id, carried to the department details page */
+  schoolYearId?: number;
   /** Opens the assign modal for a department. Omit to hide the button (read-only). */
   onManage?: (courseId: number) => void;
 }) {
   const q = search.trim().toLowerCase();
   const themeByCourse = new Map(themes.map((t) => [Number(t.course_id), t]));
+
+  // Opens the department details page on the same school year being viewed here
+  const detailsPath = (courseId: number | string) =>
+    `/documents/${courseId}${schoolYearId ? `?school_year_id=${schoolYearId}` : ""}`;
 
   const items = courses
     .map((course, index) => {
@@ -102,7 +109,7 @@ export function DepartmentRequirementCards({
                 className="relative overflow-hidden rounded-2xl border border-t-4 border-[var(--color-line)] bg-white shadow-sm transition hover:shadow-md group"
                 style={{ borderTopColor: color }}
               >
-                <Link to={`/documents/${course.id}`} className="absolute inset-0 z-10">
+                <Link to={detailsPath(course.id)} className="absolute inset-0 z-10">
                   <span className="sr-only">View {displayName} document details</span>
                 </Link>
 

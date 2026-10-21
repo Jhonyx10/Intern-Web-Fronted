@@ -12,9 +12,11 @@ type DocumentType = "common" | "departmental";
 export function CreateRequirementModal({
   visible,
   onClose,
+  schoolYearId,
 }: {
   visible: boolean;
   onClose: () => void;
+  schoolYearId?: number;
 }) {
   const { themeColor } = useTheme();
   const createRequirement = useCreateDocumentRequirement();
@@ -98,6 +100,7 @@ export function CreateRequirementModal({
         document_type: documentType,
         course_ids: targetCourseIds,
         deadline_at: (!isRecurring && deadline) ? deadline : undefined,
+        school_year_id: schoolYearId,
       });
       reset();
       onClose();

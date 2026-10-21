@@ -66,6 +66,7 @@ export interface EvaluationTemplateDetail {
   is_used?: boolean;
   used_in_school_years?: string[];
   created_school_year?: string;
+  created_semester?: string;
   anchored_school_years_count?: number;
 }
 
@@ -115,6 +116,7 @@ export interface EvaluationSubmission {
   course_code: string | null;
   section_code: string | null;
   school_year: string | null;
+  semester?: string | null;
 }
 
 /** Fetch all supervisor-submitted evaluations for a given template. */

@@ -6,6 +6,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
+  CalendarDays,
   Loader2,
   GraduationCap,
   User,
@@ -14,7 +15,6 @@ import {
   Layers,
   Plus,
   Eye,
-  X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { toastMutationError, toastMutationSuccess } from "@/lib/mutationToast";
@@ -36,7 +36,7 @@ function formatDate(dateStr: string | null) {
 //   • Routed (/course/details/:id?school_year_id=5): id and school year come from the URL.
 //   • Embedded (dean, from the "School Year" sidenav item): AppShell passes the dean's
 //     course id and the current school year id as props. No Back button, and
-//     "Show all" is local state instead of a URL change.
+//     "All school years" is local state instead of a URL change.
 export default function CourseDetailsPage({
   courseId,
   schoolYearId: schoolYearIdProp,
@@ -57,6 +57,22 @@ export default function CourseDetailsPage({
       : String(schoolYearIdProp)
     : searchParams.get("school_year_id");
 
+  // The school year the toggle switches back to (stays known even after "All")
+  const [initialYearId] = useState(() => searchParams.get("school_year_id"));
+  const baseYearId = embedded
+    ? schoolYearIdProp != null
+      ? String(schoolYearIdProp)
+      : null
+    : initialYearId;
+  const isFiltered = Boolean(schoolYearId);
+
+  const applyYearFilter = () =>
+    embedded
+      ? setShowAll(false)
+      : setSearchParams({ school_year_id: baseYearId! });
+  const clearYearFilter = () =>
+    embedded ? setShowAll(true) : setSearchParams({});
+
   const navigate = useNavigate();
   const { token, user } = useAuth();
   const isDean = user?.role?.name === "dean";
@@ -76,15 +92,15 @@ export default function CourseDetailsPage({
     enabled: Boolean(token) && Boolean(id),
   });
 
-  // School year name for the "Showing" chip (works even when there are no sections)
+  // School year name for the toggle (works even when there are no sections)
   const { data: filterYear } = useQuery({
-    queryKey: queryKeys.schoolYears.detail(schoolYearId ?? ""),
+    queryKey: queryKeys.schoolYears.detail(baseYearId ?? ""),
     queryFn: () =>
       apiRequest<{ id: number; name: string; semester?: string | null }>(
-        `/school-years/${schoolYearId}`,
+        `/school-years/${baseYearId}`,
         { token }
       ),
-    enabled: Boolean(token) && Boolean(schoolYearId),
+    enabled: Boolean(token) && Boolean(baseYearId),
   });
 
   // ── Add Section modal ───────────────────────────────────────────
@@ -92,7 +108,7 @@ export default function CourseDetailsPage({
   const [addOpen, setAddOpen] = useState(false);
   const [modalKey, setModalKey] = useState(0); // fresh form every time it opens
 
-  // Current school year = fallback target when no school year is selected ("Show all")
+  // Current school year = fallback target when no school year is selected ("All school years")
   const { data: currentYear } = useQuery({
     queryKey: [...queryKeys.schoolYears.all, "current"],
     queryFn: () =>
@@ -219,38 +235,43 @@ export default function CourseDetailsPage({
             {totalStudents === 1 ? "" : "s"} total
           </p>
 
-          {schoolYearId && (
-            <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-[var(--color-line)] bg-white px-3 py-1 text-xs">
-              <span className="text-[var(--color-muted)]">Showing</span>
-              <span className="font-semibold text-[var(--color-ink)]">
+          {/* School year toggle */}
+          {baseYearId && (
+            <div
+              role="group"
+              aria-label="School year filter"
+              className="mt-3 inline-flex items-center gap-1 rounded-xl border border-[var(--color-line)] bg-white p-1 shadow-sm"
+            >
+              <button
+                type="button"
+                aria-pressed={isFiltered}
+                onClick={applyYearFilter}
+                className={[
+                  "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition",
+                  isFiltered
+                    ? "bg-[var(--color-accent)] text-white shadow"
+                    : "text-[var(--color-muted)] hover:bg-slate-100 hover:text-[var(--color-ink)]",
+                ].join(" ")}
+              >
+                <CalendarDays size={13} />
                 {filterYear
                   ? `${filterYear.name}${filterYear.semester ? ` · ${filterYear.semester}` : ""}`
                   : "…"}
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  embedded ? setShowAll(true) : setSearchParams({})
-                }
-                className="inline-flex items-center gap-1 font-semibold text-[var(--color-accent)] hover:underline"
-              >
-                <X size={12} /> Show all
               </button>
-            </div>
-          )}
 
-          {/* Embedded only: way back to the current school year after "Show all" */}
-          {embedded && showAll && schoolYearIdProp != null && (
-            <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-[var(--color-line)] bg-white px-3 py-1 text-xs">
-              <span className="text-[var(--color-muted)]">
-                Showing all school years
-              </span>
               <button
                 type="button"
-                onClick={() => setShowAll(false)}
-                className="font-semibold text-[var(--color-accent)] hover:underline"
+                aria-pressed={!isFiltered}
+                onClick={clearYearFilter}
+                className={[
+                  "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition",
+                  !isFiltered
+                    ? "bg-[var(--color-accent)] text-white shadow"
+                    : "text-[var(--color-muted)] hover:bg-slate-100 hover:text-[var(--color-ink)]",
+                ].join(" ")}
               >
-                Show current only
+                <Layers size={13} />
+                All school years
               </button>
             </div>
           )}
@@ -386,7 +407,7 @@ export default function CourseDetailsPage({
             </p>
             <p className="mt-1 text-xs text-[var(--color-muted)]">
               {schoolYearId
-                ? "Use “Show all” to see this program's sections from other school years."
+                ? "Switch to “All school years” to see this program's sections from other school years."
                 : "Sections under this course will appear here."}
             </p>
           </div>

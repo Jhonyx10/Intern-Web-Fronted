@@ -85,6 +85,22 @@ function SchoolYearCard({ sy }: { sy: any }) {
             <div className="flex items-start justify-between mb-4">
                 <div>
                     <h3 className="text-base font-semibold text-[var(--color-ink)]">{sy.name}</h3>
+                    {sy.semester && (
+                        <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${sy.semester.toLowerCase().includes('summer')
+                                ? 'bg-orange-100 text-orange-700'
+                                : sy.semester.toLowerCase().includes('second')
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-blue-100 text-blue-700'
+                            }`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${sy.semester.toLowerCase().includes('summer')
+                                    ? 'bg-orange-500'
+                                    : sy.semester.toLowerCase().includes('second')
+                                        ? 'bg-green-500'
+                                        : 'bg-blue-500'
+                                }`} />
+                            {sy.semester}
+                        </span>
+                    )}
                     <p className="text-xs text-[var(--color-muted)] mt-0.5">
                         {sy.start_date ? format(new Date(sy.start_date), "MMM yyyy") : "—"}
                         {" – "}

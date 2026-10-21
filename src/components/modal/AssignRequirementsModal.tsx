@@ -17,6 +17,7 @@ export function AssignRequirementsModal({
   masterList,
   currentIds,
   currentDeadline,
+  schoolYearId,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -25,6 +26,7 @@ export function AssignRequirementsModal({
   masterList: DocumentRequirement[];
   currentIds: number[];
   currentDeadline?: string;
+  schoolYearId?: number;
 }) {
   const syncRequirements = useSyncCourseRequirements(courseId);
   const { themeColor } = useTheme();
@@ -42,9 +44,10 @@ export function AssignRequirementsModal({
 
   const handleSave = async () => {
     try {
-      await syncRequirements.mutateAsync({
+     await syncRequirements.mutateAsync({
         document_requirement_ids: Array.from(selected),
         deadline_at: deadline ? deadline : null,
+        school_year_id: schoolYearId,
       });
       onClose();
     } catch (err) {

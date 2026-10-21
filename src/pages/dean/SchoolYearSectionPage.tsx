@@ -317,8 +317,8 @@ const SchoolYearPage = () => {
     // History: most recently ended first
     return view === "history"
       ? [...list].sort((a, b) =>
-          (b.end_date ?? "").localeCompare(a.end_date ?? "")
-        )
+        (b.end_date ?? "").localeCompare(a.end_date ?? "")
+      )
       : list;
   }, [schoolYears, search, view]);
 
@@ -491,20 +491,18 @@ const SchoolYearPage = () => {
               key={key}
               type="button"
               onClick={() => setView(key)}
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                active
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${active
                   ? "bg-[var(--color-accent)] text-white shadow-sm"
                   : "text-[var(--color-muted)] hover:bg-slate-50"
-              }`}
+                }`}
             >
               <Icon size={14} />
               {label}
               <span
-                className={`rounded-full px-1.5 text-[11px] font-semibold ${
-                  active
+                className={`rounded-full px-1.5 text-[11px] font-semibold ${active
                     ? "bg-white/20 text-white"
                     : "bg-slate-100 text-[var(--color-muted)]"
-                }`}
+                  }`}
               >
                 {count}
               </span>

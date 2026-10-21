@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
-import { Search, Building2, Loader2, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
+import { CalendarDays, Search, Building2, Loader2, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 import { useStudents } from '@/lib/queries/students'
 import { useCompanies } from '@/lib/queries/companies'
 import { useCourses } from '@/lib/queries/courses'
-import { useSchoolYears } from '@/lib/queries/school-year'
+import { useSchoolYears, useCurrentSchoolYear } from '@/lib/queries/school-year'
 import { useAuth } from '@/lib/auth'
 import type { Student } from '@/types'
 
@@ -82,6 +82,7 @@ const toArray = (value: any): any[] => (Array.isArray(value) ? value : value?.da
 const StudentsPage = () => {
     const navigate = useNavigate()
     const { user } = useAuth()
+    const { data: currentSchoolYear } = useCurrentSchoolYear()
     const [page, setPage] = useState(1)
     const [query, setQuery] = useState('')
     const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -192,9 +193,20 @@ const StudentsPage = () => {
                 className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
             >
                 <div>
-                    <p className="text-[11px] font-semibold tracking-[0.22em] text-[var(--color-accent)] uppercase">
-                        Directory
-                    </p>
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <p className="text-[11px] font-semibold tracking-[0.22em] text-[var(--color-accent)] uppercase">
+                            Directory
+                        </p>
+                        {currentSchoolYear && (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 shadow-2xs">
+                                <CalendarDays size={12} className="text-amber-600" />
+                                S.Y. {currentSchoolYear.name}
+                                {currentSchoolYear.semester && (
+                                    <span className="font-normal text-amber-700">· {currentSchoolYear.semester}</span>
+                                )}
+                            </span>
+                        )}
+                    </div>
                     <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--color-ink)]">Students</h1>
                     <p className="mt-1 text-sm text-[var(--color-muted)]">
                         {totalStudents} student intern{totalStudents === 1 ? '' : 's'}
@@ -340,6 +352,9 @@ const StudentsPage = () => {
                                             {schoolYearName && (
                                                 <p className="truncate text-[11px] text-[var(--color-muted)]">
                                                     S.Y. {schoolYearName}
+                                                    {(student.section?.school_year as any)?.semester && (
+                                                        <span className="ml-1">· {(student.section?.school_year as any).semester}</span>
+                                                    )}
                                                 </p>
                                             )}
                                         </div>

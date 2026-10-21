@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ClipboardList, Eye, Loader2, Search } from "lucide-react";
+import { ArrowLeft, CalendarDays, ClipboardList, Eye, Loader2, Search } from "lucide-react";
 import {
     useEvaluationTemplate,
     useEvaluationSubmissions,
     type EvaluationSubmission,
 } from "@/lib/queries/evaluation";
+import { useCurrentSchoolYear } from "@/lib/queries/school-year";
 import { EvaluationReviewModal } from "@/components/modal/EvaluationReviewModal";
 
 function formatDateTime(value: string | null) {
@@ -36,6 +37,7 @@ export const EvaluationSubmissionsPage: React.FC = () => {
     const { data: template } = useEvaluationTemplate(id);
     const { data: submissions = [], isLoading, isError } =
         useEvaluationSubmissions(id);
+    const { data: currentSchoolYear } = useCurrentSchoolYear();
 
     const [search, setSearch] = useState("");
     const [schoolYear, setSchoolYear] = useState("");
@@ -89,9 +91,20 @@ export const EvaluationSubmissionsPage: React.FC = () => {
                     <ArrowLeft size={18} />
                 </button>
                 <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--color-muted)]">
-                        Evaluation / Submissions
-                    </p>
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--color-muted)]">
+                            Evaluation / Submissions
+                        </p>
+                        {currentSchoolYear && (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 shadow-2xs">
+                                <CalendarDays size={12} className="text-amber-600" />
+                                S.Y. {currentSchoolYear.name}
+                                {currentSchoolYear.semester && (
+                                    <span className="font-normal text-amber-700">· {currentSchoolYear.semester}</span>
+                                )}
+                            </span>
+                        )}
+                    </div>
                     <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--color-ink)]">
                         {template?.title ?? "Evaluation"}
                     </h1>
@@ -158,7 +171,7 @@ export const EvaluationSubmissionsPage: React.FC = () => {
                             <tr className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
                                 <th className="px-6 py-3.5">Student</th>
                                 <th className="px-4 py-3.5">Program / Section</th>
-                                <th className="px-4 py-3.5">School year</th>
+                                <th className="px-4 py-3.5">School Year / Semester</th>
                                 <th className="px-4 py-3.5">Evaluated by</th>
                                 <th className="px-4 py-3.5">Score</th>
                                 <th className="px-6 py-3.5">Submitted</th>
@@ -220,8 +233,11 @@ export const EvaluationSubmissionsPage: React.FC = () => {
                                                 {s.section_code ? ` (${s.section_code})` : ""}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-4 text-xs text-[var(--color-ink)]">
-                                            {s.school_year ?? "—"}
+                                        <td className="px-4 py-4">
+                                            <p className="text-xs font-medium text-[var(--color-ink)]">{s.school_year ?? "—"}</p>
+                                            {(s as any).semester && (
+                                                <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">{(s as any).semester}</p>
+                                            )}
                                         </td>
                                         <td className="px-4 py-4 text-xs text-[var(--color-ink)]">
                                             {s.evaluator ?? "—"}

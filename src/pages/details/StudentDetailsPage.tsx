@@ -23,7 +23,14 @@ import {
   Download,
 } from "lucide-react";
 import { useStudent } from "@/lib/queries/students";
-import { exportDTRAsCSV, exportDTRAsPDF } from "@/lib/exportDtr";
+import {
+  exportDTRAsCSV,
+  exportDTRAsPDF,
+  formatDuration,
+  groupByMonth,
+  buildRows,
+  MONTHS,
+} from "@/lib/exportDtr";
 import type {
   CompanySchedule,
   TimeLog,
@@ -165,6 +172,12 @@ function formatDateReadable(dateStr?: string | null): string {
   return dateStr;
 }
 
+function verificationLabel(method?: string | null): string {
+  if (!method) return "Facial Match";
+  if (method === "auto_closed_missed_punch_out") return "Auto-closed";
+  return method.replace(/_/g, " ");
+}
+
 export function StudentDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -192,6 +205,8 @@ export function StudentDetailsPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [weeklyOpen, setWeeklyOpen] = useState(false);
   const [weeklyExporting, setWeeklyExporting] = useState(false);
+  const [timeLogView, setTimeLogView] = useState<"normal" | "dtr">("normal");
+  const [dtrMonthKey, setDtrMonthKey] = useState<string | null>(null);
   const { logoUrl } = useTheme();
   const fullName = useMemo(() => {
     if (!student) return "";
@@ -209,7 +224,6 @@ export function StudentDetailsPage() {
     );
   }, [student]);
 
-  const totalHoursRendered = (totalMinutes / 60).toFixed(1);
   const requiredHours = student?.section?.course?.required_hours ?? 486;
   const progressPercent = Math.min(
     100,
@@ -236,6 +250,31 @@ export function StudentDetailsPage() {
     : null;
 
   const supervisor = companySchedules[0]?.creator;
+
+  // ── DTR view data (same row-building logic as the PDF export) ──
+  const dtrByMonth = useMemo(() => groupByMonth(timeLogs), [timeLogs]);
+  const dtrMonthKeys = useMemo(
+    () => [...dtrByMonth.keys()].sort().reverse(),
+    [dtrByMonth]
+  );
+  const activeDtrKey =
+    dtrMonthKey && dtrByMonth.has(dtrMonthKey)
+      ? dtrMonthKey
+      : dtrMonthKeys[0] ?? null;
+
+  const dtr = useMemo(() => {
+    if (!activeDtrKey) return null;
+    const [year, month] = activeDtrKey.split("-").map(Number);
+    const requiredMinutes =
+      (Number(student?.ojt_schedule?.hours_per_day) || 8) * 60;
+    const built = buildRows(dtrByMonth.get(activeDtrKey) ?? [], requiredMinutes);
+    return {
+      year,
+      month,
+      daysInMonth: new Date(year, month, 0).getDate(),
+      ...built,
+    };
+  }, [activeDtrKey, dtrByMonth, student]);
 
   async function handleExportWeekly(input: WeeklyReportExportInput) {
     setWeeklyExporting(true);
@@ -419,7 +458,7 @@ export function StudentDetailsPage() {
               OJT Hours Rendered
             </span>
             <span className="font-bold text-[var(--color-accent)]">
-              {totalHoursRendered} / {requiredHours} hrs ({progressPercent}%)
+             {formatDuration(totalMinutes)} / {requiredHours} hrs ({progressPercent}%)
             </span>
           </div>
           <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100">
@@ -719,17 +758,32 @@ export function StudentDetailsPage() {
             transition={{ duration: 0.2 }}
             className="space-y-4"
           >
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-base font-bold text-[var(--color-ink)]">
                   Student Time Logs
                 </h3>
                 <span className="text-xs text-[var(--color-muted)] font-medium">
-                  Total: {timeLogs.length} entries · {totalHoursRendered} hrs
-                  rendered
+                  Total: {timeLogs.length} entries · {formatDuration(totalMinutes)} rendered
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                <div className="inline-flex rounded-lg border border-[var(--color-line)] bg-slate-50 p-0.5">
+                  {(["normal", "dtr"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setTimeLogView(mode)}
+                      className={`rounded-md px-3 py-1 text-[11px] font-semibold transition ${
+                        timeLogView === mode
+                          ? "bg-white text-[var(--color-accent)] shadow-sm"
+                          : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                      }`}
+                    >
+                      {mode === "normal" ? "Normal" : "DTR"}
+                    </button>
+                  ))}
+                </div>
                 <button
                   type="button"
                   onClick={() => setWeeklyOpen(true)}
@@ -747,7 +801,94 @@ export function StudentDetailsPage() {
               </div>
             </div>
 
-            {timeLogs.length > 0 ? (
+            {timeLogs.length > 0 && timeLogView === "dtr" ? (
+              <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-line)] px-4 py-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-muted)]">
+                      Daily Time Record
+                    </p>
+                    <p className="text-sm font-bold text-[var(--color-ink)]">
+                      {fullName}
+                      {assignedCompany ? ` · ${assignedCompany.name}` : ""}
+                    </p>
+                  </div>
+                  <select
+                    value={activeDtrKey ?? ""}
+                    onChange={(e) => setDtrMonthKey(e.target.value)}
+                    className="rounded-lg border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--color-ink)] outline-none focus:border-[var(--color-accent)]"
+                  >
+                    {dtrMonthKeys.map((key) => {
+                      const [y, m] = key.split("-").map(Number);
+                      return (
+                        <option key={key} value={key}>
+                          {MONTHS[m - 1]} {y}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {dtr && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-center text-xs">
+                      <thead className="bg-slate-50/80 font-semibold text-[var(--color-ink)]">
+                        <tr>
+                          <th rowSpan={2} className="border border-[var(--color-line)] px-2 py-2">Day</th>
+                          <th colSpan={2} className="border border-[var(--color-line)] px-2 py-1">A.M.</th>
+                          <th colSpan={2} className="border border-[var(--color-line)] px-2 py-1">P.M.</th>
+                          <th colSpan={2} className="border border-[var(--color-line)] px-2 py-1">Undertime</th>
+                          <th rowSpan={2} className="border border-[var(--color-line)] px-2 py-2">Total Time</th>
+                        </tr>
+                        <tr>
+                          {["Time In", "Time Out", "Time In", "Time Out", "Hours", "Min."].map((h, i) => (
+                            <th key={i} className="border border-[var(--color-line)] px-2 py-1 text-[10px]">
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dtr.rows.slice(0, dtr.daysInMonth).map((row) => (
+                          <tr key={row[0]} className="hover:bg-slate-50/60">
+                            {row.map((cell, i) => (
+                              <td
+                                key={i}
+                                className={`border border-[var(--color-line)] px-2 py-1.5 ${
+                                  i === 0
+                                    ? "font-bold text-[var(--color-ink)]"
+                                    : i === 7
+                                      ? "whitespace-nowrap font-semibold text-indigo-600"
+                                      : "text-[var(--color-muted)]"
+                                }`}
+                              >
+                                {cell}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-slate-50/80 font-bold text-[var(--color-ink)]">
+                        <tr>
+                          <td colSpan={5} className="border border-[var(--color-line)] px-3 py-2 text-left">
+                            Total
+                          </td>
+                          <td className="border border-[var(--color-line)] px-2 py-2">
+                            {Math.floor(dtr.underTotal / 60)}
+                          </td>
+                          <td className="border border-[var(--color-line)] px-2 py-2">
+                            {dtr.underTotal % 60}
+                          </td>
+                          <td className="whitespace-nowrap border border-[var(--color-line)] px-2 py-2 text-indigo-600">
+                            {formatDuration(dtr.workedTotal)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : timeLogs.length > 0 ? (
               <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
@@ -763,9 +904,10 @@ export function StudentDetailsPage() {
                     </thead>
                     <tbody className="divide-y divide-[var(--color-line)]">
                       {timeLogs.map((log) => {
-                        const durationHours = log.duration_minutes
-                          ? (log.duration_minutes / 60).toFixed(1)
-                          : "In Progress";
+                        const duration =
+                          log.duration_minutes != null
+                            ? formatDuration(log.duration_minutes)
+                            : "In Progress";
 
                         return (
                           <tr
@@ -785,28 +927,37 @@ export function StudentDetailsPage() {
                             </td>
                             <td className="px-4 py-3 text-[var(--color-muted)]">
                               {log.time_out ? (
-                                new Date(log.time_out).toLocaleString([], {
-                                  month: "short",
-                                  day: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })
+                                <div>
+                                  <span>
+                                    {new Date(log.time_out).toLocaleString([], {
+                                      month: "short",
+                                      day: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </span>
+                                  {log.system_note && (
+                                    <span className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-amber-700">
+                                      <AlertCircle size={11} />
+                                      {log.system_note}
+                                    </span>
+                                  )}
+                                </div>
                               ) : (
-                                <span className="font-semibold text-amber-600">
-                                  Active Shift
-                                </span>
+                                <span className="font-semibold text-amber-600">Active Shift</span>
                               )}
                             </td>
                             <td className="px-4 py-3 font-bold text-indigo-600">
-                              {durationHours}{" "}
-                              {typeof durationHours === "number" ||
-                                !isNaN(Number(durationHours))
-                                ? "hrs"
-                                : ""}
+                              {duration}
                             </td>
                             <td className="px-4 py-3">
-                              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 capitalize">
-                                {log.verification_method || "Facial Match"}
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${log.verification_method === "auto_closed_missed_punch_out"
+                                    ? "bg-amber-50 text-amber-700"
+                                    : "bg-blue-50 text-blue-700"
+                                  }`}
+                              >
+                                {verificationLabel(log.verification_method)}
                               </span>
                             </td>
                             <td className="px-4 py-3">

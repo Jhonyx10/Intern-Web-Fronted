@@ -366,6 +366,8 @@ export type UpdateCompanyGeofenceInput = {
     geofence_enabled: boolean
     geofence_polygon: unknown
     geofence_radius_meters?: number
+    latitude?: number
+    longitude?: number
 }
 
 export function useUpdateCompanyGeofence() {

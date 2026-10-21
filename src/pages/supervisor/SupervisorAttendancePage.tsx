@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   AlertCircle,
   Calendar,
+  CalendarDays,
   Clock,
   Plus,
   Pencil,
@@ -21,6 +22,7 @@ import {
   type ScheduleInput,
 } from "@/lib/queries/supervisor";
 import { useAuth } from "@/lib/auth";
+import { useCurrentSchoolYear } from "@/lib/queries/school-year";
 import AddEditScheduleModal from "@/components/modal/AddEditScheduleModal";
 
 function fmtTime(isoOrTime: string | null) {
@@ -70,6 +72,7 @@ function isWithinDateRange(isoTimeIn: string | null, from: string, to: string) {
 export function SupervisorAttendancePage() {
   const { user } = useAuth();
   const { data: profile } = useSupervisorProfile();
+  const { data: currentSchoolYear } = useCurrentSchoolYear();
   const {
     data: logs,
     isLoading: isLoadingLogs,
@@ -94,6 +97,8 @@ export function SupervisorAttendancePage() {
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [range, setRange] = useState<"today" | "week" | "month" | "custom">("today");
+  const [viewMode, setViewMode] = useState<"logs" | "summary">("logs");
 
   if (!user || user.role?.name !== "supervisor") {
     return (
@@ -129,16 +134,79 @@ export function SupervisorAttendancePage() {
     );
   }
 
-  const hasDateFilter = Boolean(dateFrom || dateTo);
+  // Compute date boundaries for preset ranges
+  const rangeFrom = useMemo(() => {
+    if (range === "custom") return dateFrom;
+    const now = new Date();
+    if (range === "today") return now.toISOString().slice(0, 10);
+    if (range === "week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - d.getDay()); // Sunday
+      return d.toISOString().slice(0, 10);
+    }
+    if (range === "month") {
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    }
+    return "";
+  }, [range, dateFrom]);
+
+  const rangeTo = useMemo(() => {
+    if (range === "custom") return dateTo;
+    return new Date().toISOString().slice(0, 10);
+  }, [range, dateTo]);
 
   const filtered = (logs ?? []).filter((l) => {
     const matchesSearch =
       l.student_name.toLowerCase().includes(search.toLowerCase()) ||
       (l.student_number ?? "").includes(search);
-    const matchesDate =
-      !hasDateFilter || isWithinDateRange(l.time_in, dateFrom, dateTo);
+    const matchesDate = !rangeFrom && !rangeTo
+      ? true
+      : isWithinDateRange(l.time_in, rangeFrom, rangeTo);
     return matchesSearch && matchesDate;
   });
+
+  // Per-student summary grouped from filtered logs
+  type StudentSummary = {
+    student_id: number;
+    student_name: string;
+    student_number: string;
+    sessions: number;
+    days: number;
+    total_minutes: number;
+    last_seen: string | null;
+  };
+  const studentSummary = useMemo<StudentSummary[]>(() => {
+    const map = new Map<number, StudentSummary & { days_set: Set<string> }>();
+    for (const l of filtered) {
+      const dateStr = l.time_in ? l.time_in.slice(0, 10) : null;
+      const ex = map.get(l.student_id);
+      if (ex) {
+        ex.sessions += 1;
+        ex.total_minutes += l.duration_minutes ?? 0;
+        if (dateStr && !ex.days_set.has(dateStr)) { ex.days_set.add(dateStr); ex.days += 1; }
+        if (l.time_in && (!ex.last_seen || l.time_in > ex.last_seen)) ex.last_seen = l.time_in;
+      } else {
+        map.set(l.student_id, {
+          student_id: l.student_id,
+          student_name: l.student_name,
+          student_number: l.student_number ?? "",
+          sessions: 1,
+          days: dateStr ? 1 : 0,
+          total_minutes: l.duration_minutes ?? 0,
+          last_seen: l.time_in ?? null,
+          days_set: new Set(dateStr ? [dateStr] : []),
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.student_name.localeCompare(b.student_name));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered]);
+
+  const rangePeriodLabel =
+    range === "today" ? "Today"
+      : range === "week" ? "This Week"
+        : range === "month" ? "This Month"
+          : "Custom Range";
 
   function handleSaveSchedule(input: ScheduleInput) {
     if (editingSchedule) {
@@ -166,18 +234,24 @@ export function SupervisorAttendancePage() {
     }
   }
 
-  function clearDateFilter() {
-    setDateFrom("");
-    setDateTo("");
-  }
-
   return (
     <section className="space-y-6">
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <p className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
-            Supervisor Portal
-          </p>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <p className="text-sm font-semibold tracking-wide text-[var(--color-accent)] uppercase">
+              Supervisor Portal
+            </p>
+            {currentSchoolYear && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 shadow-2xs">
+                <CalendarDays size={12} className="text-amber-600" />
+                S.Y. {currentSchoolYear.name}
+                {currentSchoolYear.semester && (
+                  <span className="font-normal text-amber-700">· {currentSchoolYear.semester}</span>
+                )}
+              </span>
+            )}
+          </div>
           <h1 className="text-3xl font-bold tracking-tight text-[var(--color-ink)]">
             Attendance & Work Schedule
           </h1>
@@ -304,15 +378,57 @@ export function SupervisorAttendancePage() {
       {/* Attendance / Time Logs Section */}
       <div className="rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
         <div className="flex flex-col gap-3 border-b border-[var(--color-line)] px-6 py-4 md:flex-row md:items-center md:justify-between">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Clock size={18} className="text-[var(--color-muted)]" />
-            Attendance Time Logs
-            <span className="text-sm font-normal text-[var(--color-muted)]">
-              ({filtered.length})
-            </span>
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Clock size={18} className="text-[var(--color-muted)]" />
+              Attendance Time Logs
+              <span className="text-sm font-normal text-[var(--color-muted)]">({filtered.length})</span>
+            </h2>
+          </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Range tabs */}
+            <div className="flex items-center rounded-xl border border-[var(--color-line)] bg-white p-1 shadow-sm">
+              {(["today", "week", "month", "custom"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRange(r)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${range === r
+                      ? "bg-[var(--color-accent)] text-white shadow-xs"
+                      : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                    }`}
+                >
+                  {r === "today" ? "Today" : r === "week" ? "Week" : r === "month" ? "Month" : "Custom"}
+                </button>
+              ))}
+            </div>
+
+            {/* View mode toggle */}
+            <div className="flex items-center rounded-xl border border-[var(--color-line)] bg-white p-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setViewMode("logs")}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${viewMode === "logs"
+                    ? "bg-slate-700 text-white shadow-xs"
+                    : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                  }`}
+              >
+                Logs
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("summary")}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${viewMode === "summary"
+                    ? "bg-slate-700 text-white shadow-xs"
+                    : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                  }`}
+              >
+                By Student
+              </button>
+            </div>
+
+            {/* Search */}
             <div className="relative">
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]"
@@ -327,43 +443,81 @@ export function SupervisorAttendancePage() {
               />
             </div>
 
-            <div className="flex items-center gap-1.5 rounded-xl border border-[var(--color-line)] px-2.5 py-1.5">
-              <Calendar
-                size={14}
-                className="text-[var(--color-muted)] shrink-0"
-              />
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                max={dateTo || undefined}
-                aria-label="From date"
-                className="bg-transparent text-sm text-[var(--color-ink)] outline-none"
-              />
-              <span className="text-xs text-[var(--color-muted)]">to</span>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                min={dateFrom || undefined}
-                aria-label="To date"
-                className="bg-transparent text-sm text-[var(--color-ink)] outline-none"
-              />
-              {hasDateFilter && (
-                <button
-                  type="button"
-                  onClick={clearDateFilter}
-                  aria-label="Clear date filter"
-                  className="ml-0.5 text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
+            {/* Custom date pickers */}
+            {range === "custom" && (
+              <div className="flex items-center gap-1.5 rounded-xl border border-[var(--color-line)] px-2.5 py-1.5">
+                <Calendar size={14} className="text-[var(--color-muted)] shrink-0" />
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  max={dateTo || undefined}
+                  aria-label="From date"
+                  className="bg-transparent text-sm text-[var(--color-ink)] outline-none"
+                />
+                <span className="text-xs text-[var(--color-muted)]">to</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  min={dateFrom || undefined}
+                  aria-label="To date"
+                  className="bg-transparent text-sm text-[var(--color-ink)] outline-none"
+                />
+                {(dateFrom || dateTo) && (
+                  <button
+                    type="button"
+                    onClick={() => { setDateFrom(""); setDateTo(""); }}
+                    aria-label="Clear date filter"
+                    className="ml-0.5 text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {filtered.length > 0 ? (
+        {viewMode === "summary" ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-[var(--color-muted)]">
+              <thead className="bg-slate-50/50 text-xs uppercase text-[var(--color-muted)]">
+                <tr>
+                  <th className="px-6 py-3 font-medium">Student</th>
+                  <th className="px-6 py-3 font-medium">Days Present ({rangePeriodLabel})</th>
+                  <th className="px-6 py-3 font-medium">Sessions</th>
+                  <th className="px-6 py-3 font-medium">Total Hours</th>
+                  <th className="px-6 py-3 font-medium">Last Seen</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
+                {studentSummary.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-10 text-center text-sm text-[var(--color-muted)]">
+                      No records for this period.
+                    </td>
+                  </tr>
+                ) : studentSummary.map((s) => (
+                  <tr key={s.student_id} className="transition-colors hover:bg-slate-50/50">
+                    <td className="px-6 py-4">
+                      <p className="font-medium">{s.student_name}</p>
+                      <p className="text-xs text-[var(--color-muted)]">{s.student_number}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+                        {s.days} {s.days === 1 ? "day" : "days"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-semibold">{s.sessions}</td>
+                    <td className="px-6 py-4 font-semibold text-emerald-700">{fmtDuration(s.total_minutes)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{s.last_seen ? fmtDate(s.last_seen) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : filtered.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-[var(--color-muted)]">
               <thead className="bg-slate-50/50 text-xs uppercase text-[var(--color-muted)]">
@@ -426,16 +580,18 @@ export function SupervisorAttendancePage() {
           <div className="flex flex-col items-center justify-center gap-3 p-12 text-center">
             <Clock size={36} className="text-[var(--color-muted)]" />
             <p className="text-sm text-[var(--color-muted)]">
-              {hasDateFilter || search
+              {search || rangeFrom
                 ? "No attendance records match your filters."
                 : "No attendance records found."}
             </p>
-            {(hasDateFilter || search) && (
+            {(search || rangeFrom) && (
               <button
                 type="button"
                 onClick={() => {
                   setSearch("");
-                  clearDateFilter();
+                  setDateFrom("");
+                  setDateTo("");
+                  setRange("today");
                 }}
                 className="text-xs font-semibold text-[var(--color-accent)] hover:underline"
               >

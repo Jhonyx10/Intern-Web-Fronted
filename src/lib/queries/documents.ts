@@ -30,6 +30,13 @@ export interface CourseTheme {
   logo_url: string | null
 }
 
+export interface SchoolYearOption {
+  id: number
+  name: string
+  semester?: string | null
+  is_active?: boolean
+}
+
 type CreateRequirementPayload = {
   title: string
   description?: string
@@ -38,16 +45,38 @@ type CreateRequirementPayload = {
   document_type?: 'common' | 'departmental'
   course_ids?: number[]
   deadline_at?: string
+  school_year_id?: number
+}
+
+// Appends ?school_year_id=… to a path when a school year is selected
+const withSchoolYear = (path: string, schoolYearId?: number) =>
+  schoolYearId ? `${path}?school_year_id=${schoolYearId}` : path
+
+// --- School years (for the filter dropdown) ---
+
+export function useSchoolYearOptions() {
+  const { user } = useAuth()
+
+  return useQuery({
+    queryKey: ['school-year-options'],
+    queryFn: () => apiRequest<SchoolYearOption[]>('/school-years'),
+    enabled: !!user,
+  })
 }
 
 // --- Master list (created/managed by superadmin) ---
 
-export function useDocumentRequirements() {
+// No argument = every requirement across all school years (used by the modals).
+// With a school year = only the requirements linked to that year.
+export function useDocumentRequirements(schoolYearId?: number) {
   const { user } = useAuth()
 
   return useQuery({
-    queryKey: ['document-requirements'],
-    queryFn: () => apiRequest<DocumentRequirement[]>('/document-requirements'),
+    queryKey: ['document-requirements', schoolYearId],
+    queryFn: () =>
+      apiRequest<DocumentRequirement[]>(
+        withSchoolYear('/document-requirements', schoolYearId),
+      ),
     enabled: !!user,
   })
 }
@@ -70,29 +99,74 @@ export function useCreateDocumentRequirement() {
   })
 }
 
+// Reuse the requirements of one school year in another
+export function useCarryOverRequirements() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      toSchoolYearId,
+      fromSchoolYearId,
+      document_requirement_ids,
+    }: {
+      toSchoolYearId: number
+      fromSchoolYearId: number
+      document_requirement_ids?: number[]
+    }) =>
+      apiRequest<{ copied: number }>(
+        `/school-years/${toSchoolYearId}/document-requirements/carry-over`,
+        {
+          method: 'POST',
+          body: {
+            from_school_year_id: fromSchoolYearId,
+            document_requirement_ids,
+          },
+        },
+      ),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['document-requirements'] })
+      queryClient.invalidateQueries({ queryKey: ['course-document-requirements'] })
+      toastMutationSuccess(
+        `${data.copied} requirement${data.copied === 1 ? '' : 's'} copied`,
+      )
+    },
+    onError: (error) => toastMutationError(error, 'Failed to copy requirements'),
+  })
+}
+
 // --- Program/dean-scoped ---
 
-export function useCourseDocumentRequirements(courseId?: number) {
+export function useCourseDocumentRequirements(
+  courseId?: number,
+  schoolYearId?: number,
+) {
   const { user } = useAuth()
 
   return useQuery({
-    queryKey: ['course-document-requirements', courseId],
+    queryKey: ['course-document-requirements', courseId, schoolYearId],
     queryFn: () =>
-      apiRequest<DocumentRequirement[]>(`/courses/${courseId}/document-requirements`),
+      apiRequest<DocumentRequirement[]>(
+        withSchoolYear(`/courses/${courseId}/document-requirements`, schoolYearId),
+      ),
     enabled: !!user && !!courseId,
   })
 }
 
 // One query per department (super admin cards). Uses the same query key as
 // useCourseDocumentRequirements, so the cache is shared and invalidation works.
-export function useDepartmentRequirements(courseIds: number[]) {
+export function useDepartmentRequirements(
+  courseIds: number[],
+  schoolYearId?: number,
+) {
   const { user } = useAuth()
 
   return useQueries({
     queries: courseIds.map((id) => ({
-      queryKey: ['course-document-requirements', id],
+      queryKey: ['course-document-requirements', id, schoolYearId],
       queryFn: () =>
-        apiRequest<DocumentRequirement[]>(`/courses/${id}/document-requirements`),
+        apiRequest<DocumentRequirement[]>(
+          withSchoolYear(`/courses/${id}/document-requirements`, schoolYearId),
+        ),
       enabled: !!user,
     })),
   })
@@ -116,15 +190,19 @@ export function useSyncCourseRequirements(courseId?: number) {
     mutationFn: (payload: {
       document_requirement_ids: number[]
       deadline_at?: string | null
+      school_year_id?: number
     }) =>
       apiRequest<DocumentRequirement[]>(`/courses/${courseId}/document-requirements`, {
         method: 'PUT',
         body: payload,
       }),
     onSuccess: () => {
+      // Prefix match: refreshes this course's requirements for every school year
       queryClient.invalidateQueries({
         queryKey: ['course-document-requirements', courseId],
       })
+      // The year-filtered master list changes too when requirements get linked to a year
+      queryClient.invalidateQueries({ queryKey: ['document-requirements'] })
       toastMutationSuccess('Requirements assigned')
     },
     onError: (error) => toastMutationError(error, 'Failed to assign requirements'),

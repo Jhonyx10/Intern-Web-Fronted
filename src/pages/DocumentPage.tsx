@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BookOpen,
@@ -11,6 +11,8 @@ import {
   X,
   Layers,
   CalendarDays,
+  CopyPlus,
+  Building2,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import {
@@ -18,6 +20,8 @@ import {
   useCourseDocumentRequirements,
   useDepartmentRequirements,
   useCourseThemes,
+  useSchoolYearOptions,
+  useCarryOverRequirements,
 } from "@/lib/queries/documents";
 import { useCourses } from "@/lib/queries/courses";
 import { useCurrentSchoolYear } from "@/lib/queries/school-year";
@@ -25,6 +29,7 @@ import { CreateRequirementModal } from "@/components/modal/CreateRequirementModa
 import { AssignRequirementsModal } from "@/components/modal/AssignRequirementsModal";
 import { CommonDocumentsModal } from "@/components/modal/CommonDocumentsModal";
 import { DepartmentRequirementCards } from "@/components/cards/DepartmentRequirementCard";
+import { FilterDropdown, type FilterOption } from "@/components/ui/FilterDropDown";
 import type { Program } from "@/types";
 
 // ─── animation variants ─────────────────────────────────
@@ -66,19 +71,41 @@ export default function DocumentPage() {
   const [assignCourseId, setAssignCourseId] = useState<number | null>(null);
 
   const { data: currentSchoolYear } = useCurrentSchoolYear();
+  const { data: schoolYears } = useSchoolYearOptions();
   const { data: courses } = useCourses();
+  const carryOver = useCarryOverRequirements();
+
+  // School year filter lives in the URL (?school_year_id=…) so it carries over to
+  // the department details page. Defaults to the current school year.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlYearId = Number(searchParams.get("school_year_id")) || null;
+  const activeSchoolYearId: number | undefined =
+    urlYearId ?? (currentSchoolYear?.id as number | undefined);
+  const activeSchoolYear =
+    schoolYears?.find((sy) => sy.id === activeSchoolYearId) ?? currentSchoolYear;
+  const isCurrentYear =
+    !currentSchoolYear || activeSchoolYearId === currentSchoolYear.id;
 
   const courseIds = useMemo(
     () => (courses ?? []).map((c) => Number(c.id)),
     [courses]
   );
 
-  const deptResults = useDepartmentRequirements(isSuperAdmin ? courseIds : []);
+  const deptResults = useDepartmentRequirements(
+    isSuperAdmin ? courseIds : [],
+    activeSchoolYearId
+  );
   const { data: themes } = useCourseThemes(isSuperAdmin);
 
+  // Everything across all years: feeds the modals (so old requirements can be reused)
   const { data: allRequirements, isError: errorAll } = useDocumentRequirements();
+  // Only the selected year: feeds the stat cards
+  const { data: yearRequirements } = useDocumentRequirements(activeSchoolYearId);
 
-  const deanQuery = useCourseDocumentRequirements(isDean ? courseId : undefined);
+  const deanQuery = useCourseDocumentRequirements(
+    isDean ? courseId : undefined,
+    activeSchoolYearId
+  );
   const courseRequirements = deanQuery.data;
   const errorCourse = deanQuery.isError;
 
@@ -87,12 +114,13 @@ export default function DocumentPage() {
     (user?.course as Program | undefined);
 
   const { data: assignTarget } = useCourseDocumentRequirements(
-    isSuperAdmin ? assignCourseId ?? undefined : undefined
+    isSuperAdmin ? assignCourseId ?? undefined : undefined,
+    activeSchoolYearId
   );
 
   const requirements: { is_active: boolean }[] | undefined = isDean
     ? courseRequirements
-    : allRequirements;
+    : yearRequirements;
   const isErrorRequirements = isDean ? errorCourse : errorAll;
 
   const totalRequirements = requirements?.length ?? 0;
@@ -106,6 +134,47 @@ export default function DocumentPage() {
       ).length,
     [allRequirements]
   );
+
+  const schoolYearOptions: FilterOption[] = useMemo(
+    () =>
+      (schoolYears ?? []).map((sy) => ({
+        value: sy.id,
+        label: `S.Y. ${sy.name}`,
+        hint: sy.semester ?? undefined,
+        tag: sy.id === currentSchoolYear?.id ? "Current" : undefined,
+      })),
+    [schoolYears, currentSchoolYear?.id]
+  );
+
+  const copyFromOptions: FilterOption[] = useMemo(
+    () => schoolYearOptions.filter((o) => o.value !== activeSchoolYearId),
+    [schoolYearOptions, activeSchoolYearId]
+  );
+
+  const courseOptions: FilterOption[] = useMemo(
+    () =>
+      (courses ?? []).map((c) => ({
+        value: c.id,
+        label: c.name,
+        hint: c.code,
+      })),
+    [courses]
+  );
+
+  const handleCarryOver = (fromId: number) => {
+    if (!fromId || !activeSchoolYearId) return;
+    const from = schoolYears?.find((sy) => sy.id === fromId);
+    const ok = window.confirm(
+      `Copy all requirements from S.Y. ${from?.name ?? ""} into S.Y. ${
+        activeSchoolYear?.name ?? ""
+      }?`
+    );
+    if (!ok) return;
+    carryOver.mutate({
+      toSchoolYearId: activeSchoolYearId,
+      fromSchoolYearId: fromId,
+    });
+  };
 
   if (isDean && courseId) {
     return (
@@ -155,12 +224,12 @@ export default function DocumentPage() {
               <p className="text-[11px] font-semibold tracking-[0.2em] text-[var(--color-accent)] uppercase">
                 Document Management
               </p>
-              {currentSchoolYear && (
+              {activeSchoolYear && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 shadow-2xs">
                   <CalendarDays size={12} className="text-amber-600" />
-                  S.Y. {currentSchoolYear.name}
-                  {currentSchoolYear.semester && (
-                    <span className="font-normal text-amber-700">· {currentSchoolYear.semester}</span>
+                  S.Y. {activeSchoolYear.name}
+                  {activeSchoolYear.semester && (
+                    <span className="font-normal text-amber-700">· {activeSchoolYear.semester}</span>
                   )}
                 </span>
               )}
@@ -176,23 +245,45 @@ export default function DocumentPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            {/* School year filter (everyone) */}
+            <FilterDropdown
+              caption="School year"
+              icon={<CalendarDays size={14} />}
+              options={schoolYearOptions}
+              value={activeSchoolYearId ?? null}
+              onSelect={(v) =>
+                setSearchParams({ school_year_id: String(v) }, { replace: true })
+              }
+              placeholder="Select school year"
+              emptyText="No school years found"
+            />
+
             {isSuperAdmin && (
               <>
-                <select
-                  value=""
-                  onChange={(e) =>
-                    e.target.value && setAssignCourseId(Number(e.target.value))
-                  }
-                  aria-label="Assign requirements to a department"
-                  className="cursor-pointer rounded-xl border border-[var(--color-line)] bg-white px-3 py-2.5 text-sm font-medium text-[var(--color-muted)] shadow-sm outline-none transition hover:border-[var(--color-accent)]"
-                >
-                  <option value="">Assign to department…</option>
-                  {courses?.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.code} — {c.name}
-                    </option>
-                  ))}
-                </select>
+                {/* Reuse requirements from another school year */}
+                <FilterDropdown
+                  mode="action"
+                  icon={<CopyPlus size={14} />}
+                  options={copyFromOptions}
+                  onSelect={(v) => handleCarryOver(Number(v))}
+                  placeholder="Copy from school year"
+                  menuTitle="Copy requirements from"
+                  emptyText="No other school years"
+                  disabled={carryOver.isPending || !activeSchoolYearId}
+                />
+
+                {/* Assign requirements to a department */}
+                <FilterDropdown
+                  mode="action"
+                  icon={<Building2 size={14} />}
+                  options={courseOptions}
+                  onSelect={(v) => setAssignCourseId(Number(v))}
+                  placeholder="Assign to department"
+                  menuTitle="Assign requirements to"
+                  searchable
+                  searchPlaceholder="Search departments…"
+                  emptyText="No departments match"
+                />
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(true)}
@@ -204,6 +295,19 @@ export default function DocumentPage() {
             )}
           </div>
         </motion.div>
+
+        {/* ── Past school year notice ──────────────────────── */}
+        {!isCurrentYear && activeSchoolYear && (
+          <motion.div
+            variants={row}
+            className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+          >
+            You're viewing S.Y. {activeSchoolYear.name}, not the current school
+            year.
+            {isSuperAdmin &&
+              " Changes you make here apply to this school year."}
+          </motion.div>
+        )}
 
         {/* ── Dean read-only notice ────────────────────────── */}
         {isDean && (
@@ -316,8 +420,9 @@ export default function DocumentPage() {
                 results={deptResults}
                 themes={themes}
                 search={search}
-                schoolYear={currentSchoolYear?.name}
+                schoolYear={activeSchoolYear?.name}
                 onManage={setAssignCourseId}
+                schoolYearId={activeSchoolYearId}
               />
             )}
           </motion.div>
@@ -328,7 +433,8 @@ export default function DocumentPage() {
           <DepartmentRequirementCards
             courses={[deanCourse]}
             results={[deanQuery]}
-            schoolYear={currentSchoolYear?.name}
+            schoolYear={activeSchoolYear?.name}
+            schoolYearId={activeSchoolYearId}
           />
         )}
       </motion.section>
@@ -348,11 +454,12 @@ export default function DocumentPage() {
             key="create-requirement"
             visible={showCreateModal}
             onClose={() => setShowCreateModal(false)}
+            schoolYearId={activeSchoolYearId}
           />
         )}
         {isSuperAdmin && assignCourseId !== null && assignTarget && (
           <AssignRequirementsModal
-            key={`assign-requirements-${assignCourseId}`}
+            key={`assign-requirements-${assignCourseId}-${activeSchoolYearId ?? "none"}`}
             visible
             onClose={() => setAssignCourseId(null)}
             courseId={assignCourseId}
@@ -360,6 +467,7 @@ export default function DocumentPage() {
             masterList={allRequirements ?? []}
             currentIds={assignTarget.map((r) => r.id)}
             currentDeadline={assignTarget[0]?.pivot?.deadline_at?.slice(0, 10)}
+            schoolYearId={activeSchoolYearId}
           />
         )}
       </AnimatePresence>

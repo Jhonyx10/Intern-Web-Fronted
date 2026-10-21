@@ -7,12 +7,14 @@ import {
   AlertCircle,
   Eye,
   BookOpen,
+  CalendarDays,
   Send,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { SendEvaluationModal } from "@/components/modal/SendEvaluationModal";
+import { useCurrentSchoolYear } from "@/lib/queries/school-year";
 import {
   useEvaluationTemplates,
   useBulkAssignEvaluations,
@@ -101,11 +103,10 @@ function Pagination({
               onClick={() => onChange(item)}
               aria-label={`Page ${item}`}
               aria-current={item === page ? "page" : undefined}
-              className={`grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-semibold transition ${
-                item === page
+              className={`grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-semibold transition ${item === page
                   ? "bg-[var(--color-accent)] text-white"
                   : "border border-[var(--color-line)] bg-white text-[var(--color-ink)] hover:bg-slate-50"
-              }`}
+                }`}
             >
               {item}
             </button>
@@ -154,6 +155,7 @@ export function CoordinatorSectionPage() {
 
   const { mutate: bulkAssign, isPending } = useBulkAssignEvaluations(token);
   const { data: templates = [] } = useEvaluationTemplates(token);
+  const { data: currentSchoolYear } = useCurrentSchoolYear();
 
   useEffect(() => {
     if (sections && sections.length > 0 && !selectedSectionId) {
@@ -288,9 +290,20 @@ export function CoordinatorSectionPage() {
 
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-[28px] font-bold leading-tight tracking-tight text-[var(--color-ink)]">
-            Section management
-          </h1>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-[28px] font-bold leading-tight tracking-tight text-[var(--color-ink)]">
+              Section management
+            </h1>
+            {currentSchoolYear && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 shadow-2xs">
+                <CalendarDays size={12} className="text-amber-600" />
+                S.Y. {currentSchoolYear.name}
+                {currentSchoolYear.semester && (
+                  <span className="font-normal text-amber-700">· {currentSchoolYear.semester}</span>
+                )}
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-sm text-[var(--color-muted)]">
             Your coordinated sections, and the students enrolled in each.
           </p>
@@ -324,11 +337,10 @@ export function CoordinatorSectionPage() {
                 else tabRefs.current.delete(sec.id);
               }}
               onClick={() => setSelectedSectionId(sec.id)}
-              className={`relative z-10 flex shrink-0 items-center gap-2 whitespace-nowrap px-4 py-2.5 text-sm font-medium transition-colors ${
-                isActive
+              className={`relative z-10 flex shrink-0 items-center gap-2 whitespace-nowrap px-4 py-2.5 text-sm font-medium transition-colors ${isActive
                   ? "text-[var(--color-accent)]"
                   : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-              }`}
+                }`}
             >
               <BookOpen size={15} />
               {sec.name} {sec.code ? `(${sec.code})` : ""}
@@ -378,7 +390,11 @@ export function CoordinatorSectionPage() {
                 {currentSection.name}
               </h2>
               <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-                {currentSection.school_year?.name || "N/A"} ·{" "}
+                {currentSection.school_year?.name || "N/A"}
+                {(currentSection.school_year as any)?.semester
+                  ? ` · ${(currentSection.school_year as any).semester}`
+                  : ""}
+                {" · "}
                 {currentSection.course?.name || "N/A"}
               </p>
             </div>

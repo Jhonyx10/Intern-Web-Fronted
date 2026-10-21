@@ -7,6 +7,7 @@ import type { WeeklyReportRow } from './weeklyReportPdf'
 // best guesses. If the accomplishment text or photo is empty in the PDF,
 // add your real field names here.
 const TASK_FIELDS = [
+  'task_note',
   'task_description',
   'tasks',
   'task',
@@ -127,7 +128,7 @@ export function buildWeeklyReportRows(
 
     rows.push({
       date: day,
-      accomplishment:
+      task_note:
         logs.length === 0
           ? 'No time log recorded.'
           : tasks.length > 0

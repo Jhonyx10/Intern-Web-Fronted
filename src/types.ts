@@ -180,6 +180,7 @@ export type TimeLog = {
     id: number
     photo_path: string
   }>
+  system_note?: string | null;
 }
 
 export type ReviewedBy = {

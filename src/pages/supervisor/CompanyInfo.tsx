@@ -31,6 +31,9 @@ const CompanyInfo = () => {
   const [newBuildingName, setNewBuildingName] = useState('');
   const [newBuildingCode, setNewBuildingCode] = useState('');
   const [draftPolygon, setDraftPolygon] = useState<GeofencePolygon | null>(null);
+  // New center point picked on the map (null = unchanged)
+  const [draftCenter, setDraftCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const [isPickingCenter, setIsPickingCenter] = useState(false);
   const mapRef = useRef<MapboxMapHandle>(null);
 
   useEffect(() => {
@@ -59,11 +62,16 @@ const CompanyInfo = () => {
   const markers = useMemo<MapMarker[]>(() => {
     const marks: MapMarker[] = [];
 
-    if (company?.latitude && company?.longitude) {
+    // While editing the main geofence, the marker follows the picked center point
+    const useDraft = isEditingMainGeofence && draftCenter !== null;
+    const mainLat = useDraft ? draftCenter!.lat : company?.latitude;
+    const mainLng = useDraft ? draftCenter!.lng : company?.longitude;
+
+    if (company && mainLat && mainLng) {
       marks.push({
         id: company.id,
-        latitude: company.latitude,
-        longitude: company.longitude,
+        latitude: mainLat,
+        longitude: mainLng,
         title: company.name,
         color: 'accent',
         hexColor: '#0b6e4f',
@@ -86,7 +94,7 @@ const CompanyInfo = () => {
     });
 
     return marks;
-  }, [company]);
+  }, [company, isEditingMainGeofence, draftCenter]);
 
   const polygons = useMemo<MapPolygonFeature[]>(() => {
     const features: MapPolygonFeature[] = [];
@@ -144,14 +152,21 @@ const CompanyInfo = () => {
 
   const mapCenter = hasCoords ? [company.longitude!, company.latitude!] as [number, number] : undefined;
 
+  const resetMainEditing = () => {
+    setIsEditingMainGeofence(false);
+    setIsPickingCenter(false);
+    setDraftCenter(null);
+    setDraftPolygon(null);
+  };
+
   const handleSaveMainGeofence = async () => {
     if (!company) return;
     await updateCompanyGeofence({
       geofence_polygon: draftPolygon,
       geofence_enabled: !!draftPolygon,
+      ...(draftCenter ? { latitude: draftCenter.lat, longitude: draftCenter.lng } : {}),
     });
-    setIsEditingMainGeofence(false);
-    setDraftPolygon(null);
+    resetMainEditing();
   };
 
   const handleSaveGeofence = async (buildingId: number) => {
@@ -255,29 +270,65 @@ const CompanyInfo = () => {
             </div>
 
             {isEditingMainGeofence ? (
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={() => void handleSaveMainGeofence()}
-                  disabled={isUpdatingMain}
-                  className="flex-1 rounded-md bg-[var(--color-accent)] py-1.5 text-xs font-medium text-white shadow-sm hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
-                >
-                  {isUpdatingMain ? 'Saving...' : 'Save Geofence'}
-                </button>
-                <button
-                  onClick={() => {
-                    setIsEditingMainGeofence(false)
-                    setDraftPolygon(null)
-                  }}
-                  disabled={isUpdatingMain}
-                  className="flex-1 rounded-md border border-[var(--color-line)] bg-white py-1.5 text-xs font-medium text-[var(--color-ink)] hover:bg-slate-50 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
+              <div className="mt-3 space-y-3">
+                {/* Center point: pick it by clicking the map */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setIsPickingCenter((p) => !p)}
+                    className={`flex w-full items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs font-medium transition ${isPickingCenter
+                      ? 'border-[var(--color-accent)] bg-[var(--color-accent)] text-white'
+                      : 'border-[var(--color-accent)] bg-white text-[var(--color-accent)] hover:bg-green-50'
+                      }`}
+                  >
+                    <MapPin size={13} />
+                    {isPickingCenter ? 'Done placing center' : 'Edit center location'}
+                  </button>
+
+                  {isPickingCenter && (
+                    <p className="mt-1.5 text-[11px] text-[var(--color-muted)]">
+                      Click anywhere on the map to move the center point.
+                    </p>
+                  )}
+                  {!isPickingCenter && draftCenter && (
+                    <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                      <span className="font-medium text-green-600">
+                        New center set. Save to apply.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setDraftCenter(null)}
+                        className="font-medium text-[var(--color-muted)] hover:text-[var(--color-ink)] hover:underline"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => void handleSaveMainGeofence()}
+                    disabled={isUpdatingMain}
+                    className="flex-1 rounded-md bg-[var(--color-accent)] py-1.5 text-xs font-medium text-white shadow-sm hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
+                  >
+                    {isUpdatingMain ? 'Saving...' : 'Save Geofence'}
+                  </button>
+                  <button
+                    onClick={resetMainEditing}
+                    disabled={isUpdatingMain}
+                    className="flex-1 rounded-md border border-[var(--color-line)] bg-white py-1.5 text-xs font-medium text-[var(--color-ink)] hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             ) : (
               <button
                 onClick={() => {
                   setEditingBuildingId(null);
+                  setDraftCenter(null);
+                  setIsPickingCenter(false);
                   setIsEditingMainGeofence(true);
                 }}
                 className="mt-3 w-full rounded-md border border-[var(--color-accent)] bg-white py-1.5 text-xs font-medium text-[var(--color-accent)] hover:bg-green-50"
@@ -301,6 +352,12 @@ const CompanyInfo = () => {
             polygons={polygons}
             drawEnabled={editingBuildingId !== null || isEditingMainGeofence || isCreatingBuilding}
             onDrawChange={setDraftPolygon}
+            pickPointMode={isPickingCenter}
+            onMapClick={
+              isPickingCenter
+                ? (lng, lat) => setDraftCenter({ lat, lng })
+                : undefined
+            }
           />
         </div>
       </div>
