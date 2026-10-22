@@ -10,7 +10,7 @@ import { useLatestGeofenceEvents } from "@/lib/queries/geofenceEvents";
 import { useLiveInternLocations } from "@/hooks/useLiveInternLocations";
 import { useTheme } from "@/context/ThemeContext"; // adjust path as needed
 import type { Company } from "@/types";
-import { MapPin, X, Building2, User, Navigation } from "lucide-react";
+import { MapPin, X, Building2, User, Navigation, Clock } from "lucide-react";
 
 type LocatedCompany = Company & { latitude: number; longitude: number };
 
@@ -36,11 +36,40 @@ function isPointInPolygon(
   return inside;
 }
 
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 type MatchedArea = {
   name: string;
   address?: string | null;
   type: "company" | "building";
 };
+
+type GeofenceStatus = { inside: boolean; locationName: string | null };
+
+const StatusPill = ({ inside }: { inside: boolean }) =>
+  inside ? (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      Inside
+    </span>
+  ) : (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">
+      <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+      Outside
+    </span>
+  );
 
 const StudentLiveTracker = () => {
   const { data: companies } = useCompanies();
@@ -113,7 +142,6 @@ const StudentLiveTracker = () => {
   }, [selectedIntern, approvedCompanies]);
 
   // Geofence status for every visible intern
-  type GeofenceStatus = { inside: boolean; locationName: string | null };
   const internGeofenceStatuses = useMemo<Map<number | string, GeofenceStatus>>(() => {
     const map = new Map<number | string, GeofenceStatus>();
     for (const loc of liveLocations) {
@@ -244,12 +272,12 @@ const StudentLiveTracker = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[340px_1fr]">
-        <aside className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white/80 shadow-[var(--shadow-soft)] backdrop-blur">
+        <aside className="flex max-h-[640px] flex-col overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white/80 shadow-[var(--shadow-soft)] backdrop-blur">
           <div className="border-b border-[var(--color-line)] px-4 py-3">
             <h2 className="flex items-center text-sm font-medium text-[var(--color-ink)]">
-              <span className="mr-2 relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+              <span className="relative mr-2 flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-blue-500"></span>
               </span>
               Attendance Timetable
               <span className="ml-1 text-slate-400">
@@ -258,104 +286,107 @@ const StudentLiveTracker = () => {
             </h2>
           </div>
 
-          {liveLocations.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-slate-500">
-              No interns are currently broadcasting their location.
-            </p>
-          ) : (
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
-                <tr>
-                  <th className="px-4 py-2 font-medium">Student</th>
-                  <th className="px-4 py-2 font-medium">Last Seen</th>
-                  <th className="px-4 py-2 font-medium">Latitude</th>
-                  <th className="px-4 py-2 font-medium">Longitude</th>
-                  <th className="px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2 font-medium text-right">Area</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--color-line)]">
-                {liveLocations.map((loc) => (
-                  <tr
-                    key={loc.intern_id}
-                    className={`cursor-pointer transition-colors hover:bg-slate-50 ${selectedInternId === loc.intern_id ? "bg-blue-50" : ""
-                      }`}
-                    onClick={() => handleSelect(loc)}
-                  >
-                    <td className="px-4 py-3 font-medium text-slate-700">
-                      {loc.intern_name}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">
-                      {new Date(loc.recorded_at).toLocaleTimeString()}
-                    </td>
-                    <td className="px-4 py-3 text-xs font-mono text-slate-500">
-                      {loc.latitude.toFixed(6)}
-                    </td>
-                    <td className="px-4 py-3 text-xs font-mono text-slate-500">
-                      {loc.longitude.toFixed(6)}
-                    </td>
-                    <td className="px-4 py-3">
-                      {(() => {
-                        const status = internGeofenceStatuses.get(loc.intern_id);
-                        if (!status) return null;
-                        return status.inside ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                            Inside
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">
-                            <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-                            Outside
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-4 py-3 text-right">
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {liveLocations.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-slate-500">
+                No interns are currently broadcasting their location.
+              </p>
+            ) : (
+              <ul className="divide-y divide-[var(--color-line)]">
+                {liveLocations.map((loc) => {
+                  const status = internGeofenceStatuses.get(loc.intern_id);
+                  const isSelected = selectedInternId === loc.intern_id;
+                  return (
+                    <li key={loc.intern_id}>
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelect(loc);
+                        onClick={() => handleSelect(loc)}
+                        className={`flex w-full items-start gap-3 border-l-4 px-4 py-3 text-left transition-colors hover:bg-slate-50 ${
+                          isSelected ? "bg-slate-50" : ""
+                        }`}
+                        style={{
+                          borderLeftColor: isSelected
+                            ? themeColor
+                            : "transparent",
                         }}
-                        className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200"
                       >
-                        <MapPin className="h-3 w-3" /> View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                        <span
+                          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+                          style={{ backgroundColor: themeColor }}
+                        >
+                          {getInitials(loc.intern_name)}
+                        </span>
 
-          {(geofenceEvents?.length ?? 0) > 0 && (
-            <div className="border-t border-[var(--color-line)] px-4 py-3">
-              <h2 className="text-sm font-medium text-[var(--color-ink)]">
-                Recent activity{" "}
-                <span className="text-slate-400">
-                  ({geofenceEvents!.length})
-                </span>
-              </h2>
-              <ul className="mt-2 space-y-1">
-                {geofenceEvents!.map((event) => (
-                  <li key={event.student_id} className="text-xs text-slate-500">
-                    <span
-                      className={
-                        event.event_type === "exit"
-                          ? "text-red-600"
-                          : "text-green-600"
-                      }
-                    >
-                      {event.event_type === "exit" ? "⚠️" : "✅"}
-                    </span>{" "}
-                    {event.student_name} —{" "}
-                    {new Date(event.occurred_at).toLocaleTimeString()}
-                  </li>
-                ))}
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-start justify-between gap-2">
+                            <span className="text-sm font-semibold leading-snug text-slate-800">
+                              {loc.intern_name}
+                            </span>
+                            {status && <StatusPill inside={status.inside} />}
+                          </span>
+
+                          {status?.inside && status.locationName && (
+                            <span className="mt-0.5 flex items-center gap-1 text-xs text-emerald-700">
+                              <Building2 className="h-3 w-3 shrink-0" />
+                              <span className="truncate">
+                                {status.locationName}
+                              </span>
+                            </span>
+                          )}
+
+                          <span className="mt-1.5 flex items-center gap-1 text-xs text-slate-500">
+                            <Clock className="h-3 w-3 shrink-0 text-slate-400" />
+                            Last seen {formatTime(loc.recorded_at)}
+                          </span>
+
+                          <span className="mt-1 flex items-center gap-1 font-mono text-[11px] text-slate-400">
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            {loc.latitude.toFixed(6)}, {loc.longitude.toFixed(6)}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
-            </div>
-          )}
+            )}
+
+            {(geofenceEvents?.length ?? 0) > 0 && (
+              <div className="border-t border-[var(--color-line)] px-4 py-3">
+                <h2 className="text-sm font-medium text-[var(--color-ink)]">
+                  Recent activity{" "}
+                  <span className="text-slate-400">
+                    ({geofenceEvents!.length})
+                  </span>
+                </h2>
+                <ul className="mt-2 space-y-1.5">
+                  {geofenceEvents!.map((event) => (
+                    <li
+                      key={event.student_id}
+                      className="flex items-start gap-1.5 text-xs text-slate-500"
+                    >
+                      <span
+                        className={
+                          event.event_type === "exit"
+                            ? "text-red-600"
+                            : "text-green-600"
+                        }
+                      >
+                        {event.event_type === "exit" ? "⚠️" : "✅"}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        {event.student_name}
+                        <span className="text-slate-400">
+                          {" "}
+                          — {formatTime(event.occurred_at)}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </aside>
 
         <div className="relative overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white/80 shadow-[var(--shadow-soft)] backdrop-blur">
@@ -369,7 +400,7 @@ const StudentLiveTracker = () => {
           />
 
           {selectedIntern && (
-            <div className="absolute right-4 top-4 w-72 rounded-2xl border border-[var(--color-line)] bg-white p-4 shadow-lg">
+            <div className="absolute right-12 top-4 w-72 rounded-2xl border border-[var(--color-line)] bg-white p-4 shadow-lg">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
                   <User className="h-4 w-4" style={{ color: themeColor }} />
