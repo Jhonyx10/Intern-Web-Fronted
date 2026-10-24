@@ -7,10 +7,20 @@ import {
 } from "@/components/MapboxMap";
 import { useCompanies } from "@/lib/queries/companies";
 import { useLatestGeofenceEvents } from "@/lib/queries/geofenceEvents";
+import { useAttendanceMonitoring, type AttendanceRecord } from "@/lib/queries/attendance";
+import { useAuth } from "@/lib/auth";
 import { useLiveInternLocations } from "@/hooks/useLiveInternLocations";
 import { useTheme } from "@/context/ThemeContext"; // adjust path as needed
 import type { Company } from "@/types";
-import { MapPin, X, Building2, User, Navigation, Clock } from "lucide-react";
+import {
+  MapPin,
+  X,
+  Building2,
+  User,
+  Navigation,
+  Clock,
+  Coffee,
+} from "lucide-react";
 
 type LocatedCompany = Company & { latitude: number; longitude: number };
 
@@ -50,6 +60,19 @@ function formatTime(iso: string) {
   });
 }
 
+// Attendance fields can be full ISO strings or plain "HH:MM:SS" values.
+function formatLogTime(value: string) {
+  if (value.includes("T")) return formatTime(value);
+  const [h, m] = value.split(":");
+  const hour = parseInt(h, 10);
+  if (Number.isNaN(hour) || m === undefined) return value;
+  return `${hour % 12 || 12}:${m} ${hour >= 12 ? "PM" : "AM"}`;
+}
+
+function normalizeName(name: string) {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 type MatchedArea = {
   name: string;
   address?: string | null;
@@ -57,6 +80,11 @@ type MatchedArea = {
 };
 
 type GeofenceStatus = { inside: boolean; locationName: string | null };
+
+type WorkStatus =
+  | { kind: "break"; since: string }
+  | { kind: "working" }
+  | { kind: "out" };
 
 const StatusPill = ({ inside }: { inside: boolean }) =>
   inside ? (
@@ -71,9 +99,37 @@ const StatusPill = ({ inside }: { inside: boolean }) =>
     </span>
   );
 
+const WorkStatusPill = ({ status }: { status: WorkStatus }) => {
+  if (status.kind === "break") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">
+        <Coffee className="h-3 w-3" />
+        On lunch break · since {formatLogTime(status.since)}
+      </span>
+    );
+  }
+  if (status.kind === "working") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+        <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+        Working
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+      <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+      Timed out
+    </span>
+  );
+};
+
 const StudentLiveTracker = () => {
+  const { token } = useAuth();
   const { data: companies } = useCompanies();
   const { data: geofenceEvents } = useLatestGeofenceEvents();
+  // Today's time logs, used to tell who is on their lunch break.
+  const { data: todayLogs } = useAttendanceMonitoring({ range: "today" }, token);
   const mapRef = useRef<MapboxMapHandle>(null);
   const [selectedInternId, setSelectedInternId] = useState<
     number | string | null
@@ -176,6 +232,44 @@ const StudentLiveTracker = () => {
     }
     return map;
   }, [liveLocations, approvedCompanies]);
+
+  // Work status (on lunch break / working / timed out) for every visible
+  // intern, derived from today's latest time log. Matches by name first, then
+  // falls back to the id.
+  const internWorkStatuses = useMemo<Map<number | string, WorkStatus>>(() => {
+    const latestByName = new Map<string, AttendanceRecord>();
+    const latestById = new Map<number, AttendanceRecord>();
+
+    for (const log of todayLogs ?? []) {
+      if (!log.time_in) continue;
+      const nameKey = normalizeName(log.student_name);
+      const byName = latestByName.get(nameKey);
+      if (!byName || (byName.time_in && log.time_in > byName.time_in)) {
+        latestByName.set(nameKey, log);
+      }
+      const byId = latestById.get(log.student_id);
+      if (!byId || (byId.time_in && log.time_in > byId.time_in)) {
+        latestById.set(log.student_id, log);
+      }
+    }
+
+    const map = new Map<number | string, WorkStatus>();
+    for (const loc of liveLocations) {
+      const log =
+        latestByName.get(normalizeName(loc.intern_name)) ??
+        latestById.get(Number(loc.intern_id));
+      if (!log) continue;
+
+      if (log.time_out) {
+        map.set(loc.intern_id, { kind: "out" });
+      } else if (log.break_out && !log.break_in) {
+        map.set(loc.intern_id, { kind: "break", since: log.break_out });
+      } else {
+        map.set(loc.intern_id, { kind: "working" });
+      }
+    }
+    return map;
+  }, [liveLocations, todayLogs]);
 
   const companyMarkers: MapMarker[] = useMemo(
     () =>
@@ -295,6 +389,7 @@ const StudentLiveTracker = () => {
               <ul className="divide-y divide-[var(--color-line)]">
                 {liveLocations.map((loc) => {
                   const status = internGeofenceStatuses.get(loc.intern_id);
+                  const workStatus = internWorkStatuses.get(loc.intern_id);
                   const isSelected = selectedInternId === loc.intern_id;
                   return (
                     <li key={loc.intern_id}>
@@ -324,6 +419,12 @@ const StudentLiveTracker = () => {
                             </span>
                             {status && <StatusPill inside={status.inside} />}
                           </span>
+
+                          {workStatus && (
+                            <span className="mt-1 flex">
+                              <WorkStatusPill status={workStatus} />
+                            </span>
+                          )}
 
                           {status?.inside && status.locationName && (
                             <span className="mt-0.5 flex items-center gap-1 text-xs text-emerald-700">
@@ -461,6 +562,15 @@ const StudentLiveTracker = () => {
                           Outside geofence
                         </span>
                       )}
+                    </div>
+                  );
+                })()}
+                {(() => {
+                  const workStatus = internWorkStatuses.get(selectedIntern.intern_id);
+                  if (!workStatus) return null;
+                  return (
+                    <div className="flex items-center gap-2">
+                      <WorkStatusPill status={workStatus} />
                     </div>
                   );
                 })()}

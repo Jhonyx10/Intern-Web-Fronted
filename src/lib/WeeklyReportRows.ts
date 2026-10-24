@@ -1,11 +1,10 @@
 import { addDays, differenceInCalendarWeeks, format, startOfWeek } from 'date-fns'
 import type { TimeLog } from '@/types'
-import type { WeeklyReportRow } from './weeklyReportPdf'
+import type { WeeklyReportRow, WeeklyReportSession } from './weeklyReportPdf'
 
 // ── Field mapping ─────────────────────────────────────────────────
-// I haven't seen the TimeLog payload for tasks / photos, so these lists are
-// best guesses. If the accomplishment text or photo is empty in the PDF,
-// add your real field names here.
+// If the accomplishment text or photo is empty in the PDF, add your real
+// field names here.
 const TASK_FIELDS = [
   'task_note',
   'task_description',
@@ -20,6 +19,7 @@ const TASK_FIELDS = [
 
 const PHOTO_LIST_FIELDS = ['task_photos', 'taskPhotos'] as const
 const PHOTO_URL_FIELDS = [
+  'file_url',
   'url',
   'photo_url',
   'image_url',
@@ -29,6 +29,7 @@ const PHOTO_URL_FIELDS = [
 ] as const
 
 type Loose = Record<string, unknown>
+type SessionKey = 'morning' | 'afternoon'
 
 function pickString(obj: Loose, keys: readonly string[]): string {
   for (const key of keys) {
@@ -46,19 +47,123 @@ function toPhotoUrl(value: string): string {
   return `${origin}/storage/${value.replace(/^\/+/, '').replace(/^storage\//, '')}`
 }
 
-function firstPhotoOf(log: Loose): string | null {
+// ── Task note: "[Morning] … [Afternoon] …" → separate sessions ────
+
+function parseTaskNote(note: string) {
+  const result = {
+    morning: '',
+    afternoon: '',
+    general: '',
+  }
+
+  const parts = note.split(/\[(Morning|Afternoon)\]\s*/i)
+  // parts: [leading text, "Morning", text, "Afternoon", text, ...]
+  result.general = (parts[0] ?? '').trim()
+
+  for (let i = 1; i < parts.length; i += 2) {
+    const key = parts[i].toLowerCase() as SessionKey
+    result[key] = (parts[i + 1] ?? '').trim()
+  }
+  return result
+}
+
+// ── Photos: work out which session each one belongs to ────────────
+
+function photoSessionOf(item: Loose, breakIn: string): SessionKey {
+  // 1. The API says so
+  const raw = String(item.session ?? item.period ?? '').toLowerCase()
+  if (raw.startsWith('morn')) return 'morning'
+  if (raw.startsWith('after')) return 'afternoon'
+
+  // 2. Otherwise compare when it was uploaded with when the break ended
+  const stamp = pickString(item, ['submitted_at', 'created_at', 'updated_at'])
+  if (stamp && breakIn) {
+    const uploaded = Date.parse(stamp)
+    const resumed = Date.parse(breakIn)
+    if (!Number.isNaN(uploaded) && !Number.isNaN(resumed)) {
+      return uploaded >= resumed ? 'afternoon' : 'morning'
+    }
+  }
+
+  return 'morning'
+}
+
+function photosBySession(log: Loose, breakIn: string) {
+  const found: Partial<Record<SessionKey, string>> = {}
+
   for (const listKey of PHOTO_LIST_FIELDS) {
     const list = log[listKey]
     if (!Array.isArray(list)) continue
+
     for (const item of list) {
-      if (typeof item === 'string' && item) return toPhotoUrl(item)
-      if (item && typeof item === 'object') {
+      let url = ''
+      let session: SessionKey = 'morning'
+
+      if (typeof item === 'string' && item) {
+        url = toPhotoUrl(item)
+      } else if (item && typeof item === 'object') {
         const value = pickString(item as Loose, PHOTO_URL_FIELDS)
-        if (value) return toPhotoUrl(value)
+        if (value) url = toPhotoUrl(value)
+        session = photoSessionOf(item as Loose, breakIn)
       }
+
+      if (url && !found[session]) found[session] = url
     }
   }
-  return null
+
+  return found
+}
+
+// ── Per-session accumulator (a day can have more than one log) ────
+
+type Acc = {
+  present: boolean
+  start: number | null
+  end: number | null
+  minutes: number
+  notes: Set<string>
+  photoUrl: string | null
+}
+
+const newAcc = (): Acc => ({
+  present: false,
+  start: null,
+  end: null,
+  minutes: 0,
+  notes: new Set(),
+  photoUrl: null,
+})
+
+function addRange(acc: Acc, startIso: string, endIso: string) {
+  const start = Date.parse(startIso)
+  if (Number.isNaN(start)) return
+
+  acc.present = true
+  acc.start = acc.start === null ? start : Math.min(acc.start, start)
+
+  if (!endIso) return
+  const end = Date.parse(endIso)
+  if (Number.isNaN(end)) return
+
+  acc.end = acc.end === null ? end : Math.max(acc.end, end)
+  acc.minutes += Math.max(0, Math.round((end - start) / 60000))
+}
+
+function toSession(acc: Acc): WeeklyReportSession {
+  const hasRange = acc.present && acc.start !== null
+  return {
+    present: acc.present,
+    task_note: acc.present
+      ? Array.from(acc.notes).join('\n') || 'No accomplishment recorded.'
+      : '—',
+    hours: Math.round((acc.minutes / 60) * 10) / 10,
+    timeRange: hasRange
+      ? `${format(acc.start as number, 'h:mm a')} – ${
+          acc.end !== null ? format(acc.end, 'h:mm a') : 'ongoing'
+        }`
+      : undefined,
+    photoUrl: acc.photoUrl,
+  }
 }
 
 // ── Helpers used by the page / modal ──────────────────────────────
@@ -83,8 +188,12 @@ export function suggestWeekNo(firstLogDate: Date | null, weekDate: Date): number
 }
 
 /**
- * One row per weekday (Mon–Fri) of the week containing `weekDate`.
- * Saturday / Sunday are only included when the student logged time on them.
+ * One entry per weekday (Mon–Fri) of the week containing `weekDate`, each with
+ * a morning and an afternoon session. Saturday / Sunday are only included when
+ * the student logged time on them.
+ *
+ *   Morning   = time in  → break out (or time out if there was no break)
+ *   Afternoon = break in → time out
  */
 export function buildWeeklyReportRows(
   timeLogs: TimeLog[],
@@ -110,32 +219,56 @@ export function buildWeeklyReportRows(
     const isWeekend = i >= 5
     if (isWeekend && logs.length === 0) continue
 
-    const minutes = logs.reduce((sum, l) => sum + (l.duration_minutes ?? 0), 0)
+    if (logs.length === 0) {
+      rows.push({ date: day, empty: true })
+      continue
+    }
 
-    const tasks = Array.from(
-      new Set(
-        logs
-          .map((l) => pickString(l as unknown as Loose, TASK_FIELDS))
-          .filter(Boolean),
-      ),
-    )
+    const morning = newAcc()
+    const afternoon = newAcc()
 
-    let photoUrl: string | null = null
     for (const log of logs) {
-      photoUrl = firstPhotoOf(log as unknown as Loose)
-      if (photoUrl) break
+      const l = log as unknown as Loose
+      const str = (key: string) => (typeof l[key] === 'string' ? (l[key] as string) : '')
+
+      const timeIn = str('time_in')
+      const breakOut = str('break_out')
+      const breakIn = str('break_in')
+      const timeOut = str('time_out')
+
+      // Hours / time ranges
+      addRange(morning, timeIn, breakOut || timeOut)
+      if (breakIn) addRange(afternoon, breakIn, timeOut)
+
+      // Task notes, split by their [Morning] / [Afternoon] tags
+      const rawNote = pickString(l, TASK_FIELDS)
+      if (rawNote) {
+        const note = parseTaskNote(rawNote)
+        if (note.morning) {
+          morning.present = true
+          morning.notes.add(note.morning)
+        }
+        if (note.afternoon) {
+          afternoon.present = true
+          afternoon.notes.add(note.afternoon)
+        }
+        if (note.general) {
+          // An untagged note belongs to the day: show it under the morning
+          morning.present = true
+          morning.notes.add(note.general)
+        }
+      }
+
+      // Photos
+      const photos = photosBySession(l, breakIn)
+      if (photos.morning && !morning.photoUrl) morning.photoUrl = photos.morning
+      if (photos.afternoon && !afternoon.photoUrl) afternoon.photoUrl = photos.afternoon
     }
 
     rows.push({
       date: day,
-      task_note:
-        logs.length === 0
-          ? 'No time log recorded.'
-          : tasks.length > 0
-            ? tasks.join('\n')
-            : 'No accomplishment recorded.',
-      hours: Math.round((minutes / 60) * 10) / 10,
-      photoUrl,
+      morning: toSession(morning),
+      afternoon: toSession(afternoon),
     })
   }
 

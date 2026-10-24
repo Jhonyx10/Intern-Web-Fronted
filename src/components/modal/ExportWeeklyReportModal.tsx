@@ -8,8 +8,6 @@ import { backdropVariants, panelVariants } from './ModalVariant'
 export type WeeklyReportExportInput = {
     weekDate: Date // any date inside the chosen week
     weekNo: number
-    notedByName: string
-    notedByPosition: string
 }
 
 const inputClass =
@@ -22,8 +20,6 @@ export default function ExportWeeklyReportModal({
     isExporting,
     defaultWeekDate,
     firstLogDate,
-    defaultNotedByName,
-    defaultNotedByPosition,
 }: {
     open: boolean
     onClose: () => void
@@ -31,21 +27,15 @@ export default function ExportWeeklyReportModal({
     isExporting?: boolean
     defaultWeekDate: Date
     firstLogDate: Date | null
-    defaultNotedByName: string
-    defaultNotedByPosition: string
 }) {
     const [weekDateStr, setWeekDateStr] = useState(format(defaultWeekDate, 'yyyy-MM-dd'))
     const [weekNoOverride, setWeekNoOverride] = useState('')
-    const [notedByName, setNotedByName] = useState(defaultNotedByName)
-    const [notedByPosition, setNotedByPosition] = useState(defaultNotedByPosition)
 
     // Fresh defaults every time the modal opens
     useEffect(() => {
         if (!open) return
         setWeekDateStr(format(defaultWeekDate, 'yyyy-MM-dd'))
         setWeekNoOverride('')
-        setNotedByName(defaultNotedByName)
-        setNotedByPosition(defaultNotedByPosition)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open])
 
@@ -64,12 +54,7 @@ export default function ExportWeeklyReportModal({
     function submit(e: React.FormEvent) {
         e.preventDefault()
         if (!weekNo || weekNo < 1) return
-        onExport({
-            weekDate,
-            weekNo,
-            notedByName: notedByName.trim(),
-            notedByPosition: notedByPosition.trim(),
-        })
+        onExport({ weekDate, weekNo })
     }
 
     return (
@@ -141,26 +126,6 @@ export default function ExportWeeklyReportModal({
                                     <span className="text-xs text-[var(--color-muted)]">
                                         Leave blank to use week {suggestedWeekNo} (counted from the first time log).
                                     </span>
-                                </label>
-
-                                <label className="flex flex-col gap-1.5 text-sm">
-                                    <span className="font-medium text-[var(--color-ink)]">Noted by</span>
-                                    <input
-                                        value={notedByName}
-                                        onChange={(e) => setNotedByName(e.target.value)}
-                                        placeholder="Supervisor name"
-                                        className={inputClass}
-                                    />
-                                </label>
-
-                                <label className="flex flex-col gap-1.5 text-sm">
-                                    <span className="font-medium text-[var(--color-ink)]">Position</span>
-                                    <input
-                                        value={notedByPosition}
-                                        onChange={(e) => setNotedByPosition(e.target.value)}
-                                        placeholder="e.g. Senior Developer"
-                                        className={inputClass}
-                                    />
                                 </label>
 
                                 <button

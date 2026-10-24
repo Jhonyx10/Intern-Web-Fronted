@@ -134,7 +134,7 @@ function AppContent() {
                 element={<SupervisorInternDetailsPage />}
               />
               <Route
-                path="student/live/location"
+                path="/student/live/location"
                 element={<StudentLiveTracker />}
               />
               <Route

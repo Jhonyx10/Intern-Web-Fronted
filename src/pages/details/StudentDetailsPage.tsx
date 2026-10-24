@@ -20,7 +20,6 @@ import {
   ClipboardCheck,
   Star,
   Map,
-  Download,
 } from "lucide-react";
 import { useStudent } from "@/lib/queries/students";
 import {
@@ -53,6 +52,7 @@ import { DocumentPreviewModal } from "@/components/modal/DocumentPreviewModal";
 import { TimeLogDetails } from "@/components/modal/TimeLogDetails";
 import { GeofenceExcursionDetailsModal } from "@/components/modal/GeofenceExcursionDetailsModal";
 import { ExportDTRModal } from "@/components/modal/ExportDtrModal";
+import { TimeLogToolbar } from "@/components/TimeLogToolbar";
 import { useUpdateDocumentStatus } from "@/lib/queries/documents";
 import { toastMutationError, toastMutationSuccess } from "@/lib/mutationToast";
 // --- Shapes matching the actual /students/{id} payload ---
@@ -172,6 +172,32 @@ function formatDateReadable(dateStr?: string | null): string {
   return dateStr;
 }
 
+// Handles both ISO strings and MySQL "YYYY-MM-DD HH:mm:ss" (Safari-safe).
+function formatDateTime(value?: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value.includes("T") ? value : value.replace(" ", "T"));
+  if (isNaN(date.getTime())) return "—";
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function formatSeconds(seconds?: number | null): string {
+  if (seconds == null) return "—";
+  const total = Math.round(Number(seconds));
+  if (isNaN(total)) return "—";
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
 function verificationLabel(method?: string | null): string {
   if (!method) return "Facial Match";
   if (method === "auto_closed_missed_punch_out") return "Auto-closed";
@@ -251,6 +277,12 @@ export function StudentDetailsPage() {
 
   const supervisor = companySchedules[0]?.creator;
 
+  // The supervisor this student is assigned to. Prefers the explicit
+  // assignment from the API; falls back to whoever created the work schedule.
+  const assignedSupervisor = (student as any)?.supervisor ?? supervisor ?? null;
+  const supervisorName: string | undefined = assignedSupervisor?.user?.name;
+  const supervisorTitle: string | undefined = assignedSupervisor?.position_title;
+
   // ── DTR view data (same row-building logic as the PDF export) ──
   const dtrByMonth = useMemo(() => groupByMonth(timeLogs), [timeLogs]);
   const dtrMonthKeys = useMemo(
@@ -286,8 +318,12 @@ export function StudentDetailsPage() {
         studentName: `${student!.last_name}, ${student!.first_name}${middle}`,
         weekNo: input.weekNo,
         rows: buildWeeklyReportRows(timeLogs, input.weekDate),
-        verifiedBy: { name: fullName, organization: assignedCompany?.name },
-        notedBy: { name: input.notedByName, position: input.notedByPosition },
+        supervisorBy: {
+          name: supervisorName ?? "",
+          title: supervisorTitle,
+          organization: assignedCompany?.name,
+        },
+        studentBy: { name: fullName },
         school: { college: student!.section?.course?.name },
         logos: { left: OCCLOGO, right: logoUrl },
         fileName: `weekly-report-week-${input.weekNo}-${student!.last_name}.pdf`,
@@ -458,7 +494,7 @@ export function StudentDetailsPage() {
               OJT Hours Rendered
             </span>
             <span className="font-bold text-[var(--color-accent)]">
-             {formatDuration(totalMinutes)} / {requiredHours} hrs ({progressPercent}%)
+              {formatDuration(totalMinutes)} / {requiredHours} hrs ({progressPercent}%)
             </span>
           </div>
           <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100">
@@ -571,6 +607,22 @@ export function StudentDetailsPage() {
                         className="shrink-0 text-slate-400 mt-0.5"
                       />
                       <span>{assignedCompany.address}</span>
+                    </div>
+                  )}
+
+                  {supervisorName && (
+                    <div className="flex items-start gap-2.5 text-xs text-[var(--color-muted)]">
+                      <Briefcase
+                        size={15}
+                        className="shrink-0 text-slate-400 mt-0.5"
+                      />
+                      <span>
+                        Supervisor:{" "}
+                        <strong className="text-[var(--color-ink)]">
+                          {supervisorName}
+                        </strong>
+                        {supervisorTitle ? ` (${supervisorTitle})` : ""}
+                      </span>
                     </div>
                   )}
 
@@ -767,38 +819,12 @@ export function StudentDetailsPage() {
                   Total: {timeLogs.length} entries · {formatDuration(totalMinutes)} rendered
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="inline-flex rounded-lg border border-[var(--color-line)] bg-slate-50 p-0.5">
-                  {(["normal", "dtr"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setTimeLogView(mode)}
-                      className={`rounded-md px-3 py-1 text-[11px] font-semibold transition ${
-                        timeLogView === mode
-                          ? "bg-white text-[var(--color-accent)] shadow-sm"
-                          : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-                      }`}
-                    >
-                      {mode === "normal" ? "Normal" : "DTR"}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setWeeklyOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--color-ink)] shadow-sm hover:bg-slate-50 transition whitespace-nowrap"
-                >
-                  <FileText size={14} /> Export Weekly Report
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExportOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--color-ink)] shadow-sm hover:bg-slate-50 transition whitespace-nowrap"
-                >
-                  <Download size={14} /> Export DTR
-                </button>
-              </div>
+              <TimeLogToolbar
+                view={timeLogView}
+                onViewChange={setTimeLogView}
+                onExportWeekly={() => setWeeklyOpen(true)}
+                onExportDtr={() => setExportOpen(true)}
+              />
             </div>
 
             {timeLogs.length > 0 && timeLogView === "dtr" ? (
@@ -854,13 +880,12 @@ export function StudentDetailsPage() {
                             {row.map((cell, i) => (
                               <td
                                 key={i}
-                                className={`border border-[var(--color-line)] px-2 py-1.5 ${
-                                  i === 0
-                                    ? "font-bold text-[var(--color-ink)]"
-                                    : i === 7
-                                      ? "whitespace-nowrap font-semibold text-indigo-600"
-                                      : "text-[var(--color-muted)]"
-                                }`}
+                                className={`border border-[var(--color-line)] px-2 py-1.5 ${i === 0
+                                  ? "font-bold text-[var(--color-ink)]"
+                                  : i === 7
+                                    ? "whitespace-nowrap font-semibold text-indigo-600"
+                                    : "text-[var(--color-muted)]"
+                                  }`}
                               >
                                 {cell}
                               </td>
@@ -953,8 +978,8 @@ export function StudentDetailsPage() {
                             <td className="px-4 py-3">
                               <span
                                 className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${log.verification_method === "auto_closed_missed_punch_out"
-                                    ? "bg-amber-50 text-amber-700"
-                                    : "bg-blue-50 text-blue-700"
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-blue-50 text-blue-700"
                                   }`}
                               >
                                 {verificationLabel(log.verification_method)}
@@ -1024,55 +1049,57 @@ export function StudentDetailsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--color-line)]">
-                      {excursions.map((exc) => (
-                        <tr
-                          key={exc.id}
-                          className="hover:bg-slate-50/60 transition"
-                        >
-                          <td className="px-4 py-3 font-semibold text-[var(--color-ink)] capitalize">
-                            {exc.session_period || "Reg."}
-                          </td>
-                          <td className="px-4 py-3 text-[var(--color-muted)]">
-                            {new Date(exc.excursion_start).toLocaleString([], {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </td>
-                          <td className="px-4 py-3 text-[var(--color-muted)]">
-                            {exc.excursion_end ? (
-                              new Date(exc.excursion_end).toLocaleString([], {
-                                month: "short",
-                                day: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            ) : (
-                              <span className="font-semibold text-amber-600">
-                                Active Incident
+                      {excursions.map((exc) => {
+                        const timeLog = timeLogs.find(
+                          (l) => l.id === exc.time_log_id
+                        );
+                        const session = timeLog?.session_period
+                          || (timeLog
+                            ? new Date(timeLog.time_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : undefined);
+                        const isActive =
+                          !exc.return_at || exc.status === "active";
+
+                        return (
+                          <tr
+                            key={exc.id}
+                            className="hover:bg-slate-50/60 transition"
+                          >
+                            <td className="px-4 py-3 font-semibold text-[var(--color-ink)] capitalize">
+                              {session ?? '—'}
+                            </td>
+                            <td className="px-4 py-3 text-[var(--color-muted)]">
+                              {formatDateTime(exc.exit_at)}
+                            </td>
+                            <td className="px-4 py-3 text-[var(--color-muted)]">
+                              {isActive ? (
+                                <span className="font-semibold text-amber-600">
+                                  Active Incident
+                                </span>
+                              ) : (
+                                formatDateTime(exc.return_at)
+                              )}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-rose-600">
+                              {formatSeconds(exc.duration_seconds)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-[var(--color-muted)] italic max-w-[150px] truncate block">
+                                {exc.reason || "No reason specified"}
                               </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 font-bold text-rose-600">
-                            {exc.duration_minutes ? `${exc.duration_minutes} mins` : '—'}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="text-[var(--color-muted)] italic max-w-[150px] truncate block">
-                              {exc.reason || 'No reason specified'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <button
-                              type="button"
-                              onClick={() => setViewingExcursion(exc)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--color-accent)] shadow-sm hover:bg-slate-50 transition whitespace-nowrap"
-                            >
-                              <Map size={12} /> View Map
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="px-4 py-3">
+                              <button
+                                type="button"
+                                onClick={() => setViewingExcursion(exc)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--color-accent)] shadow-sm hover:bg-slate-50 transition whitespace-nowrap"
+                              >
+                                <Map size={12} /> View Map
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1553,6 +1580,16 @@ export function StudentDetailsPage() {
       <GeofenceExcursionDetailsModal
         isOpen={viewingExcursion !== null}
         excursion={viewingExcursion}
+        geofencePolygon={assignedCompany?.geofence_polygon ?? null}
+        sessionLabel={
+          viewingExcursion
+            ? (() => {
+              const l = timeLogs.find((l) => l.id === viewingExcursion.time_log_id);
+              return l?.session_period
+                || (l ? new Date(l.time_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : undefined);
+            })()
+            : null
+        }
         onClose={() => setViewingExcursion(null)}
       />
 
@@ -1569,8 +1606,6 @@ export function StudentDetailsPage() {
         isExporting={weeklyExporting}
         defaultWeekDate={getLatestLogDate(timeLogs) ?? new Date()}
         firstLogDate={getFirstLogDate(timeLogs)}
-        defaultNotedByName={supervisor?.user?.name ?? ""}
-        defaultNotedByPosition={supervisor?.position_title ?? ""}
       />
     </section>
   );

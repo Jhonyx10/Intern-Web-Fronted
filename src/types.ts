@@ -233,15 +233,20 @@ export type GeofenceExcursionPoint = {
   recorded_at: string
 }
 
-export type GeofenceExcursion = {
-  id: number
-  student_id: number
-  session_period: string
-  reason: string | null
-  excursion_start: string
-  excursion_end: string | null
-  duration_minutes: number | null
-  points?: GeofenceExcursionPoint[]
+export interface GeofenceExcursion {
+  id: number;
+  intern_id: number;
+  time_log_id: number;
+  exit_at: string;
+  return_at: string | null;
+  duration_seconds: number | null;
+  max_distance_meters: number | null;
+  status: "active" | "completed" | string;
+  reason: string | null;
+  created_at: string;
+  updated_at: string;
+  /** Eager-loaded location snapshots — present when the endpoint includes them. */
+  points?: GeofenceExcursionPoint[];
 }
 
 export type Student = {

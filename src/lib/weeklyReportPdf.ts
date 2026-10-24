@@ -1,15 +1,31 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import type { RowInput, Styles } from 'jspdf-autotable'
 import { format, parseISO } from 'date-fns'
 
 // ── Types ─────────────────────────────────────────────────────────
 
+export type WeeklyReportSession = {
+  /** false when the student has no time recorded for this session */
+  present: boolean
+  task_note: string
+  hours: number
+  /** e.g. "8:00 AM – 12:00 PM" */
+  timeRange?: string
+  /** Optional attachment photo (URL or data URL) */
+  photoUrl?: string | null
+}
+
 export type WeeklyReportRow = {
   /** 'YYYY-MM-DD' string or Date */
   date: string | Date
-  task_note: string
-  hours: number
-  /** Optional attachment photo (URL or data URL) */
+  morning?: WeeklyReportSession
+  afternoon?: WeeklyReportSession
+  /** true when there is no time log for the day */
+  empty?: boolean
+  /** Legacy single-row fields (used only when morning/afternoon are missing) */
+  task_note?: string
+  hours?: number
   photoUrl?: string | null
 }
 
@@ -17,8 +33,10 @@ export type WeeklyReportOptions = {
   studentName: string // e.g. "Ordaniza, Jhon Mark E."
   weekNo: number | string
   rows: WeeklyReportRow[]
-  verifiedBy: { name: string; organization?: string } // student + company
-  notedBy: { name: string; position?: string } // supervisor
+  /** Left signature — company supervisor */
+  supervisorBy: { name: string; title?: string | null; organization?: string }
+  /** Right signature — the student intern */
+  studentBy: { name: string }
   school?: {
     name?: string
     address?: string
@@ -31,14 +49,17 @@ export type WeeklyReportOptions = {
 }
 
 type LoadedImage = { dataUrl: string; width: number; height: number }
+type RGB = [number, number, number]
 
 // ── Look & feel (matches the sample) ──────────────────────────────
 
-const ORANGE: [number, number, number] = [237, 125, 49]
-const PEACH: [number, number, number] = [251, 228, 213]
-const NAVY: [number, number, number] = [31, 56, 100]
-const RULE_BLUE: [number, number, number] = [68, 114, 196]
-const INK: [number, number, number] = [30, 30, 30]
+const ORANGE: RGB = [237, 125, 49]
+const PEACH: RGB = [251, 228, 213]
+const WHITE: RGB = [255, 255, 255]
+const NAVY: RGB = [31, 56, 100]
+const RULE_BLUE: RGB = [68, 114, 196]
+const INK: RGB = [30, 30, 30]
+const MUTED: RGB = [120, 120, 120]
 
 const MARGIN = 18
 const PHOTO_ROW_HEIGHT = 30 // mm, rows that have an attachment
@@ -90,6 +111,107 @@ function fit(img: LoadedImage, maxW: number, maxH: number) {
   return { w: img.width * ratio, h: img.height * ratio }
 }
 
+// ── Table body ────────────────────────────────────────────────────
+
+const cell = (content: string, fill: RGB, extra: Partial<Styles> = {}) => ({
+  content,
+  styles: { fillColor: fill, ...extra } as Partial<Styles>,
+})
+
+const roundHours = (value: number) => Math.round(value * 10) / 10
+
+/**
+ * Each day becomes two rows (Morning, Afternoon) sharing one date cell.
+ * Days without a log become one "No time log recorded." row.
+ * `photoUrls` lines up 1:1 with the body rows so images can be drawn later.
+ */
+function buildBody(rows: WeeklyReportRow[]) {
+  const body: RowInput[] = []
+  const photoUrls: (string | null)[] = []
+  let totalHours = 0
+
+  rows.forEach((r, dayIdx) => {
+    const fill = dayIdx % 2 === 0 ? PEACH : WHITE
+    const dateStr = format(typeof r.date === 'string' ? parseISO(r.date) : r.date, 'MM/dd/yyyy')
+    const dateStyles: Partial<Styles> = { halign: 'center', fontStyle: 'bold', valign: 'middle' }
+
+    if (r.empty) {
+      body.push([
+        cell(dateStr, fill, dateStyles),
+        {
+          ...cell('No time log recorded.', fill, {
+            halign: 'center',
+            fontStyle: 'italic',
+            textColor: MUTED,
+          }),
+          colSpan: 4, // spans Session through Attachments
+        },
+      ])
+      photoUrls.push(null)
+      return
+    }
+
+    if (r.morning || r.afternoon) {
+      const sessions: [string, WeeklyReportSession][] = [
+        ['Morning', r.morning ?? { present: false, task_note: '—', hours: 0 }],
+        ['Afternoon', r.afternoon ?? { present: false, task_note: '—', hours: 0 }],
+      ]
+
+      sessions.forEach(([label, s], i) => {
+        totalHours += s.hours
+        const sessionCell = cell(
+          s.timeRange ? `${label}\n${s.timeRange}` : label,
+          fill,
+          { halign: 'center', fontStyle: 'bold', fontSize: 8 },
+        )
+        const noteCell = cell(
+          s.task_note,
+          fill,
+          s.present ? { halign: 'left' } : { halign: 'left', textColor: MUTED, fontStyle: 'italic' },
+        )
+        const hoursCell = cell(s.present ? `${s.hours}hrs` : '—', fill, {
+          halign: 'center',
+          fontStyle: 'bold',
+        })
+        const photoCell = cell('', fill)
+
+        if (i === 0) {
+          // The date cell spans both session rows
+          const dateCell = { ...cell(dateStr, fill, dateStyles), rowSpan: 2 }
+          body.push([dateCell, sessionCell, noteCell, hoursCell, photoCell])
+        } else {
+          body.push([sessionCell, noteCell, hoursCell, photoCell])
+        }
+        photoUrls.push(s.photoUrl ?? null)
+      })
+      return
+    }
+
+    // Legacy single-row input
+    const hours = r.hours ?? 0
+    totalHours += hours
+    body.push([
+      cell(dateStr, fill, dateStyles),
+      cell('Whole day', fill, { halign: 'center', fontSize: 8 }),
+      cell(r.task_note ?? '', fill, { halign: 'left' }),
+      cell(`${hours}hrs`, fill, { halign: 'center', fontStyle: 'bold' }),
+      cell('', fill),
+    ])
+    photoUrls.push(r.photoUrl ?? null)
+  })
+
+  // Weekly total
+  const totalStyles: Partial<Styles> = { fontStyle: 'bold', textColor: WHITE }
+  body.push([
+    { ...cell('TOTAL HOURS', ORANGE, { ...totalStyles, halign: 'right' }), colSpan: 3 },
+    cell(`${roundHours(totalHours)}hrs`, ORANGE, { ...totalStyles, halign: 'center' }),
+    cell('', ORANGE),
+  ])
+  photoUrls.push(null)
+
+  return { body, photoUrls }
+}
+
 // ── PDF ───────────────────────────────────────────────────────────
 
 type DocWithTable = jsPDF & { lastAutoTable?: { finalY: number } }
@@ -99,8 +221,8 @@ export async function exportWeeklyReportPdf(options: WeeklyReportOptions): Promi
     studentName,
     weekNo,
     rows,
-    verifiedBy,
-    notedBy,
+    supervisorBy,
+    studentBy,
     logos,
     fileName = `weekly-report-week-${weekNo}.pdf`,
   } = options
@@ -112,11 +234,13 @@ export async function exportWeeklyReportPdf(options: WeeklyReportOptions): Promi
     subject: options.school?.subject ?? 'IT405 – On-the-Job Training (OJT)',
   }
 
+  const { body, photoUrls } = buildBody(rows)
+
   // Load everything first so the document can be built synchronously
   const [leftLogo, rightLogo, ...photos] = await Promise.all([
     loadImage(logos?.left, 'image/png', 400),
     loadImage(logos?.right, 'image/png', 400),
-    ...rows.map((r) => loadImage(r.photoUrl)),
+    ...photoUrls.map((url) => loadImage(url)),
   ])
 
   const doc = new jsPDF({ unit: 'mm', format: 'a4' }) as DocWithTable
@@ -177,13 +301,8 @@ export async function exportWeeklyReportPdf(options: WeeklyReportOptions): Promi
   autoTable(doc, {
     startY: 60,
     margin: { top: 44, left: MARGIN, right: MARGIN, bottom: 20 },
-    head: [['DATE', 'Accomplishments', 'No. of Hours', 'Attachments']],
-    body: rows.map((r) => [
-      format(typeof r.date === 'string' ? parseISO(r.date) : r.date, 'MM/dd/yyyy'),
-      r.task_note,
-      `${r.hours}hrs`,
-      '',
-    ]),
+    head: [['DATE', 'Session', 'Accomplishments', 'No. of Hours', 'Attachments']],
+    body,
     theme: 'grid',
     styles: {
       font: 'helvetica',
@@ -196,31 +315,30 @@ export async function exportWeeklyReportPdf(options: WeeklyReportOptions): Promi
     },
     headStyles: {
       fillColor: ORANGE,
-      textColor: [255, 255, 255],
+      textColor: WHITE,
       fontStyle: 'bold',
       halign: 'center',
       valign: 'middle',
     },
-    bodyStyles: { fillColor: PEACH },
-    alternateRowStyles: { fillColor: [255, 255, 255] },
     columnStyles: {
-      0: { cellWidth: 24, halign: 'center', fontStyle: 'bold' },
-      1: { cellWidth: 'auto', halign: 'left' },
-      2: { cellWidth: 22, halign: 'center', fontStyle: 'bold' },
-      3: { cellWidth: 50 },
+      0: { cellWidth: 22 },
+      1: { cellWidth: 26 },
+      2: { cellWidth: 'auto', halign: 'left' },
+      3: { cellWidth: 20 },
+      4: { cellWidth: 46 },
     },
     didParseCell: (data) => {
       // Give rows with an attachment enough height for the photo
       if (
         data.section === 'body' &&
-        data.column.index === 3 &&
+        data.column.index === 4 &&
         photos[data.row.index]
       ) {
         data.cell.styles.minCellHeight = PHOTO_ROW_HEIGHT
       }
     },
     didDrawCell: (data) => {
-      if (data.section !== 'body' || data.column.index !== 3) return
+      if (data.section !== 'body' || data.column.index !== 4) return
       const img = photos[data.row.index]
       if (!img) return
       const pad = 2
@@ -250,22 +368,33 @@ export async function exportWeeklyReportPdf(options: WeeklyReportOptions): Promi
   const leftX = MARGIN + 8
   const rightX = pageW - MARGIN - 62
 
+  // Labels
   doc.setTextColor(...INK).setFontSize(9)
   doc.setFont('helvetica', 'normal')
-  doc.text('Verified by:', leftX, y)
-  doc.text('Noted by:', rightX, y)
+  doc.text('Noted by:', leftX, y)
+  doc.text('Prepared by:', rightX, y)
 
-  doc.setFont('helvetica', 'bold')
-  doc.text(verifiedBy.name.toUpperCase(), leftX, y + 14)
-  doc.text(notedBy.name.toUpperCase(), rightX, y + 14)
+  // Signature lines
+  doc.setDrawColor(...MUTED).setLineWidth(0.4)
+  doc.line(leftX, y + 18, leftX + 70, y + 18)
+  doc.line(rightX, y + 18, rightX + 70, y + 18)
 
-  doc.setFontSize(8.5)
-  if (verifiedBy.organization) {
-    doc.text(verifiedBy.organization.toUpperCase(), leftX, y + 24)
+  // Names
+  doc.setFont('helvetica', 'bold').setFontSize(9)
+  doc.text(supervisorBy.name.toUpperCase(), leftX, y + 14)
+  doc.text(studentBy.name.toUpperCase(), rightX, y + 14)
+
+  // Sub-labels (position + company name | Intern)
+  doc.setFont('helvetica', 'normal').setFontSize(8.5)
+  let subY = y + 24
+  if (supervisorBy.title) {
+    doc.text(supervisorBy.title.toUpperCase(), leftX, subY)
+    subY += 4
   }
-  if (notedBy.position) {
-    doc.text(notedBy.position.toUpperCase(), rightX, y + 24)
+  if (supervisorBy.organization) {
+    doc.text(supervisorBy.organization.toUpperCase(), leftX, subY)
   }
+  doc.text('INTERN', rightX, y + 24)
 
   doc.save(fileName)
 }

@@ -59,6 +59,10 @@ type MapboxMapProps = {
   zoom?: number
   markers?: MapMarker[]
   polygons?: MapPolygonFeature[]
+  /** Optional ordered list of [lng, lat] pairs drawn as a polyline trail on the map. */
+  trail?: [number, number][]
+  /** CSS color for the trail line (defaults to orange). */
+  trailColor?: string
   fitMarkers?: boolean
   fitRouteBounds?: boolean
   drawEnabled?: boolean
@@ -189,6 +193,8 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
     zoom = 14,
     markers = [],
     polygons = [],
+    trail,
+    trailColor = '#f97316',
     fitMarkers = true,
     fitRouteBounds = true,
     drawEnabled = false,
@@ -364,6 +370,28 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
           'line-opacity': 0.9,
         },
       })
+
+      // Trail source — used for excursion point paths, etc.
+      map.addSource('map-trail', {
+        type: 'geojson',
+        data: emptyLineCollection(),
+      })
+
+      map.addLayer({
+        id: 'map-trail-line',
+        type: 'line',
+        source: 'map-trail',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round',
+        },
+        paint: {
+          'line-color': '#f97316',
+          'line-width': 2.5,
+          'line-opacity': 0.85,
+          'line-dasharray': [2, 2],
+        },
+      })
     })
 
     if (drawEnabled) {
@@ -439,6 +467,47 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
       map.off('load', syncPolygons)
     }
   }, [polygons])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !MAPBOX_TOKEN) return
+
+    const syncTrail = () => {
+      const source = map.getSource('map-trail') as mapboxgl.GeoJSONSource | undefined
+      if (!source) return
+
+      if (!trail || trail.length < 2) {
+        source.setData(emptyLineCollection())
+        return
+      }
+
+      source.setData({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: trail },
+          },
+        ],
+      })
+
+      // Update paint color dynamically
+      if (map.getLayer('map-trail-line')) {
+        map.setPaintProperty('map-trail-line', 'line-color', trailColor)
+      }
+    }
+
+    if (map.isStyleLoaded()) {
+      syncTrail()
+    } else {
+      map.once('load', syncTrail)
+    }
+
+    return () => {
+      map.off('load', syncTrail)
+    }
+  }, [trail, trailColor])
 
   useEffect(() => {
     const map = mapRef.current

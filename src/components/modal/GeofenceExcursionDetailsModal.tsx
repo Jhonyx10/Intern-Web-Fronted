@@ -1,19 +1,49 @@
 import { useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, MapPin, Clock, AlertCircle } from 'lucide-react'
-import { MapboxMap, type MapMarker } from '@/components/MapboxMap'
-import type { GeofenceExcursion } from '@/types'
+import { X, MapPin, Clock, AlertCircle, Ruler } from 'lucide-react'
+import { MapboxMap, type MapMarker, type MapPolygonFeature } from '@/components/MapboxMap'
+import type { GeofenceExcursion, GeofencePolygon } from '@/types'
 
 type GeofenceExcursionDetailsModalProps = {
     isOpen: boolean
     excursion: GeofenceExcursion | null
     onClose: () => void
+    /** Optional label for the linked time log (e.g. "morning"). Falls back to "Log #id". */
+    sessionLabel?: string | null
+    /** The company's geofence polygon to draw on the map. */
+    geofencePolygon?: GeofencePolygon | null
+}
+
+// Handles ISO strings and MySQL "YYYY-MM-DD HH:mm:ss" (Safari-safe).
+function parseDate(value?: string | null): Date | null {
+    if (!value) return null
+    const d = new Date(value.includes('T') ? value : value.replace(' ', 'T'))
+    return isNaN(d.getTime()) ? null : d
+}
+
+function formatTime(value?: string | null): string {
+    const d = parseDate(value)
+    return d ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : '—'
+}
+
+function formatSeconds(seconds?: number | null): string {
+    if (seconds == null) return '—'
+    const total = Math.round(Number(seconds))
+    if (isNaN(total)) return '—'
+    const h = Math.floor(total / 3600)
+    const m = Math.floor((total % 3600) / 60)
+    const s = total % 60
+    if (h > 0) return `${h}h ${m}m ${s}s`
+    if (m > 0) return `${m}m ${s}s`
+    return `${s}s`
 }
 
 export function GeofenceExcursionDetailsModal({
     isOpen,
     excursion,
     onClose,
+    sessionLabel,
+    geofencePolygon,
 }: GeofenceExcursionDetailsModalProps) {
     const points = excursion?.points ?? []
 
@@ -26,16 +56,47 @@ export function GeofenceExcursionDetailsModal({
                 latitude: p.latitude,
                 color: index === 0 ? 'amber' : index === points.length - 1 ? 'danger' : 'primary',
                 shape: 'circle',
-                popupHtml: `<div class="text-[10px]">Point ${index + 1}<br/>${new Date(p.recorded_at).toLocaleTimeString()}</div>`
+                popupHtml: `<div class="text-[10px]">Point ${index + 1}<br/>${formatTime(p.recorded_at)}</div>`
             }
         })
     }, [points])
 
-    // Center coordinate handling
-    const centerLat = points.length > 0 ? points[0].latitude : null;
-    const centerLng = points.length > 0 ? points[0].longitude : null;
+    // Build the geofence polygon layer for the map
+    const polygons = useMemo<MapPolygonFeature[]>(() => {
+        if (!geofencePolygon) return []
+        return [
+            {
+                id: 'company-geofence',
+                name: 'Company Geofence',
+                polygon: geofencePolygon,
+                color: '#6366f1', // indigo
+            },
+        ]
+    }, [geofencePolygon])
+
+    // Build an ordered [lng, lat] trail connecting all excursion points
+    const trail = useMemo<[number, number][]>(() => {
+        return points.map((p) => [p.longitude, p.latitude])
+    }, [points])
+
+    // Compute a smart map center: first excursion point, or polygon centroid
+    const center = useMemo<[number, number] | undefined>(() => {
+        if (points.length > 0) {
+            return [points[0].longitude, points[0].latitude]
+        }
+        if (geofencePolygon) {
+            const coords = geofencePolygon.coordinates[0]
+            const avgLng = coords.reduce((s, c) => s + c[0], 0) / coords.length
+            const avgLat = coords.reduce((s, c) => s + c[1], 0) / coords.length
+            return [avgLng, avgLat]
+        }
+        return undefined
+    }, [points, geofencePolygon])
 
     if (!isOpen || !excursion) return null
+
+    const isActive = !excursion.return_at || excursion.status === 'active'
+    const sessionText = sessionLabel || `Log #${excursion.time_log_id}`
 
     return (
         <AnimatePresence>
@@ -59,10 +120,11 @@ export function GeofenceExcursionDetailsModal({
                     <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
                         <div>
                             <h2 className="text-lg font-bold text-slate-900">Geofence Excursion Incident</h2>
-                            <p className="text-xs text-slate-500 mt-0.5">Time Log Session: <span className="capitalize font-semibold text-slate-700">{excursion.session_period}</span></p>
+                            <p className="text-xs text-slate-500 mt-0.5">Time Log Session: <span className="capitalize font-semibold text-slate-700">{sessionText}</span></p>
                         </div>
                         <button
                             onClick={onClose}
+                            aria-label="Close"
                             className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
                         >
                             <X size={20} />
@@ -73,13 +135,40 @@ export function GeofenceExcursionDetailsModal({
                         {/* Map Area */}
                         <div className="relative w-full md:w-2/3 h-[300px] md:h-full bg-slate-100 border-r border-slate-100">
                             <MapboxMap
-                                center={centerLng && centerLat ? [centerLng, centerLat] : undefined}
+                                center={center}
                                 markers={markers}
-                                fitMarkers={true}
+                                polygons={polygons}
+                                trail={trail}
+                                trailColor="#f97316"
+                                fitMarkers={points.length > 0}
                                 className="w-full"
                                 heightClassName="h-full"
                                 showCampusMarker={false}
                             />
+
+                            {/* Map legend */}
+                            {(geofencePolygon || points.length > 0) && (
+                                <div className="absolute bottom-3 left-3 flex flex-col gap-1 rounded-xl bg-white/90 px-3 py-2 text-[10px] shadow backdrop-blur-sm">
+                                    {geofencePolygon && (
+                                        <span className="flex items-center gap-1.5">
+                                            <span className="h-2.5 w-2.5 rounded-sm bg-indigo-500 opacity-70" />
+                                            <span className="text-slate-600 font-medium">Company Geofence</span>
+                                        </span>
+                                    )}
+                                    {points.length > 0 && (
+                                        <span className="flex items-center gap-1.5">
+                                            <span className="h-0.5 w-4 bg-orange-400" style={{ borderTop: '2px dashed #f97316' }} />
+                                            <span className="text-slate-600 font-medium">Excursion Trail</span>
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+
+                            {points.length === 0 && (
+                                <div className="absolute inset-x-4 bottom-4 rounded-xl bg-white/90 px-4 py-3 text-xs text-slate-500 shadow">
+                                    No location snapshots were recorded for this excursion.
+                                </div>
+                            )}
                         </div>
 
                         {/* Details Area */}
@@ -93,9 +182,9 @@ export function GeofenceExcursionDetailsModal({
                                     <div>
                                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Time Outside</p>
                                         <p className="text-sm font-semibold text-slate-900">
-                                            {new Date(excursion.excursion_start).toLocaleTimeString()}
+                                            {formatTime(excursion.exit_at)}
                                             {" - "}
-                                            {excursion.excursion_end ? new Date(excursion.excursion_end).toLocaleTimeString() : 'Ongoing'}
+                                            {isActive ? 'Ongoing' : formatTime(excursion.return_at)}
                                         </p>
                                     </div>
                                 </div>
@@ -107,10 +196,24 @@ export function GeofenceExcursionDetailsModal({
                                     <div>
                                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Duration</p>
                                         <p className="text-sm font-semibold text-slate-900">
-                                            {excursion.duration_minutes ?? '---'} minutes
+                                            {formatSeconds(excursion.duration_seconds)}
                                         </p>
                                     </div>
                                 </div>
+
+                                {excursion.max_distance_meters != null && (
+                                    <div className="flex items-start gap-3">
+                                        <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-violet-50 text-violet-600">
+                                            <Ruler size={16} />
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Farthest Distance</p>
+                                            <p className="text-sm font-semibold text-slate-900">
+                                                {Math.round(Number(excursion.max_distance_meters))} m from the geofence
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="flex items-start gap-3">
                                     <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-sky-50 text-sky-600">
@@ -119,7 +222,7 @@ export function GeofenceExcursionDetailsModal({
                                     <div>
                                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Logged Pings</p>
                                         <p className="text-sm font-semibold text-slate-900">
-                                            {points.length} coordinate snapshots
+                                            {points.length} coordinate snapshot{points.length === 1 ? '' : 's'}
                                         </p>
                                     </div>
                                 </div>

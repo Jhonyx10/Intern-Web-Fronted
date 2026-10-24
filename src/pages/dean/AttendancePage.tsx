@@ -53,6 +53,9 @@ function fmtDuration(minutes: number | null) {
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+// "By Student" ignores the Today / Week / Month filter and covers all recorded attendance.
+const ALL_TIME_FROM = "2000-01-01";
+
 /* ─────────── date helpers for modal range filtering ─────────── */
 
 type ModalTab = "today" | "week" | "month" | "last_month" | "custom";
@@ -433,13 +436,22 @@ export default function AttendancePage() {
 
     const isCustomRange = range === "custom";
 
+    // "By Student" ignores the Today / Week / Month filter and fetches all
+    // recorded attendance; "Logs" keeps using the selected range.
     const { data: logs, isLoading, isError, refetch } = useAttendanceMonitoring(
-        {
-            range,
-            search: search.trim() || undefined,
-            date_from: isCustomRange ? dateFrom || undefined : undefined,
-            date_to: isCustomRange ? dateTo || undefined : undefined,
-        },
+        viewMode === "summary"
+            ? {
+                range: "custom",
+                search: search.trim() || undefined,
+                date_from: ALL_TIME_FROM,
+                date_to: toISODate(new Date()),
+            }
+            : {
+                range,
+                search: search.trim() || undefined,
+                date_from: isCustomRange ? dateFrom || undefined : undefined,
+                date_to: isCustomRange ? dateTo || undefined : undefined,
+            },
         token
     );
 
@@ -498,16 +510,10 @@ export default function AttendancePage() {
         return m;
     }, [logs]);
 
-    const rangePeriodLabel =
-        range === "today" ? "Today"
-            : range === "week" ? "This Week"
-                : range === "month" ? "This Month"
-                    : "Custom Range";
-
     return (
         <section className="space-y-6">
             {/* Top Banner */}
-            <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <div className="flex items-center gap-2.5 flex-wrap">
                         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-accent)]">
@@ -532,46 +538,28 @@ export default function AttendancePage() {
                     </p>
                 </div>
 
-                {/* Quick Range Tabs + View Mode Toggle */}
-                <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center rounded-xl border border-[var(--color-line)] bg-white p-1 shadow-sm">
-                        {(["today", "week", "month", "custom"] as const).map((r) => (
-                            <button
-                                key={r}
-                                type="button"
-                                onClick={() => setRange(r)}
-                                className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${range === r
-                                    ? "bg-[var(--color-accent)] text-white shadow-xs"
-                                    : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-                                    }`}
-                            >
-                                {r === "today" ? "Today" : r === "week" ? "This Week" : r === "month" ? "This Month" : "Custom"}
-                            </button>
-                        ))}
-                    </div>
-
-                    <div className="flex items-center rounded-xl border border-[var(--color-line)] bg-white p-1 shadow-sm">
-                        <button
-                            type="button"
-                            onClick={() => setViewMode("logs")}
-                            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${viewMode === "logs"
-                                ? "bg-slate-700 text-white shadow-xs"
-                                : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-                                }`}
-                        >
-                            Logs
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setViewMode("summary")}
-                            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${viewMode === "summary"
-                                ? "bg-slate-700 text-white shadow-xs"
-                                : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-                                }`}
-                        >
-                            By Student
-                        </button>
-                    </div>
+                {/* View Mode Toggle (top of page) */}
+                <div className="flex items-center self-start rounded-xl border border-[var(--color-line)] bg-white p-1 shadow-sm md:self-auto">
+                    <button
+                        type="button"
+                        onClick={() => setViewMode("logs")}
+                        className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${viewMode === "logs"
+                            ? "bg-slate-700 text-white shadow-xs"
+                            : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                            }`}
+                    >
+                        Logs
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setViewMode("summary")}
+                        className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${viewMode === "summary"
+                            ? "bg-slate-700 text-white shadow-xs"
+                            : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                            }`}
+                    >
+                        By Student
+                    </button>
                 </div>
             </header>
 
@@ -616,7 +604,7 @@ export default function AttendancePage() {
 
             {/* Table Container */}
             <div className="rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)] overflow-hidden">
-                {/* Table Filters & Toolbar */}
+                {/* Toolbar */}
                 <div className="flex flex-col gap-3 border-b border-[var(--color-line)] bg-slate-50/50 px-6 py-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-2">
                         <h2 className="text-base font-semibold text-[var(--color-ink)]">
@@ -628,6 +616,25 @@ export default function AttendancePage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3">
+                        {/* Range filter only applies to the Logs view */}
+                        {viewMode === "logs" && (
+                            <div className="flex items-center rounded-xl border border-[var(--color-line)] bg-white p-1 shadow-sm">
+                                {(["today", "week", "month", "custom"] as const).map((r) => (
+                                    <button
+                                        key={r}
+                                        type="button"
+                                        onClick={() => setRange(r)}
+                                        className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${range === r
+                                            ? "bg-[var(--color-accent)] text-white shadow-xs"
+                                            : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                                            }`}
+                                    >
+                                        {r === "today" ? "Today" : r === "week" ? "This Week" : r === "month" ? "This Month" : "Custom"}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
                         {/* Search Input */}
                         <div className="relative">
                             <Search
@@ -652,8 +659,8 @@ export default function AttendancePage() {
                             )}
                         </div>
 
-                        {/* Custom Date Inputs if Range = Custom */}
-                        {isCustomRange && (
+                        {/* Custom Date Inputs if Range = Custom (Logs view only) */}
+                        {isCustomRange && viewMode === "logs" && (
                             <div className="flex items-center gap-1.5 rounded-xl border border-[var(--color-line)] bg-white px-3 py-1 text-xs">
                                 <Calendar size={13} className="text-[var(--color-muted)] shrink-0" />
                                 <input
@@ -709,7 +716,7 @@ export default function AttendancePage() {
                                 <tr>
                                     <th className="px-6 py-3">Student</th>
                                     <th className="px-6 py-3">Dept &amp; Section</th>
-                                    <th className="px-6 py-3">Days Present ({rangePeriodLabel})</th>
+                                    <th className="px-6 py-3">Days Present (All Time)</th>
                                     <th className="px-6 py-3">Sessions</th>
                                     <th className="px-6 py-3">Total Hours</th>
                                     <th className="px-6 py-3">Last Session</th>
@@ -720,7 +727,7 @@ export default function AttendancePage() {
                                 {studentSummary.length === 0 ? (
                                     <tr>
                                         <td colSpan={7} className="px-6 py-10 text-center text-xs text-[var(--color-muted)]">
-                                            No records for this period.
+                                            No records found.
                                         </td>
                                     </tr>
                                 ) : studentSummary.map((s) => {
