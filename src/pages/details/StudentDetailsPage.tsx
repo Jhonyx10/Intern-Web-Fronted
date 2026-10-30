@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -37,7 +37,10 @@ import type {
   ItemType,
   GeofenceExcursion,
 } from "@/types";
-import { exportWeeklyReportPdf } from "@/lib/weeklyReportPdf";
+import {
+  buildWeeklyReportPdf,
+  downloadPdfBlob,
+} from "@/lib/weeklyReportPdf";
 import {
   buildWeeklyReportRows,
   getFirstLogDate,
@@ -46,6 +49,7 @@ import {
 import ExportWeeklyReportModal, {
   type WeeklyReportExportInput,
 } from "@/components/modal/ExportWeeklyReportModal";
+import WeeklyReportPreviewModal from "@/components/modal/WeeklyReportPreviewModal";
 import { useTheme } from "@/context/ThemeContext";
 import OCCLOGO from "@/assets/OCC logo.webp";
 import { DocumentPreviewModal } from "@/components/modal/DocumentPreviewModal";
@@ -172,6 +176,13 @@ function formatDateReadable(dateStr?: string | null): string {
   return dateStr;
 }
 
+function formatWeekday(value?: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value.includes("T") ? value : value.replace(" ", "T"));
+  if (isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-US", { weekday: "long" });
+}
+
 // Handles both ISO strings and MySQL "YYYY-MM-DD HH:mm:ss" (Safari-safe).
 function formatDateTime(value?: string | null): string {
   if (!value) return "—";
@@ -231,9 +242,22 @@ export function StudentDetailsPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [weeklyOpen, setWeeklyOpen] = useState(false);
   const [weeklyExporting, setWeeklyExporting] = useState(false);
+  // Generated weekly report, shown in the preview modal before downloading.
+  const [weeklyPreview, setWeeklyPreview] = useState<{
+    blob: Blob;
+    url: string;
+    fileName: string;
+  } | null>(null);
   const [timeLogView, setTimeLogView] = useState<"normal" | "dtr">("normal");
   const [dtrMonthKey, setDtrMonthKey] = useState<string | null>(null);
   const { logoUrl } = useTheme();
+
+  // Free the preview's object URL whenever it is replaced, closed, or the page unmounts.
+  useEffect(() => {
+    if (!weeklyPreview) return;
+    return () => URL.revokeObjectURL(weeklyPreview.url);
+  }, [weeklyPreview]);
+
   const fullName = useMemo(() => {
     if (!student) return "";
     return [student.first_name, student.middle_name, student.last_name]
@@ -308,13 +332,14 @@ export function StudentDetailsPage() {
     };
   }, [activeDtrKey, dtrByMonth, student]);
 
+  // Step 1: build the PDF and show it in the preview modal (no download yet).
   async function handleExportWeekly(input: WeeklyReportExportInput) {
     setWeeklyExporting(true);
     try {
       const middle = student!.middle_name
         ? ` ${student!.middle_name[0].toUpperCase()}.`
         : "";
-      await exportWeeklyReportPdf({
+      const { blob, fileName } = await buildWeeklyReportPdf({
         studentName: `${student!.last_name}, ${student!.first_name}${middle}`,
         weekNo: input.weekNo,
         rows: buildWeeklyReportRows(timeLogs, input.weekDate),
@@ -328,13 +353,21 @@ export function StudentDetailsPage() {
         logos: { left: OCCLOGO, right: logoUrl },
         fileName: `weekly-report-week-${input.weekNo}-${student!.last_name}.pdf`,
       });
+      setWeeklyPreview({ blob, url: URL.createObjectURL(blob), fileName });
       setWeeklyOpen(false);
-      toastMutationSuccess("Weekly report exported");
     } catch (err) {
-      toastMutationError(err, "Failed to export weekly report");
+      toastMutationError(err, "Failed to generate weekly report");
     } finally {
       setWeeklyExporting(false);
     }
+  }
+
+  // Step 2: the user is happy with the preview and downloads it.
+  function handleDownloadWeekly() {
+    if (!weeklyPreview) return;
+    downloadPdfBlob(weeklyPreview.blob, weeklyPreview.fileName);
+    toastMutationSuccess("Weekly report downloaded");
+    setWeeklyPreview(null);
   }
 
   if (isLoading) {
@@ -920,6 +953,7 @@ export function StudentDetailsPage() {
                     <thead className="border-b border-[var(--color-line)] bg-slate-50/80 font-semibold text-[var(--color-muted)] uppercase tracking-wider">
                       <tr>
                         <th className="px-4 py-3">Session</th>
+                        <th className="px-4 py-3">Day</th>
                         <th className="px-4 py-3">Time In</th>
                         <th className="px-4 py-3">Time Out</th>
                         <th className="px-4 py-3">Duration</th>
@@ -941,6 +975,11 @@ export function StudentDetailsPage() {
                           >
                             <td className="px-4 py-3 font-semibold text-[var(--color-ink)] capitalize">
                               {log.session_period || "Regular"}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                                {formatWeekday(log.time_in)}
+                              </span>
                             </td>
                             <td className="px-4 py-3 text-[var(--color-muted)]">
                               {new Date(log.time_in).toLocaleString([], {
@@ -1606,6 +1645,17 @@ export function StudentDetailsPage() {
         isExporting={weeklyExporting}
         defaultWeekDate={getLatestLogDate(timeLogs) ?? new Date()}
         firstLogDate={getFirstLogDate(timeLogs)}
+      />
+      <WeeklyReportPreviewModal
+        open={weeklyPreview !== null}
+        url={weeklyPreview?.url ?? null}
+        fileName={weeklyPreview?.fileName ?? ""}
+        onClose={() => setWeeklyPreview(null)}
+        onDownload={handleDownloadWeekly}
+        onChangeWeek={() => {
+          setWeeklyPreview(null);
+          setWeeklyOpen(true);
+        }}
       />
     </section>
   );

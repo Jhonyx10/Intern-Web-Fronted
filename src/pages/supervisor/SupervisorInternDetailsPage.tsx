@@ -11,19 +11,23 @@ import {
   CheckCircle2,
   XCircle,
   Send,
-  ArrowUpRight,
-  UserX,
+  Eye,
   Mail,
+  UserX,
+  Pencil
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useSupervisorInternDetail,
   useRemoveIntern,
+  useUpdateTimeLogTimeOut,
+  type InternDetailTimelog,
 } from "@/lib/queries/supervisor";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/api";
 import { toastMutationError, toastMutationSuccess } from "@/lib/mutationToast";
 import { RemoveInternModal } from "@/components/modal/RemoveInternModal";
+import { SupervisorTimeLogModal } from "@/components/modal/SupervisorTimeLogModal";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -111,8 +115,16 @@ export default function SupervisorInternDetailsPage() {
 
   const removeIntern = useRemoveIntern();
   const [showRemoveModal, setShowRemoveModal] = useState(false);
-
+  const [viewingLog, setViewingLog] = useState<InternDetailTimelog | null>(null);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+
+  // Time-out correction (for logs the intern forgot to close)
+  const updateTimeOut = useUpdateTimeLogTimeOut();
+  const [editingLog, setEditingLog] = useState<{
+    id: number;
+    time_in: string;
+  } | null>(null);
+  const [newTimeOut, setNewTimeOut] = useState("");
 
   if (!user || user.role?.name !== "supervisor") {
     return (
@@ -177,9 +189,7 @@ export default function SupervisorInternDetailsPage() {
       return bTime - aTime;
     })[0];
 
-  const pendingEvaluation = intern.ojt_evaluations?.find(
-    (e) => e.status === "pending"
-  );
+
 
   async function handleUpdateStatus(
     requestId: number,
@@ -219,6 +229,19 @@ export default function SupervisorInternDetailsPage() {
     );
   }
 
+  function handleSaveTimeOut() {
+    if (!editingLog || !newTimeOut) return;
+    updateTimeOut.mutate(
+      { logId: editingLog.id, timeOut: newTimeOut },
+      {
+        onSuccess: () => {
+          setEditingLog(null);
+          setNewTimeOut("");
+        },
+      }
+    );
+  }
+
   return (
     <section className="space-y-6 pb-12">
       {/* Back button + actions */}
@@ -232,25 +255,6 @@ export default function SupervisorInternDetailsPage() {
         </button>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() =>
-              pendingEvaluation &&
-              navigate(
-                `/supervisor/interns/${intern.id}/evaluations/${pendingEvaluation.id}`
-              )
-            }
-            disabled={!pendingEvaluation}
-            className="relative inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2 text-xs font-semibold text-[var(--color-ink)] shadow-[var(--shadow-soft)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[var(--color-line)] disabled:hover:text-[var(--color-ink)]"
-          >
-            Evaluate
-            <ArrowUpRight size={14} />
-            {pendingEvaluation && (
-              <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white ring-2 ring-white">
-                !
-              </span>
-            )}
-          </button>
           <button
             type="button"
             onClick={() => setShowRemoveModal(true)}
@@ -686,15 +690,12 @@ export default function SupervisorInternDetailsPage() {
                     <th className="px-5 py-3">Time Out</th>
                     <th className="px-5 py-3">Duration</th>
                     <th className="px-5 py-3">Verification</th>
-                    <th className="px-5 py-3">Task Note</th>
+                    <th className="px-5 py-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-line)]">
                   {intern.time_logs.map((log) => (
-                    <tr
-                      key={log.id}
-                      className="hover:bg-slate-50/60 transition"
-                    >
+                    <tr key={log.id} className="hover:bg-slate-50/60 transition">
                       <td className="px-5 py-3 font-medium text-[var(--color-ink)] whitespace-nowrap">
                         {fmtDateTime(log.time_in)}
                       </td>
@@ -708,6 +709,11 @@ export default function SupervisorInternDetailsPage() {
                             In Progress
                           </span>
                         )}
+                        {log.needs_correction && (
+                          <p className="mt-1 text-[10px] text-amber-700">
+                            Forgot to time out
+                          </p>
+                        )}
                       </td>
                       <td className="px-5 py-3 font-bold text-indigo-600 tabular-nums whitespace-nowrap">
                         {fmtDuration(log.duration_minutes)}
@@ -717,8 +723,28 @@ export default function SupervisorInternDetailsPage() {
                           {log.verification_method ?? "Facial Match"}
                         </span>
                       </td>
-                      <td className="max-w-[180px] truncate px-5 py-3 text-xs text-[var(--color-muted)]">
-                        {log.task_note ?? <span className="italic">—</span>}
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-2">
+                          {log.needs_correction && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingLog({ id: log.id, time_in: log.time_in! });
+                                setNewTimeOut("");
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"
+                            >
+                              <Pencil size={11} /> Update
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setViewingLog(log)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--color-ink)] transition hover:bg-slate-50"
+                          >
+                            <Eye size={11} /> View
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -738,6 +764,52 @@ export default function SupervisorInternDetailsPage() {
           </div>
         )}
       </motion.div>
+      {/* Update time-out modal */}
+      {editingLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm space-y-4 rounded-2xl bg-white p-5 shadow-xl">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--color-ink)]">
+                Update Time Out
+              </h3>
+              <p className="mt-1 text-xs text-[var(--color-muted)]">
+                Shift on {fmtDate(editingLog.time_in)}, timed in at{" "}
+                {fmtDateTime(editingLog.time_in)}. Enter the actual time the
+                intern left.
+              </p>
+            </div>
+
+            <input
+              type="time"
+              value={newTimeOut}
+              onChange={(e) => setNewTimeOut(e.target.value)}
+              className="w-full rounded-xl border border-[var(--color-line)] px-3 py-2 text-sm"
+            />
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={updateTimeOut.isPending}
+                onClick={() => setEditingLog(null)}
+                className="rounded-lg border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs font-semibold hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={updateTimeOut.isPending || !newTimeOut}
+                onClick={handleSaveTimeOut}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+              >
+                {updateTimeOut.isPending && (
+                  <Loader2 size={13} className="animate-spin" />
+                )}
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <RemoveInternModal
         isOpen={showRemoveModal}
@@ -745,6 +817,12 @@ export default function SupervisorInternDetailsPage() {
         internName={fullName}
         onConfirm={handleConfirmRemove}
         onClose={() => setShowRemoveModal(false)}
+      />
+      <SupervisorTimeLogModal
+        log={viewingLog}
+        studentName={fullName}
+        visible={Boolean(viewingLog)}
+        onClose={() => setViewingLog(null)}
       />
     </section>
   );

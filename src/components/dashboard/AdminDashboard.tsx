@@ -5,7 +5,8 @@ import {
     TrendingUp,
     Hourglass,
     CircleDashed,
-    GraduationCap
+    GraduationCap,
+    FileCheck2
 } from 'lucide-react'
 import {
     PieChart,
@@ -29,8 +30,8 @@ export function AdminDashboard() {
         return (
             <div className="space-y-6 animate-pulse">
                 <div className="h-20 max-w-md rounded-2xl bg-black/5" />
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    {[1, 2, 3, 4].map((i) => (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                    {[1, 2, 3, 4, 5].map((i) => (
                         <div key={i} className="h-28 rounded-2xl bg-black/5" />
                     ))}
                 </div>
@@ -68,7 +69,7 @@ export function AdminDashboard() {
             </header>
 
             {/* System-wide KPI Cards */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 <div className="rounded-2xl border border-[var(--color-line)] bg-white p-5 shadow-[var(--shadow-soft)] transition-transform hover:-translate-y-0.5">
                     <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider">Total Students</p>
@@ -84,18 +85,36 @@ export function AdminDashboard() {
 
                 <div className="rounded-2xl border border-[var(--color-line)] bg-white p-5 shadow-[var(--shadow-soft)] transition-transform hover:-translate-y-0.5">
                     <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider">Placed Interns</p>
+                        <p className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider">Deployed Interns</p>
                         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                             <CheckCircle2 size={18} />
                         </div>
                     </div>
                     <div className="mt-3 flex items-baseline gap-2">
-                        <span className="text-3xl font-bold text-[var(--color-ink)]">{overview.assigned_students}</span>
+                        <span className="text-3xl font-bold text-[var(--color-ink)]">{overview.deployed_students}</span>
                         <span className="text-xs font-medium text-emerald-600">
-                            ({overview.total_students > 0 ? Math.round((overview.assigned_students / overview.total_students) * 100) : 0}%)
+                            ({overview.total_students > 0 ? Math.round((overview.deployed_students / overview.total_students) * 100) : 0}%)
                         </span>
                     </div>
                     <p className="mt-1 text-xs text-rose-500 font-medium">{overview.unassigned_students} unassigned</p>
+                </div>
+
+                <div className="rounded-2xl border border-[var(--color-line)] bg-white p-5 shadow-[var(--shadow-soft)] transition-transform hover:-translate-y-0.5">
+                    <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider">Documents Complete</p>
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+                            <FileCheck2 size={18} />
+                        </div>
+                    </div>
+                    <div className="mt-3 flex items-baseline gap-2">
+                        <span className="text-3xl font-bold text-[var(--color-ink)]">{overview.docs_completed_students}</span>
+                        <span className="text-xs font-medium text-sky-600">
+                            ({overview.total_students > 0 ? Math.round((overview.docs_completed_students / overview.total_students) * 100) : 0}%)
+                        </span>
+                    </div>
+                    <p className="mt-1 text-xs text-[var(--color-muted)]">
+                        {overview.docs_incomplete_students} still incomplete
+                    </p>
                 </div>
 
                 <div className="rounded-2xl border border-[var(--color-line)] bg-white p-5 shadow-[var(--shadow-soft)] transition-transform hover:-translate-y-0.5">
@@ -130,7 +149,7 @@ export function AdminDashboard() {
                 <div className="flex items-center justify-between">
                     <div>
                         <h3 className="text-base font-semibold text-[var(--color-ink)]">Program Breakdown</h3>
-                        <p className="text-xs text-[var(--color-muted)]">Placement and internship progress per course</p>
+                        <p className="text-xs text-[var(--color-muted)]">Enrollment, deployment, documents and internship progress per course</p>
                     </div>
                     <GraduationCap size={18} className="text-indigo-500" />
                 </div>
@@ -142,8 +161,9 @@ export function AdminDashboard() {
                                 <th className="py-2 pr-4">Program</th>
                                 <th className="py-2 pr-4 text-right">Sections</th>
                                 <th className="py-2 pr-4 text-right">Enrolled</th>
-                                <th className="py-2 pr-4 text-right">Assigned</th>
+                                <th className="py-2 pr-4 text-right">Deployed</th>
                                 <th className="py-2 pr-4 text-right">Unassigned</th>
+                                <th className="py-2 pr-4 text-right">Docs Complete</th>
                                 <th className="py-2 pr-4 text-right">Completed</th>
                                 <th className="py-2 pr-4 text-right">In Progress</th>
                                 <th className="py-2 pr-4 text-right">Not Started</th>
@@ -159,9 +179,16 @@ export function AdminDashboard() {
                                         <p className="text-xs text-[var(--color-muted)]">{c.name}</p>
                                     </td>
                                     <td className="py-3 pr-4 text-right text-[var(--color-ink)]">{c.total_sections}</td>
-                                    <td className="py-3 pr-4 text-right text-[var(--color-ink)]">{c.total_students}</td>
-                                    <td className="py-3 pr-4 text-right font-medium text-emerald-600">{c.assigned_students}</td>
+                                    <td className="py-3 pr-4 text-right text-[var(--color-ink)]">{c.enrolled_students}</td>
+                                    <td className="py-3 pr-4 text-right font-medium text-emerald-600">
+                                        {c.deployed_students}
+                                        <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">({c.deployment_rate}%)</span>
+                                    </td>
                                     <td className="py-3 pr-4 text-right font-medium text-rose-500">{c.unassigned_students}</td>
+                                    <td className="py-3 pr-4 text-right font-medium text-sky-600">
+                                        {c.docs_completed_students}
+                                        <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">({c.docs_completion_rate}%)</span>
+                                    </td>
                                     <td className="py-3 pr-4 text-right text-[var(--color-ink)]">{c.completed_students}</td>
                                     <td className="py-3 pr-4 text-right text-[var(--color-ink)]">{c.in_progress_students}</td>
                                     <td className="py-3 pr-4 text-right text-[var(--color-ink)]">{c.not_started_students}</td>
@@ -182,6 +209,31 @@ export function AdminDashboard() {
 
             {/* Charts */}
             <div className="grid gap-6 lg:grid-cols-2">
+                {/* Enrolled vs deployed vs docs complete per course */}
+                <div className="rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-soft)] space-y-4 lg:col-span-2">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="text-base font-semibold text-[var(--color-ink)]">Program Summary</h3>
+                            <p className="text-xs text-[var(--color-muted)]">Enrolled, deployed, and documents-complete students per course</p>
+                        </div>
+                        <FileCheck2 size={18} className="text-sky-500" />
+                    </div>
+                    <div className="h-72 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={charts.course_summary} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                                <Tooltip />
+                                <Legend wrapperStyle={{ fontSize: 11 }} />
+                                <Bar dataKey="enrolled" name="Enrolled" fill="#818CF8" radius={[6, 6, 0, 0]} />
+                                <Bar dataKey="deployed" name="Deployed" fill="#10B981" radius={[6, 6, 0, 0]} />
+                                <Bar dataKey="docs_done" name="Docs Complete" fill="#0EA5E9" radius={[6, 6, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
                 {/* Enrollment per course */}
                 <div className="rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-soft)] space-y-4">
                     <div className="flex items-center justify-between">
@@ -196,7 +248,7 @@ export function AdminDashboard() {
                             <BarChart data={charts.enrollment_by_course} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                                <YAxis tick={{ fontSize: 11 }} />
+                                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                                 <Tooltip formatter={(val: any) => [`${val} students`, 'Enrolled']} />
                                 <Bar dataKey="value" fill="#818CF8" radius={[6, 6, 0, 0]} />
                             </BarChart>
@@ -204,12 +256,12 @@ export function AdminDashboard() {
                     </div>
                 </div>
 
-                {/* Placement per course (stacked) */}
+                {/* Deployment per course (stacked) */}
                 <div className="rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-soft)] space-y-4">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h3 className="text-base font-semibold text-[var(--color-ink)]">Placement by Program</h3>
-                            <p className="text-xs text-[var(--color-muted)]">Assigned vs unassigned students per course</p>
+                            <h3 className="text-base font-semibold text-[var(--color-ink)]">Deployment by Program</h3>
+                            <p className="text-xs text-[var(--color-muted)]">Deployed vs unassigned students per course</p>
                         </div>
                         <CheckCircle2 size={18} className="text-emerald-500" />
                     </div>
@@ -218,11 +270,35 @@ export function AdminDashboard() {
                             <BarChart data={charts.placement_by_course} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                                <YAxis tick={{ fontSize: 11 }} />
+                                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                                 <Tooltip />
                                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                                <Bar dataKey="assigned" stackId="a" fill="#10B981" radius={[0, 0, 0, 0]} />
-                                <Bar dataKey="unassigned" stackId="a" fill="#EF4444" radius={[6, 6, 0, 0]} />
+                                <Bar dataKey="assigned" name="Deployed" stackId="a" fill="#10B981" radius={[0, 0, 0, 0]} />
+                                <Bar dataKey="unassigned" name="Unassigned" stackId="a" fill="#EF4444" radius={[6, 6, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Documents completed per course (stacked) */}
+                <div className="rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-soft)] space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="text-base font-semibold text-[var(--color-ink)]">Documents by Program</h3>
+                            <p className="text-xs text-[var(--color-muted)]">Students with all required documents approved vs incomplete</p>
+                        </div>
+                        <FileCheck2 size={18} className="text-sky-500" />
+                    </div>
+                    <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={charts.documents_by_course} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                                <Tooltip />
+                                <Legend wrapperStyle={{ fontSize: 11 }} />
+                                <Bar dataKey="completed" name="All Docs Complete" stackId="d" fill="#0EA5E9" />
+                                <Bar dataKey="incomplete" name="Incomplete" stackId="d" fill="#EF4444" radius={[6, 6, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -264,12 +340,12 @@ export function AdminDashboard() {
                             <BarChart data={charts.status_by_course} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                                <YAxis tick={{ fontSize: 11 }} />
+                                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                                 <Tooltip />
                                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                                <Bar dataKey="completed" stackId="s" fill="#10B981" />
-                                <Bar dataKey="in_progress" stackId="s" fill="#F59E0B" />
-                                <Bar dataKey="not_started" stackId="s" fill="#6B7280" radius={[6, 6, 0, 0]} />
+                                <Bar dataKey="completed" name="Completed" stackId="s" fill="#10B981" />
+                                <Bar dataKey="in_progress" name="In Progress" stackId="s" fill="#F59E0B" />
+                                <Bar dataKey="not_started" name="Not Started" stackId="s" fill="#6B7280" radius={[6, 6, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -277,9 +353,9 @@ export function AdminDashboard() {
             </div>
 
             {/* System-wide pies */}
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-6 md:grid-cols-3">
                 <div className="rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-soft)] space-y-4">
-                    <h3 className="text-base font-semibold text-[var(--color-ink)]">Overall Placement</h3>
+                    <h3 className="text-base font-semibold text-[var(--color-ink)]">Overall Deployment</h3>
                     <div className="h-64 w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
@@ -300,8 +376,41 @@ export function AdminDashboard() {
                             </PieChart>
                         </ResponsiveContainer>
                     </div>
-                    <div className="flex justify-center gap-6 text-xs">
+                    <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs">
                         {charts.placement_status.map((item) => (
+                            <div key={item.name} className="flex items-center gap-2">
+                                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                                <span className="text-[var(--color-muted)] font-medium">{item.name}:</span>
+                                <span className="font-bold text-[var(--color-ink)]">{item.value}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="rounded-2xl border border-[var(--color-line)] bg-white p-6 shadow-[var(--shadow-soft)] space-y-4">
+                    <h3 className="text-base font-semibold text-[var(--color-ink)]">Overall Documents</h3>
+                    <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={charts.documents_status}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={90}
+                                    paddingAngle={5}
+                                    dataKey="value"
+                                >
+                                    {charts.documents_status.map((entry, index) => (
+                                        <Cell key={`ds-${index}`} fill={entry.color} />
+                                    ))}
+                                </Pie>
+                                <Tooltip formatter={(val: any) => [`${val} students`, 'Count']} />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                    <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs">
+                        {charts.documents_status.map((item) => (
                             <div key={item.name} className="flex items-center gap-2">
                                 <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
                                 <span className="text-[var(--color-muted)] font-medium">{item.name}:</span>
@@ -333,7 +442,7 @@ export function AdminDashboard() {
                             </PieChart>
                         </ResponsiveContainer>
                     </div>
-                    <div className="flex justify-center gap-6 text-xs">
+                    <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs">
                         {charts.completion_status.map((item) => (
                             <div key={item.name} className="flex items-center gap-2">
                                 <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />

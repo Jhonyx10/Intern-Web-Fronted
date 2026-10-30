@@ -59,6 +59,14 @@ function fmtDuration(minutes: number | null) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+// Local YYYY-MM-DD (toISOString() would use UTC and shift the date near midnight)
+function toLocalYmd(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 // Compares a log's time_in date against an inclusive [from, to] range,
 // both given as "YYYY-MM-DD" strings from <input type="date">.
 function isWithinDateRange(isoTimeIn: string | null, from: string, to: string) {
@@ -97,8 +105,49 @@ export function SupervisorAttendancePage() {
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [range, setRange] = useState<"today" | "week" | "month" | "custom">("today");
-  const [viewMode, setViewMode] = useState<"logs" | "summary">("logs");
+  const [range, setRange] = useState<"today" | "week" | "month" | "custom">(
+    "today"
+  );
+
+  // ── All hooks must run before any early return below ──────────────────────
+
+  // Date boundaries for preset ranges
+  const rangeFrom = useMemo(() => {
+    if (range === "custom") return dateFrom;
+    const now = new Date();
+    if (range === "today") return toLocalYmd(now);
+    if (range === "week") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - d.getDay()); // Sunday
+      return toLocalYmd(d);
+    }
+    if (range === "month") {
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    }
+    return "";
+  }, [range, dateFrom]);
+
+  const rangeTo = useMemo(() => {
+    if (range === "custom") return dateTo;
+    return toLocalYmd(new Date());
+  }, [range, dateTo]);
+
+  const filtered = useMemo(
+    () =>
+      (logs ?? []).filter((l) => {
+        const matchesSearch =
+          l.student_name.toLowerCase().includes(search.toLowerCase()) ||
+          (l.student_number ?? "").includes(search);
+        const matchesDate =
+          !rangeFrom && !rangeTo
+            ? true
+            : isWithinDateRange(l.time_in, rangeFrom, rangeTo);
+        return matchesSearch && matchesDate;
+      }),
+    [logs, search, rangeFrom, rangeTo]
+  );
+
+  // ── Early returns ─────────────────────────────────────────────────────────
 
   if (!user || user.role?.name !== "supervisor") {
     return (
@@ -134,79 +183,7 @@ export function SupervisorAttendancePage() {
     );
   }
 
-  // Compute date boundaries for preset ranges
-  const rangeFrom = useMemo(() => {
-    if (range === "custom") return dateFrom;
-    const now = new Date();
-    if (range === "today") return now.toISOString().slice(0, 10);
-    if (range === "week") {
-      const d = new Date(now);
-      d.setDate(d.getDate() - d.getDay()); // Sunday
-      return d.toISOString().slice(0, 10);
-    }
-    if (range === "month") {
-      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-    }
-    return "";
-  }, [range, dateFrom]);
-
-  const rangeTo = useMemo(() => {
-    if (range === "custom") return dateTo;
-    return new Date().toISOString().slice(0, 10);
-  }, [range, dateTo]);
-
-  const filtered = (logs ?? []).filter((l) => {
-    const matchesSearch =
-      l.student_name.toLowerCase().includes(search.toLowerCase()) ||
-      (l.student_number ?? "").includes(search);
-    const matchesDate = !rangeFrom && !rangeTo
-      ? true
-      : isWithinDateRange(l.time_in, rangeFrom, rangeTo);
-    return matchesSearch && matchesDate;
-  });
-
-  // Per-student summary grouped from filtered logs
-  type StudentSummary = {
-    student_id: number;
-    student_name: string;
-    student_number: string;
-    sessions: number;
-    days: number;
-    total_minutes: number;
-    last_seen: string | null;
-  };
-  const studentSummary = useMemo<StudentSummary[]>(() => {
-    const map = new Map<number, StudentSummary & { days_set: Set<string> }>();
-    for (const l of filtered) {
-      const dateStr = l.time_in ? l.time_in.slice(0, 10) : null;
-      const ex = map.get(l.student_id);
-      if (ex) {
-        ex.sessions += 1;
-        ex.total_minutes += l.duration_minutes ?? 0;
-        if (dateStr && !ex.days_set.has(dateStr)) { ex.days_set.add(dateStr); ex.days += 1; }
-        if (l.time_in && (!ex.last_seen || l.time_in > ex.last_seen)) ex.last_seen = l.time_in;
-      } else {
-        map.set(l.student_id, {
-          student_id: l.student_id,
-          student_name: l.student_name,
-          student_number: l.student_number ?? "",
-          sessions: 1,
-          days: dateStr ? 1 : 0,
-          total_minutes: l.duration_minutes ?? 0,
-          last_seen: l.time_in ?? null,
-          days_set: new Set(dateStr ? [dateStr] : []),
-        });
-      }
-    }
-    return Array.from(map.values()).sort((a, b) => a.student_name.localeCompare(b.student_name));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered]);
-
-  const rangePeriodLabel =
-    range === "today" ? "Today"
-      : range === "week" ? "This Week"
-        : range === "month" ? "This Month"
-          : "Custom Range";
+  // ── Handlers (not hooks) ──────────────────────────────────────────────────
 
   function handleSaveSchedule(input: ScheduleInput) {
     if (editingSchedule) {
@@ -247,7 +224,9 @@ export function SupervisorAttendancePage() {
                 <CalendarDays size={12} className="text-amber-600" />
                 S.Y. {currentSchoolYear.name}
                 {currentSchoolYear.semester && (
-                  <span className="font-normal text-amber-700">· {currentSchoolYear.semester}</span>
+                  <span className="font-normal text-amber-700">
+                    · {currentSchoolYear.semester}
+                  </span>
                 )}
               </span>
             )}
@@ -382,7 +361,9 @@ export function SupervisorAttendancePage() {
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <Clock size={18} className="text-[var(--color-muted)]" />
               Attendance Time Logs
-              <span className="text-sm font-normal text-[var(--color-muted)]">({filtered.length})</span>
+              <span className="text-sm font-normal text-[var(--color-muted)]">
+                ({filtered.length})
+              </span>
             </h2>
           </div>
 
@@ -394,38 +375,21 @@ export function SupervisorAttendancePage() {
                   key={r}
                   type="button"
                   onClick={() => setRange(r)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${range === r
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    range === r
                       ? "bg-[var(--color-accent)] text-white shadow-xs"
                       : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-                    }`}
+                  }`}
                 >
-                  {r === "today" ? "Today" : r === "week" ? "Week" : r === "month" ? "Month" : "Custom"}
+                  {r === "today"
+                    ? "Today"
+                    : r === "week"
+                      ? "Week"
+                      : r === "month"
+                        ? "Month"
+                        : "Custom"}
                 </button>
               ))}
-            </div>
-
-            {/* View mode toggle */}
-            <div className="flex items-center rounded-xl border border-[var(--color-line)] bg-white p-1 shadow-sm">
-              <button
-                type="button"
-                onClick={() => setViewMode("logs")}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${viewMode === "logs"
-                    ? "bg-slate-700 text-white shadow-xs"
-                    : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-                  }`}
-              >
-                Logs
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("summary")}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${viewMode === "summary"
-                    ? "bg-slate-700 text-white shadow-xs"
-                    : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-                  }`}
-              >
-                By Student
-              </button>
             </div>
 
             {/* Search */}
@@ -446,7 +410,10 @@ export function SupervisorAttendancePage() {
             {/* Custom date pickers */}
             {range === "custom" && (
               <div className="flex items-center gap-1.5 rounded-xl border border-[var(--color-line)] px-2.5 py-1.5">
-                <Calendar size={14} className="text-[var(--color-muted)] shrink-0" />
+                <Calendar
+                  size={14}
+                  className="text-[var(--color-muted)] shrink-0"
+                />
                 <input
                   type="date"
                   value={dateFrom}
@@ -467,7 +434,10 @@ export function SupervisorAttendancePage() {
                 {(dateFrom || dateTo) && (
                   <button
                     type="button"
-                    onClick={() => { setDateFrom(""); setDateTo(""); }}
+                    onClick={() => {
+                      setDateFrom("");
+                      setDateTo("");
+                    }}
                     aria-label="Clear date filter"
                     className="ml-0.5 text-[var(--color-muted)] hover:text-[var(--color-ink)]"
                   >
@@ -479,45 +449,7 @@ export function SupervisorAttendancePage() {
           </div>
         </div>
 
-        {viewMode === "summary" ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-[var(--color-muted)]">
-              <thead className="bg-slate-50/50 text-xs uppercase text-[var(--color-muted)]">
-                <tr>
-                  <th className="px-6 py-3 font-medium">Student</th>
-                  <th className="px-6 py-3 font-medium">Days Present ({rangePeriodLabel})</th>
-                  <th className="px-6 py-3 font-medium">Sessions</th>
-                  <th className="px-6 py-3 font-medium">Total Hours</th>
-                  <th className="px-6 py-3 font-medium">Last Seen</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
-                {studentSummary.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-10 text-center text-sm text-[var(--color-muted)]">
-                      No records for this period.
-                    </td>
-                  </tr>
-                ) : studentSummary.map((s) => (
-                  <tr key={s.student_id} className="transition-colors hover:bg-slate-50/50">
-                    <td className="px-6 py-4">
-                      <p className="font-medium">{s.student_name}</p>
-                      <p className="text-xs text-[var(--color-muted)]">{s.student_number}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
-                        {s.days} {s.days === 1 ? "day" : "days"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 font-semibold">{s.sessions}</td>
-                    <td className="px-6 py-4 font-semibold text-emerald-700">{fmtDuration(s.total_minutes)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">{s.last_seen ? fmtDate(s.last_seen) : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : filtered.length > 0 ? (
+        {filtered.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-[var(--color-muted)]">
               <thead className="bg-slate-50/50 text-xs uppercase text-[var(--color-muted)]">

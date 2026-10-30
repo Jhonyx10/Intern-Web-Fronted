@@ -6,6 +6,8 @@ import {
     FileText,
     TrendingUp
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import type { LucideIcon } from 'lucide-react'
 import {
     PieChart,
     Pie,
@@ -21,6 +23,47 @@ import {
     Area
 } from 'recharts'
 import { useSuperAdminDashboard } from '@/lib/queries/dashboard'
+
+function KpiCard({
+    label,
+    icon: Icon,
+    iconClass,
+    value,
+    suffix,
+    suffixClass = 'text-[var(--color-muted)]',
+    caption,
+    captionClass = 'text-[var(--color-muted)]',
+    to,
+}: {
+    label: string
+    icon: LucideIcon
+    iconClass: string
+    value: number
+    suffix?: string
+    suffixClass?: string
+    caption: string
+    captionClass?: string
+    to: string
+}) {
+    return (
+        <Link
+            to={to}
+            className="block cursor-pointer rounded-2xl border border-[var(--color-line)] bg-white p-5 shadow-[var(--shadow-soft)] transition-transform hover:-translate-y-0.5 hover:border-[var(--color-accent)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
+        >
+            <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider">{label}</p>
+                <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${iconClass}`}>
+                    <Icon size={18} />
+                </div>
+            </div>
+            <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-3xl font-bold text-[var(--color-ink)]">{value}</span>
+                {suffix && <span className={`text-xs font-medium ${suffixClass}`}>{suffix}</span>}
+            </div>
+            <p className={`mt-1 text-xs ${captionClass}`}>{caption}</p>
+        </Link>
+    )
+}
 
 export function SuperAdminDashboard() {
     const { data, isLoading, error } = useSuperAdminDashboard()
@@ -64,55 +107,43 @@ export function SuperAdminDashboard() {
 
             {/* KPI Metric Cards */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-2xl border border-[var(--color-line)] bg-white p-5 shadow-[var(--shadow-soft)] transition-transform hover:-translate-y-0.5">
-                    <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider">Total Users</p>
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                            <Users size={18} />
-                        </div>
-                    </div>
-                    <p className="mt-3 text-3xl font-bold text-[var(--color-ink)]">{overview.total_users}</p>
-                    <p className="mt-1 text-xs text-[var(--color-muted)]">Registered accounts</p>
-                </div>
-
-                <div className="rounded-2xl border border-[var(--color-line)] bg-white p-5 shadow-[var(--shadow-soft)] transition-transform hover:-translate-y-0.5">
-                    <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider">Companies</p>
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                            <Building2 size={18} />
-                        </div>
-                    </div>
-                    <div className="mt-3 flex items-baseline gap-2">
-                        <span className="text-3xl font-bold text-[var(--color-ink)]">{overview.total_companies}</span>
-                        <span className="text-xs font-medium text-emerald-600">({overview.approved_companies} approved)</span>
-                    </div>
-                    <p className="mt-1 text-xs text-amber-600 font-medium">{overview.pending_companies} pending review</p>
-                </div>
-
-                <div className="rounded-2xl border border-[var(--color-line)] bg-white p-5 shadow-[var(--shadow-soft)] transition-transform hover:-translate-y-0.5">
-                    <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider">Total Students</p>
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                            <GraduationCap size={18} />
-                        </div>
-                    </div>
-                    <div className="mt-3 flex items-baseline gap-2">
-                        <span className="text-3xl font-bold text-[var(--color-ink)]">{overview.total_students}</span>
-                        <span className="text-xs font-medium text-indigo-600">({overview.assigned_students} placed)</span>
-                    </div>
-                    <p className="mt-1 text-xs text-[var(--color-muted)]">{overview.unassigned_students} unassigned</p>
-                </div>
-
-                <div className="rounded-2xl border border-[var(--color-line)] bg-white p-5 shadow-[var(--shadow-soft)] transition-transform hover:-translate-y-0.5">
-                    <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-[var(--color-muted)] uppercase tracking-wider">Pending Requests</p>
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                            <FileText size={18} />
-                        </div>
-                    </div>
-                    <p className="mt-3 text-3xl font-bold text-[var(--color-ink)]">{overview.pending_company_requests}</p>
-                    <p className="mt-1 text-xs text-[var(--color-muted)]">Company requests needing action</p>
-                </div>
+                <KpiCard
+                    label="Total Administrators"
+                    icon={Users}
+                    iconClass="bg-indigo-50 text-indigo-600"
+                    value={overview.total_administrators}
+                    caption="Admins, deans & coordinators"
+                    to="/administrator"
+                />
+                <KpiCard
+                    label="Companies"
+                    icon={Building2}
+                    iconClass="bg-emerald-50 text-emerald-600"
+                    value={overview.total_companies}
+                    suffix={`(${overview.approved_companies} approved)`}
+                    suffixClass="text-emerald-600"
+                    caption={`${overview.pending_companies} pending review`}
+                    captionClass="text-amber-600 font-medium"
+                    to="/companies"
+                />
+                <KpiCard
+                    label="Total Students"
+                    icon={GraduationCap}
+                    iconClass="bg-blue-50 text-blue-600"
+                    value={overview.total_students}
+                    suffix={`(${overview.assigned_students} placed)`}
+                    suffixClass="text-indigo-600"
+                    caption={`${overview.unassigned_students} unassigned`}
+                    to="/students"
+                />
+                <KpiCard
+                    label="Pending Requests"
+                    icon={FileText}
+                    iconClass="bg-amber-50 text-amber-600"
+                    value={overview.pending_company_requests}
+                    caption="Company requests needing action"
+                    to="/companies?tab=pending"
+                />
             </div>
 
             {/* Charts Section */}

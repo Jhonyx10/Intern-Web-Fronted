@@ -36,6 +36,7 @@ import CreateEvaluationTemplatePage from "./pages/forms/CreateEvaluationTemplate
 import { EditEvaluationTemplatePage } from "./pages/forms/EditEvaluationTemplatePage";
 import EvaluationTemplateDetails from "./pages/details/EvaluationTemplateDetails";
 import EvaluationInternPage from "./pages/forms/EvaluationInternPage";
+import { InternEvaluationsPage } from "./pages/InternEvaluationsPage";
 import DocumentPage from "./pages/DocumentPage";
 import { useGeofenceAlerts } from "./hooks/useGeofenceAlert";
 import AddOrganization from "./pages/dean/AddOrganizaton";
@@ -140,6 +141,10 @@ function AppContent() {
               <Route
                 path="/attendance"
                 element={<AttendancePage />}
+              />
+              <Route
+                path="/intern-evaluations"
+                element={<InternEvaluationsPage />}
               />
               <Route
                 path="/supervisor/attendance"

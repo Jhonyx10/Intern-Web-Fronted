@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { CalendarDays, Search, Building2, Loader2, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 import { useStudents } from '@/lib/queries/students'
@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth'
 import type { Student } from '@/types'
 
 type InternshipStatus = 'pending' | 'ongoing' | 'completed'
+type PlacementFilter = 'all' | 'assigned' | 'unassigned'
 
 type StudentListItem = Student & {
     section?: {
@@ -46,6 +47,12 @@ const FILTERS: Array<{ key: InternshipStatus | 'all'; label: string }> = [
     { key: 'completed', label: 'Completed' },
 ]
 
+const PLACEMENT_OPTIONS: Array<{ key: PlacementFilter; label: string }> = [
+    { key: 'all', label: 'All placements' },
+    { key: 'assigned', label: 'Placed (with company)' },
+    { key: 'unassigned', label: 'Not yet placed' },
+]
+
 const selectClass =
     'rounded-lg border border-[var(--color-line)] bg-white/80 px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]'
 
@@ -79,14 +86,29 @@ function initialsOf(student: StudentListItem) {
 
 const toArray = (value: any): any[] => (Array.isArray(value) ? value : value?.data ?? [])
 
+// Read the initial filters from the URL, e.g. /students?status=completed or /students?placement=assigned
+function parseStatusParam(value: string | null): InternshipStatus | 'all' {
+    return value === 'pending' || value === 'ongoing' || value === 'completed' ? value : 'all'
+}
+
+function parsePlacementParam(value: string | null): PlacementFilter {
+    return value === 'assigned' || value === 'unassigned' ? value : 'all'
+}
+
 const StudentsPage = () => {
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
     const { user } = useAuth()
     const { data: currentSchoolYear } = useCurrentSchoolYear()
     const [page, setPage] = useState(1)
     const [query, setQuery] = useState('')
     const [debouncedQuery, setDebouncedQuery] = useState('')
-    const [statusFilter, setStatusFilter] = useState<InternshipStatus | 'all'>('all')
+    const [statusFilter, setStatusFilter] = useState<InternshipStatus | 'all'>(() =>
+        parseStatusParam(searchParams.get('status')),
+    )
+    const [placementFilter, setPlacementFilter] = useState<PlacementFilter>(() =>
+        parsePlacementParam(searchParams.get('placement')),
+    )
     const [companyFilter, setCompanyFilter] = useState<string>('all')
     const [departmentFilter, setDepartmentFilter] = useState<string>('all')
     // null = not initialised yet (waiting for school years to load)
@@ -128,11 +150,12 @@ const StudentsPage = () => {
         () => ({
             search: debouncedQuery || undefined,
             status: statusFilter === 'all' ? undefined : statusFilter,
+            placement: placementFilter === 'all' ? undefined : placementFilter,
             company_id: companyFilter === 'all' ? undefined : companyFilter,
             course_id: departmentFilter === 'all' ? undefined : departmentFilter,
             school_year_id: schoolYearValue === 'all' ? undefined : schoolYearValue,
         }),
-        [debouncedQuery, statusFilter, companyFilter, departmentFilter, schoolYearValue],
+        [debouncedQuery, statusFilter, placementFilter, companyFilter, departmentFilter, schoolYearValue],
     )
 
     // Wait for the default school year so we don't fetch everything first
@@ -210,7 +233,12 @@ const StudentsPage = () => {
                     <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--color-ink)]">Students</h1>
                     <p className="mt-1 text-sm text-[var(--color-muted)]">
                         {totalStudents} student intern{totalStudents === 1 ? '' : 's'}
-                        {schoolYearValue === 'all' && departmentFilter === 'all' && companyFilter === 'all' && statusFilter === 'all' && !debouncedQuery
+                        {schoolYearValue === 'all' &&
+                        departmentFilter === 'all' &&
+                        companyFilter === 'all' &&
+                        statusFilter === 'all' &&
+                        placementFilter === 'all' &&
+                        !debouncedQuery
                             ? ' on record'
                             : ' match your filters'}
                     </p>
@@ -263,6 +291,20 @@ const StudentsPage = () => {
                             ))}
                         </select>
                     )}
+
+                    <select
+                        value={placementFilter}
+                        onChange={(event) =>
+                            onFilterChange(setPlacementFilter)(event.target.value as PlacementFilter)
+                        }
+                        className={selectClass}
+                    >
+                        {PLACEMENT_OPTIONS.map((option) => (
+                            <option key={option.key} value={option.key}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
 
                     <select
                         value={companyFilter}

@@ -48,6 +48,12 @@ export type WeeklyReportOptions = {
   fileName?: string
 }
 
+/** What buildWeeklyReportPdf returns: the PDF as a Blob plus its file name. */
+export type WeeklyReportPdfResult = {
+  blob: Blob
+  fileName: string
+}
+
 type LoadedImage = { dataUrl: string; width: number; height: number }
 type RGB = [number, number, number]
 
@@ -216,7 +222,13 @@ function buildBody(rows: WeeklyReportRow[]) {
 
 type DocWithTable = jsPDF & { lastAutoTable?: { finalY: number } }
 
-export async function exportWeeklyReportPdf(options: WeeklyReportOptions): Promise<void> {
+/**
+ * Builds the weekly report PDF and returns it as a Blob WITHOUT saving it,
+ * so the caller can show a preview first and download later.
+ */
+export async function buildWeeklyReportPdf(
+  options: WeeklyReportOptions,
+): Promise<WeeklyReportPdfResult> {
   const {
     studentName,
     weekNo,
@@ -396,5 +408,30 @@ export async function exportWeeklyReportPdf(options: WeeklyReportOptions): Promi
   }
   doc.text('INTERN', rightX, y + 24)
 
-  doc.save(fileName)
+  return { blob: doc.output('blob'), fileName }
+}
+
+/**
+ * Saves a PDF blob to the user's device.
+ */
+export function downloadPdfBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  // Give the browser a moment to start the download before freeing the URL
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/**
+ * Builds and immediately downloads the report (the old behaviour).
+ * Kept for any other callers; the student details page now uses
+ * buildWeeklyReportPdf + the preview modal instead.
+ */
+export async function exportWeeklyReportPdf(options: WeeklyReportOptions): Promise<void> {
+  const { blob, fileName } = await buildWeeklyReportPdf(options)
+  downloadPdfBlob(blob, fileName)
 }

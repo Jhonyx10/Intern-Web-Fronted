@@ -1,15 +1,18 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { AnimatePresence, motion } from "framer-motion";
+import type { LucideIcon } from "lucide-react";
 import {
     ArrowLeft,
     BookOpen,
+    Building2,
     CalendarDays,
     CheckCircle2,
     Clock,
     ExternalLink,
     FileText,
+    Globe,
     History,
     Search,
     Users,
@@ -35,7 +38,22 @@ type CourseRequirement = {
     id: number;
     title: string;
     created_school_year?: string | null;
+    // Assumed fields: adjust to whatever your API returns.
+    course_id?: number | null;
+    is_common?: boolean | number | null;
 };
+
+// Common = shared by every department. Departmental = tied to one course.
+function isCommonRequirement(
+    req?: {
+        is_common?: boolean | number | null;
+        course_id?: number | null;
+    } | null
+): boolean {
+    if (!req) return false;
+    if (req.is_common != null) return Boolean(req.is_common);
+    return req.course_id == null;
+}
 
 // ─── animation variants ─────────────────────────────────────────────────────
 const container = {
@@ -232,6 +250,45 @@ function RequirementModal({ requirementTitle, docs, onClose, onPreview }: Requir
     );
 }
 
+// ─── Requirement group (Common / Departmental) ────────────────────────────────
+interface RequirementGroupProps {
+    title: string;
+    description: string;
+    icon: LucideIcon;
+    iconClass: string;
+    count: number;
+    children: ReactNode;
+}
+
+function RequirementGroup({
+    title,
+    description,
+    icon: Icon,
+    iconClass,
+    count,
+    children,
+}: RequirementGroupProps) {
+    return (
+        <motion.section variants={item} className="space-y-3">
+            <div className="flex items-center gap-3 border-b border-[var(--color-line)] pb-2.5">
+                <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${iconClass}`}>
+                    <Icon size={16} />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <h3 className="text-base font-semibold text-[var(--color-ink)]">{title}</h3>
+                    <p className="text-xs text-[var(--color-muted)]">{description}</p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                    {count}
+                </span>
+            </div>
+            <motion.div variants={container} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {children}
+            </motion.div>
+        </motion.section>
+    );
+}
+
 // ─── Requirement card ─────────────────────────────────────────────────────────
 interface ReqCardProps {
     title: string;
@@ -380,7 +437,11 @@ export default function DepartmentDocumentsPage() {
     // Build unified requirement list (from requirements endpoint + any uncategorized)
     const requirementCards = useMemo(() => {
         const cards: Array<{
-            id: number | string; title: string; schoolYear?: string; docs: SubmittedDocument[];
+            id: number | string;
+            title: string;
+            schoolYear?: string;
+            docs: SubmittedDocument[];
+            common: boolean;
         }> = [];
         const seen = new Set<number | string>();
 
@@ -392,6 +453,7 @@ export default function DepartmentDocumentsPage() {
                 title: req.title,
                 schoolYear: selectedYear?.name ?? req.created_school_year ?? currentSchoolYear?.name,
                 docs: docsByReq.get(req.id) ?? [],
+                common: isCommonRequirement(req),
             });
         });
 
@@ -405,6 +467,7 @@ export default function DepartmentDocumentsPage() {
                     title: docs[0]?.document_requirement?.title ?? "Unknown requirement",
                     schoolYear: selectedYear?.name,
                     docs,
+                    common: isCommonRequirement(docs[0]?.document_requirement as any),
                 });
             });
         }
@@ -417,6 +480,7 @@ export default function DepartmentDocumentsPage() {
                 title: "Uncategorized Documents",
                 schoolYear: selectedYear?.name ?? currentSchoolYear?.name,
                 docs: uncategorized,
+                common: false,
             });
         }
 
@@ -430,6 +494,10 @@ export default function DepartmentDocumentsPage() {
             c.title.toLowerCase().includes(search.toLowerCase())
         );
     }, [requirementCards, search]);
+
+    // Split into the two groups shown on the page
+    const commonCards = useMemo(() => filteredCards.filter((c) => c.common), [filteredCards]);
+    const departmentalCards = useMemo(() => filteredCards.filter((c) => !c.common), [filteredCards]);
 
     const totalSubmitted = submittedDocs?.length ?? 0;
     const totalApproved = submittedDocs?.filter((d) => d.review_status === "approved").length ?? 0;
@@ -452,6 +520,24 @@ export default function DepartmentDocumentsPage() {
         setSearchParams({}, { replace: true });
         setSelectedReqId(null);
         setSearch("");
+    }
+
+    function renderCard(card: (typeof requirementCards)[number]) {
+        const approved = card.docs.filter((d) => d.review_status === "approved").length;
+        const rejected = card.docs.filter((d) => d.review_status === "rejected").length;
+        const pending = card.docs.filter((d) => !d.review_status || d.review_status === "pending").length;
+        return (
+            <RequirementCard
+                key={card.id}
+                title={card.title}
+                schoolYear={card.schoolYear}
+                totalStudents={card.docs.length}
+                approved={approved}
+                pending={pending}
+                rejected={rejected}
+                onClick={() => setSelectedReqId(card.id as number)}
+            />
+        );
     }
 
     return (
@@ -576,7 +662,7 @@ export default function DepartmentDocumentsPage() {
                     </label>
                 </motion.div>
 
-                {/* ── Cards grid ───────────────────────────────── */}
+                {/* ── Cards, grouped: Common / Departmental ────── */}
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center gap-3 py-24 text-[var(--color-muted)]">
                         <span className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
@@ -599,24 +685,30 @@ export default function DepartmentDocumentsPage() {
                         )}
                     </motion.div>
                 ) : (
-                    <motion.div variants={container} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        {filteredCards.map((card) => {
-                            const approved = card.docs.filter((d) => d.review_status === "approved").length;
-                            const rejected = card.docs.filter((d) => d.review_status === "rejected").length;
-                            const pending = card.docs.filter((d) => !d.review_status || d.review_status === "pending").length;
-                            return (
-                                <RequirementCard
-                                    key={card.id}
-                                    title={card.title}
-                                    schoolYear={card.schoolYear}
-                                    totalStudents={card.docs.length}
-                                    approved={approved}
-                                    pending={pending}
-                                    rejected={rejected}
-                                    onClick={() => setSelectedReqId(card.id as number)}
-                                />
-                            );
-                        })}
+                    <motion.div variants={container} className="space-y-8">
+                        {commonCards.length > 0 && (
+                            <RequirementGroup
+                                title="Common Requirements"
+                                description="Required of every intern, regardless of department"
+                                icon={Globe}
+                                iconClass="bg-sky-50 text-sky-600"
+                                count={commonCards.length}
+                            >
+                                {commonCards.map((card) => renderCard(card))}
+                            </RequirementGroup>
+                        )}
+
+                        {departmentalCards.length > 0 && (
+                            <RequirementGroup
+                                title="Departmental Requirements"
+                                description="Specific to this department"
+                                icon={Building2}
+                                iconClass="bg-violet-50 text-violet-600"
+                                count={departmentalCards.length}
+                            >
+                                {departmentalCards.map((card) => renderCard(card))}
+                            </RequirementGroup>
+                        )}
                     </motion.div>
                 )}
             </motion.section>

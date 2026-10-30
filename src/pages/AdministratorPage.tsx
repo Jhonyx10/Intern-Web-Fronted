@@ -419,7 +419,21 @@ function UserRow({
           {user.role?.label ?? 'No role'}
         </span>
       </td>
-
+      {/* Department */}
+      <td className="px-4 py-3.5">
+        {user.course ? (
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-[var(--color-ink)]">
+              {user.course.code ?? user.course.name}
+            </p>
+            {user.course.code && (
+              <p className="truncate text-xs text-[var(--color-muted)]">{user.course.name}</p>
+            )}
+          </div>
+        ) : (
+          <span className="text-xs text-[var(--color-muted)]">—</span>
+        )}
+      </td>
       {/* Status */}
       <td className="px-4 py-3.5">
         <span
@@ -452,7 +466,7 @@ function UserRow({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-const ALLOWED_ROLE_IDS = [2, 3]
+const ALLOWED_ROLE_IDS = [2, 3, 4]
 
 export default function AdministratorPage() {
   const { data: users, isLoading, error } = useUsers()
@@ -679,6 +693,9 @@ export default function AdministratorPage() {
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
                       Role
+                    </th>
+                    <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
+                      Department
                     </th>
                     <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-muted)]">
                       Status

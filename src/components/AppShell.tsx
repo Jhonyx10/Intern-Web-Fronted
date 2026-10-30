@@ -4,7 +4,7 @@ import { NavLink, Outlet, useLocation, matchPath } from "react-router-dom";
 import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/context/ThemeContext'
 import OCCLOGO from '@/assets/OCC logo.webp'
-import { Calendar1Icon, UserIcon, Settings, BuildingIcon, FolderIcon, FolderCheckIcon, Building2Icon, CalendarDays, Loader2 } from 'lucide-react'
+import { Calendar1Icon, UserIcon, Settings, BuildingIcon, FolderIcon, FolderCheckIcon, Building2Icon, CalendarDays, Loader2, ClipboardList } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { apiRequest } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
@@ -67,7 +67,7 @@ const navItems: NavItem[] = [
   },
   {
     to: "/evaluation",
-    label: "Evaluation",
+    label: "Evaluation Library",
     end: false,
     icon: FolderIcon,
     section: 'academic',
@@ -104,7 +104,7 @@ const navItems: NavItem[] = [
     end: false,
     icon: UserIcon,
     section: 'people',
-    roles: ["dean", "super_admin"],
+    roles: ["dean", "super_admin", "coordinator"],
   },
   {
     to: "/supervisor/interns",
@@ -164,6 +164,14 @@ const navItems: NavItem[] = [
     section: 'internship',
     roles: ["coordinator"],
   },
+  {
+    to: "/intern-evaluations",
+    label: "Intern Evaluations",
+    end: true,
+    icon: ClipboardList,
+    section: 'internship',
+    roles: ["supervisor", "dean", "coordinator"],
+  },
 ];
 
 const pageTitles: Array<{ path: string; title: string; end?: boolean }> = [
@@ -190,6 +198,11 @@ const pageTitles: Array<{ path: string; title: string; end?: boolean }> = [
   {
     path: "/supervisor/interns/:internId/evaluations/:evaluationId",
     title: "Evaluation",
+    end: true,
+  },
+  {
+    path: "/intern-evaluations",
+    title: "Intern Evaluations",
     end: true,
   },
   {
@@ -308,11 +321,9 @@ export function AppShell() {
   // The highlighted nav item. Set once from the URL on first load,
   // then only changed by clicking a sidenav item.
   const [stickyNavTo, setStickyNavTo] = useState<string | null>(null)
-  const navInitialized = useRef(false)
 
   useEffect(() => {
-    if (navInitialized.current || !userRole || visibleItems.length === 0) return
-    navInitialized.current = true
+    if (!userRole || visibleItems.length === 0) return
 
     const path = location.pathname.replace(/\/$/, '') || '/'
     const match = visibleItems
@@ -321,7 +332,7 @@ export function AppShell() {
       )
       .sort((a, b) => b.to.length - a.to.length)[0] // most specific match wins
 
-    setStickyNavTo(match?.to ?? null)
+    if (match) setStickyNavTo(match.to)
   }, [visibleItems, userRole, location.pathname])
 
   // Super admin manages the list of school years; everyone else (e.g. dean)
@@ -461,24 +472,44 @@ export function AppShell() {
             ))}
           </div>
         </nav>
+
+        {/* Collapse / expand toggle pinned to the bottom of the sidebar */}
+        <div className={`border-t border-white/15 py-3 ${sidebarOpen ? 'px-3' : 'flex justify-center px-2'}`}>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen((open) => !open)}
+            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            className={[
+              'group relative flex items-center rounded-xl text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white',
+              sidebarOpen ? 'w-full gap-3 px-3 py-2.5' : 'justify-center p-2',
+            ].join(' ')}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/20 text-white shadow-sm ring-1 ring-white/10">
+              {sidebarOpen ? <PanelLeftCloseIcon /> : <PanelLeftOpenIcon />}
+            </span>
+            <AnimatePresence initial={false}>
+              {sidebarOpen ? (
+                <motion.span
+                  key="collapse-label"
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden whitespace-nowrap"
+                >
+                  Collapse
+                </motion.span>
+              ) : null}
+            </AnimatePresence>
+          </button>
+        </div>
       </motion.aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 border-b border-[var(--color-line)] bg-[var(--color-surface)]/90 backdrop-blur-xl">
           <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
             <div className="flex min-w-0 items-center gap-3">
-              <motion.button
-                type="button"
-                whileHover={{ scale: 1.06 }}
-                whileTap={{ scale: 0.94 }}
-                onClick={() => setSidebarOpen((open) => !open)}
-                aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-                title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-[var(--color-line)] bg-white text-[var(--color-muted)] shadow-sm transition-colors hover:bg-slate-50 hover:text-[var(--color-ink)]"
-              >
-                {sidebarOpen ? <PanelLeftCloseIcon /> : <PanelLeftOpenIcon />}
-              </motion.button>
-
               <AnimatePresence mode="wait">
                 <motion.h2
                   key={pageTitle}

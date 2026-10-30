@@ -114,6 +114,17 @@ export type SubmitEvaluationInput = {
     responses: Record<number, string | number | string[]>
 }
 
+export type InternDetailTaskPhoto = {
+    id: number
+    file_url: string | null
+    file_path: string | null
+    original_filename: string | null
+    file_size: number | null
+    mime_type: string | null
+    status: 'draft' | 'submitted'
+    submitted_at: string | null
+}
+
 export type InternDetailTimelog = {
     id: number
     time_in: string | null
@@ -123,6 +134,11 @@ export type InternDetailTimelog = {
     duration_minutes: number | null
     task_note: string | null
     verification_method: string | null
+    face_match_score?: string | null
+    session_period?: string | null
+    system_note?: string | null
+    needs_correction?: boolean
+    task_photos?: InternDetailTaskPhoto[]
 }
 
 export type InternDetailSchedule = {
@@ -423,6 +439,71 @@ export function useCreateBuilding() {
             toastMutationSuccess('Building created')
         },
         onError: (error) => toastMutationError(error, 'Failed to create building'),
+    })
+}
+
+export function useUpdateTimeLogTimeOut() {
+    const { token } = useAuth()
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ logId, timeOut }: { logId: number; timeOut: string }) =>
+            apiRequest(`/supervisor/time-logs/${logId}/time-out`, {
+                method: 'PATCH',
+                token: token!,
+                body: { time_out: timeOut },
+            }),
+        onSuccess: () => {
+            // prefix match also refreshes ['supervisor', 'interns', id]
+            void queryClient.invalidateQueries({ queryKey: ['supervisor', 'interns'] })
+            toastMutationSuccess('Time out updated')
+        },
+        onError: (error) => toastMutationError(error, 'Failed to update time out'),
+    })
+}
+
+// ─── Intern Evaluations (centralised page) ──────────────────────────
+
+export type InternEvaluationRow = {
+    id: number
+    status: 'pending' | 'submitted'
+    computed_score: number | null
+    submitted_at: string | null
+    created_at: string
+    responses: Record<string, unknown> | null
+    student: {
+        id: number
+        first_name: string
+        middle_name: string | null
+        last_name: string
+        student_number: string
+    } | null
+    section_name: string | null
+    section_id: number | null
+    course_code: string | null
+    evaluator: string | null
+    company_name: string | null
+    template: {
+        id: number
+        title: string
+        description: string | null
+        items: Array<{
+            id: number
+            sort_order: number
+            item_type: 'rating' | 'text' | 'textarea' | 'single_choice' | 'multiple_choice'
+            label: string
+            options: string | null
+            is_required: boolean
+        }>
+    } | null
+}
+
+export function useInternEvaluations() {
+    const { token } = useAuth()
+    return useQuery({
+        queryKey: ['intern-evaluations'],
+        queryFn: () => apiRequest<{ data: InternEvaluationRow[] }>('/intern-evaluations', { token: token! }),
+        enabled: Boolean(token),
+        select: (res) => res.data,
     })
 }
 

@@ -53,6 +53,11 @@ function fmtDuration(minutes: number | null) {
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+function fmtWeekday(iso: string | null) {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleDateString([], { weekday: "long" });
+}
+
 // "By Student" ignores the Today / Week / Month filter and covers all recorded attendance.
 const ALL_TIME_FROM = "2000-01-01";
 
@@ -152,17 +157,20 @@ type StudentSummary = {
 
 interface StudentAttendanceModalProps {
     student: StudentSummary;
+    /** Tab the modal opens on. Defaults to "month". */
+    initialTab?: ModalTab;
     onClose: () => void;
     onViewRecord: (id: number) => void;
 }
 
 function StudentAttendanceModal({
     student,
+    initialTab = "month",
     onClose,
     onViewRecord,
 }: StudentAttendanceModalProps) {
     const { token } = useAuth();
-    const [tab, setTab] = useState<ModalTab>("month");
+    const [tab, setTab] = useState<ModalTab>(initialTab);
 
     // Custom range defaults: first of this month → today
     const [customFrom, setCustomFrom] = useState(() => toISODate(startOfMonth(new Date())));
@@ -361,6 +369,7 @@ function StudentAttendanceModal({
                             <thead className="sticky top-0 bg-slate-50 text-[11px] uppercase font-semibold text-slate-500 border-b border-[var(--color-line)]">
                                 <tr>
                                     <th className="px-6 py-3">Date</th>
+                                    <th className="px-6 py-3">Day</th>
                                     <th className="px-6 py-3">Time In</th>
                                     <th className="px-6 py-3">Break</th>
                                     <th className="px-6 py-3">Time Out</th>
@@ -373,6 +382,11 @@ function StudentAttendanceModal({
                                     <tr key={log.id} className="transition hover:bg-slate-50/70">
                                         <td className="px-6 py-3.5 whitespace-nowrap font-medium">
                                             {fmtDate(log.time_in)}
+                                        </td>
+                                        <td className="px-6 py-3.5 whitespace-nowrap">
+                                            <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                                                {fmtWeekday(log.time_in)}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-3.5 whitespace-nowrap font-medium text-slate-800">
                                             {fmtTime(log.time_in)}
@@ -435,6 +449,11 @@ export default function AttendancePage() {
     const [selectedSummaryStudent, setSelectedSummaryStudent] = useState<StudentSummary | null>(null);
 
     const isCustomRange = range === "custom";
+
+    // Week / Month in the Logs view: show one row per student instead of one per log.
+    const groupByStudent = viewMode === "logs" && (range === "week" || range === "month");
+    // Both "By Student" and the grouped Logs view use the per-student table.
+    const showStudentTable = viewMode === "summary" || groupByStudent;
 
     // "By Student" ignores the Today / Week / Month filter and fetches all
     // recorded attendance; "Logs" keeps using the selected range.
@@ -608,10 +627,14 @@ export default function AttendancePage() {
                 <div className="flex flex-col gap-3 border-b border-[var(--color-line)] bg-slate-50/50 px-6 py-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-2">
                         <h2 className="text-base font-semibold text-[var(--color-ink)]">
-                            {viewMode === "summary" ? "Students — By Student" : "Attendance Time Logs"}
+                            {viewMode === "summary"
+                                ? "Students — By Student"
+                                : groupByStudent
+                                    ? `Students — ${range === "week" ? "This Week" : "This Month"}`
+                                    : "Attendance Time Logs"}
                         </h2>
                         <span className="rounded-full bg-slate-200/70 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                            {viewMode === "summary" ? studentSummary.length : totalLogs}
+                            {showStudentTable ? studentSummary.length : totalLogs}
                         </span>
                     </div>
 
@@ -708,15 +731,17 @@ export default function AttendancePage() {
                             No interns have logged attendance for the selected time range or search filter.
                         </p>
                     </div>
-                ) : viewMode === "summary" ? (
-                    /* ── By Student view ── */
+                ) : showStudentTable ? (
+                    /* ── By Student view (also used for Week / Month in Logs) ── */
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs text-[var(--color-muted)]">
                             <thead className="bg-slate-50 text-[11px] uppercase font-semibold text-slate-600 border-b border-[var(--color-line)]">
                                 <tr>
                                     <th className="px-6 py-3">Student</th>
                                     <th className="px-6 py-3">Dept &amp; Section</th>
-                                    <th className="px-6 py-3">Days Present (All Time)</th>
+                                    <th className="px-6 py-3">
+                                        {viewMode === "summary" ? "Days Present (All Time)" : "Days Present"}
+                                    </th>
                                     <th className="px-6 py-3">Sessions</th>
                                     <th className="px-6 py-3">Total Hours</th>
                                     <th className="px-6 py-3">Last Session</th>
@@ -881,6 +906,7 @@ export default function AttendancePage() {
             {selectedSummaryStudent && (
                 <StudentAttendanceModal
                     student={selectedSummaryStudent}
+                    initialTab={groupByStudent ? range : "month"}
                     onClose={() => setSelectedSummaryStudent(null)}
                     onViewRecord={(id) => {
                         setSelectedSummaryStudent(null);

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
     Search,
     Building2,
@@ -290,7 +290,18 @@ type Tab = 'all' | 'pending' | 'approved' | 'rejected'
 
 export default function Companies() {
     const navigate = useNavigate()
-    const [activeTab, setActiveTab] = useState<Tab>('all')
+    const [searchParams, setSearchParams] = useSearchParams()
+
+    // The active tab lives in the URL (?tab=pending), so dashboard links can
+    // open a specific tab and it survives a refresh / the back button.
+    const tabParam = searchParams.get('tab')
+    const activeTab: Tab =
+        tabParam === 'pending' || tabParam === 'approved' || tabParam === 'rejected' ? tabParam : 'all'
+
+    function setActiveTab(tab: Tab) {
+        setSearchParams(tab === 'all' ? {} : { tab }, { replace: true })
+    }
+
     const [search, setSearch] = useState('')
     const [confirmTarget, setConfirmTarget] = useState<{ company: Company; action: 'approve' | 'reject' } | null>(null)
     const [actionError, setActionError] = useState<string | null>(null)

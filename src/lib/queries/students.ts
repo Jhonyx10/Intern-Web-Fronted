@@ -47,6 +47,7 @@ export type StudentFilters = {
   perPage?: number
   search?: string
   status?: 'pending' | 'ongoing' | 'completed'
+  placement?: 'assigned' | 'unassigned'
   company_id?: string
   course_id?: string
   school_year_id?: string
@@ -74,6 +75,9 @@ export async function fetchStudents(
   if (filters?.company_id) params.set('company_id', filters.company_id)
   if (filters?.course_id) params.set('course_id', filters.course_id)
   if (filters?.school_year_id) params.set('school_year_id', filters.school_year_id)
+  if (filters?.status) params.set('status', filters.status)
+  if (filters?.placement) params.set('placement', filters.placement)
+  if (filters?.company_id) params.set('company_id', filters.company_id)
 
   const response = await apiRequest<{ data: PaginatedStudents }>(`/students?${params}`, { token })
   return response.data
