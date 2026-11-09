@@ -422,7 +422,7 @@ export default function DocumentPage() {
                 search={search}
                 schoolYear={activeSchoolYear?.name}
                 onManage={setAssignCourseId}
-                schoolYearId={activeSchoolYearId}
+                schoolYearId={urlYearId ?? undefined}
               />
             )}
           </motion.div>
@@ -434,7 +434,7 @@ export default function DocumentPage() {
             courses={[deanCourse]}
             results={[deanQuery]}
             schoolYear={activeSchoolYear?.name}
-            schoolYearId={activeSchoolYearId}
+            schoolYearId={urlYearId ?? undefined}
           />
         )}
       </motion.section>

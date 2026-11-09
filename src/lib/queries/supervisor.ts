@@ -47,6 +47,7 @@ export interface SupervisorInternEvaluation {
             is_required: boolean;
         }>;
     };
+
 }
 
 export type SupervisorAttendanceLog = {
@@ -480,8 +481,12 @@ export type InternEvaluationRow = {
     section_name: string | null
     section_id: number | null
     course_code: string | null
+    school_year?: string | null
+    semester?: string | null
     evaluator: string | null
+    supervisor_name?: string | null
     company_name: string | null
+    company_location?: string | null
     template: {
         id: number
         title: string

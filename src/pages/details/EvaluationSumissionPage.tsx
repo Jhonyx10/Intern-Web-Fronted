@@ -234,9 +234,19 @@ export const EvaluationSubmissionsPage: React.FC = () => {
                                             </span>
                                         </td>
                                         <td className="px-4 py-4">
-                                            <p className="text-xs font-medium text-[var(--color-ink)]">{s.school_year ?? "—"}</p>
-                                            {(s as any).semester && (
-                                                <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">{(s as any).semester}</p>
+                                            {s.school_year ? (
+                                                <>
+                                                    <p className="text-xs font-medium text-[var(--color-ink)]">
+                                                        S.Y. {s.school_year}
+                                                    </p>
+                                                    {s.semester && (
+                                                        <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">
+                                                            {s.semester}
+                                                        </p>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <span className="text-xs text-[var(--color-muted)]">—</span>
                                             )}
                                         </td>
                                         <td className="px-4 py-4 text-xs text-[var(--color-ink)]">

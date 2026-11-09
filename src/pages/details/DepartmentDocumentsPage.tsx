@@ -38,21 +38,27 @@ type CourseRequirement = {
     id: number;
     title: string;
     created_school_year?: string | null;
-    // Assumed fields: adjust to whatever your API returns.
+    document_type?: 'common' | 'departmental' | string | null;
     course_id?: number | null;
     is_common?: boolean | number | null;
+    pivot?: { course_id?: number | null; deadline_at?: string | null } | null;
 };
 
 // Common = shared by every department. Departmental = tied to one course.
 function isCommonRequirement(
     req?: {
+        document_type?: 'common' | 'departmental' | string | null;
         is_common?: boolean | number | null;
         course_id?: number | null;
+        pivot?: { course_id?: number | null } | null;
     } | null
 ): boolean {
     if (!req) return false;
+    if (req.document_type) return req.document_type === "common";
     if (req.is_common != null) return Boolean(req.is_common);
-    return req.course_id == null;
+    if (req.pivot?.course_id != null) return false;
+    if (req.course_id != null) return false;
+    return true;
 }
 
 // ─── animation variants ─────────────────────────────────────────────────────
@@ -392,31 +398,39 @@ export default function DepartmentDocumentsPage() {
     const [pickedYear, setPickedYear] = useState<SchoolYear | null>(null);
     const [showYearModal, setShowYearModal] = useState(false);
 
+    // Active school year ID: from URL parameter if present, otherwise default to current school year
+    const activeSchoolYearId = yearId ?? (currentSchoolYear?.id as number | undefined);
+    const isCurrentYear =
+        !currentSchoolYear ||
+        !activeSchoolYearId ||
+        activeSchoolYearId === currentSchoolYear.id;
+
     // Full school year object (for labels), resolved from the id in the URL
     const selectedYear: SchoolYear | null =
-        pickedYear && pickedYear.id === yearId
+        pickedYear && pickedYear.id === activeSchoolYearId
             ? pickedYear
-            : ((yearOptions?.find((sy) => sy.id === yearId) as unknown as
+            : ((yearOptions?.find((sy) => sy.id === activeSchoolYearId) as unknown as
                   | SchoolYear
-                  | undefined) ?? null);
+                  | undefined) ??
+              (isCurrentYear ? (currentSchoolYear as unknown as SchoolYear) : null));
 
-    // The year shown in the header badge: the filter if set, else the current year
+    // The year shown in the header badge: the resolved active school year or current school year
     const shownYear = selectedYear ?? currentSchoolYear;
 
     const reqQuery = useCourseDocumentRequirements(
         id ? Number(id) : undefined,
-        yearId ?? undefined
+        activeSchoolYearId
     );
     const requirements: CourseRequirement[] | undefined = reqQuery.data;
     const loadingReqs = reqQuery.isLoading;
 
     const { data: submittedDocs, isLoading: loadingDocs, isError } = useSubmittedDocuments({
         course_id: id,
-        ...(yearId ? { school_year_id: String(yearId) } : {}),
+        ...(activeSchoolYearId ? { school_year_id: String(activeSchoolYearId) } : {}),
     });
 
     const [search, setSearch] = useState("");
-    const [selectedReqId, setSelectedReqId] = useState<number | null>(null);
+    const [selectedReqId, setSelectedReqId] = useState<number | string | null>(null);
     const [previewDoc, setPreviewDoc] = useState<{
         id: number; title: string; filename?: string; fileSize?: number;
         mimeType?: string; notes?: string | null; status?: string;
@@ -434,7 +448,8 @@ export default function DepartmentDocumentsPage() {
         return map;
     }, [submittedDocs]);
 
-    // Build unified requirement list (from requirements endpoint + any uncategorized)
+    // Build requirement cards: only requirements assigned to this course for the active school year,
+    // plus any submitted docs that belong to those requirements (or are uncategorized).
     const requirementCards = useMemo(() => {
         const cards: Array<{
             id: number | string;
@@ -444,48 +459,34 @@ export default function DepartmentDocumentsPage() {
             common: boolean;
         }> = [];
         const seen = new Set<number | string>();
+        const syName = shownYear?.name ?? currentSchoolYear?.name;
 
-        // 1. Requirements anchored to the selected year (or the current year by default)
+        // 1. Requirements assigned to this course for the active school year
         (requirements ?? []).forEach((req) => {
             seen.add(req.id);
             cards.push({
                 id: req.id,
                 title: req.title,
-                schoolYear: selectedYear?.name ?? req.created_school_year ?? currentSchoolYear?.name,
+                schoolYear: (syName ?? req.created_school_year) || undefined,
                 docs: docsByReq.get(req.id) ?? [],
                 common: isCommonRequirement(req),
             });
         });
 
-        // 2. History only: requirements that have submissions for this year but
-        //    aren't anchored to it, so those submissions don't disappear
-        if (yearId) {
-            docsByReq.forEach((docs, key) => {
-                if (key === "uncategorized" || seen.has(key)) return;
-                cards.push({
-                    id: key,
-                    title: docs[0]?.document_requirement?.title ?? "Unknown requirement",
-                    schoolYear: selectedYear?.name,
-                    docs,
-                    common: isCommonRequirement(docs[0]?.document_requirement as any),
-                });
-            });
-        }
-
-        // 3. Docs submitted without a requirement
+        // 2. Docs submitted without a linked requirement (keep them visible so nothing is hidden)
         const uncategorized = docsByReq.get("uncategorized") ?? [];
         if (uncategorized.length > 0) {
             cards.push({
                 id: "uncategorized",
                 title: "Uncategorized Documents",
-                schoolYear: selectedYear?.name ?? currentSchoolYear?.name,
+                schoolYear: syName || undefined,
                 docs: uncategorized,
                 common: false,
             });
         }
 
         return cards;
-    }, [requirements, docsByReq, currentSchoolYear, selectedYear, yearId]);
+    }, [requirements, docsByReq, shownYear, currentSchoolYear]);
 
     // Apply search filter on displayed cards
     const filteredCards = useMemo(() => {
@@ -535,7 +536,7 @@ export default function DepartmentDocumentsPage() {
                 approved={approved}
                 pending={pending}
                 rejected={rejected}
-                onClick={() => setSelectedReqId(card.id as number)}
+                onClick={() => setSelectedReqId(card.id)}
             />
         );
     }
@@ -577,14 +578,14 @@ export default function DepartmentDocumentsPage() {
                             type="button"
                             onClick={() => setShowYearModal(true)}
                             className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm font-medium shadow-xs transition hover:border-[var(--color-accent)] hover:bg-slate-50 ${
-                                yearId
+                                !isCurrentYear && selectedYear
                                     ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
                                     : "border-[var(--color-line)] bg-white text-[var(--color-ink)]"
                             }`}
                         >
                             <History size={15} className="text-[var(--color-accent)]" />
                             School Year
-                            {yearId && selectedYear && (
+                            {!isCurrentYear && selectedYear && (
                                 <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-[var(--color-accent)]">
                                     S.Y. {selectedYear.name}
                                 </span>
@@ -593,17 +594,16 @@ export default function DepartmentDocumentsPage() {
                     </div>
                 </motion.div>
 
-                {/* ── School year filter banner ────────────────── */}
-                {yearId && (
+                {/* ── Past school year filter banner ────────────────── */}
+                {!isCurrentYear && selectedYear && (
                     <motion.div
                         variants={item}
                         className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3"
                     >
                         <p className="flex items-center gap-2 text-sm font-medium text-amber-800">
                             <History size={15} className="text-amber-600" />
-                            Showing S.Y. {selectedYear?.name ?? "…"}
-                            {selectedYear?.semester ? ` · ${selectedYear.semester}` : ""}
-                            {selectedYear?.is_active ? " (current)" : ""}
+                            Showing S.Y. {selectedYear.name}
+                            {selectedYear.semester ? ` · ${selectedYear.semester}` : ""}
                         </p>
                         <button
                             type="button"
@@ -674,8 +674,8 @@ export default function DepartmentDocumentsPage() {
                         <p className="text-sm font-medium text-[var(--color-muted)]">
                             {search
                                 ? "No requirements match your search."
-                                : yearId
-                                    ? `No document requirements for S.Y. ${selectedYear?.name ?? ""}.`
+                                : !isCurrentYear && selectedYear
+                                    ? `No document requirements for S.Y. ${selectedYear.name}.`
                                     : "No document requirements found for this department."}
                         </p>
                         {search && (
