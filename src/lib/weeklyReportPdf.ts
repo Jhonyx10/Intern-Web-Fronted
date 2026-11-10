@@ -29,10 +29,19 @@ export type WeeklyReportRow = {
   photoUrl?: string | null
 }
 
-export type WeeklyReportOptions = {
-  studentName: string // e.g. "Ordaniza, Jhon Mark E."
+/** One week of the report (its own page(s) in the PDF). */
+export type WeeklyReportWeekInput = {
   weekNo: number | string
   rows: WeeklyReportRow[]
+}
+
+export type WeeklyReportOptions = {
+  studentName: string // e.g. "Ordaniza, Jhon Mark E."
+  /** Single week (kept for existing callers) */
+  weekNo?: number | string
+  rows?: WeeklyReportRow[]
+  /** Several weeks in one PDF, one section per week. Takes priority over weekNo/rows. */
+  weeks?: WeeklyReportWeekInput[]
   /** Left signature — company supervisor */
   supervisorBy: { name: string; title?: string | null; organization?: string }
   /** Right signature — the student intern */
@@ -225,19 +234,25 @@ type DocWithTable = jsPDF & { lastAutoTable?: { finalY: number } }
 /**
  * Builds the weekly report PDF and returns it as a Blob WITHOUT saving it,
  * so the caller can show a preview first and download later.
+ * Pass `weeks` for several weeks (one section each), or `weekNo` + `rows` for one.
  */
 export async function buildWeeklyReportPdf(
   options: WeeklyReportOptions,
 ): Promise<WeeklyReportPdfResult> {
-  const {
-    studentName,
-    weekNo,
-    rows,
-    supervisorBy,
-    studentBy,
-    logos,
-    fileName = `weekly-report-week-${weekNo}.pdf`,
-  } = options
+  const { studentName, supervisorBy, studentBy, logos } = options
+
+  const weeks: WeeklyReportWeekInput[] =
+    options.weeks && options.weeks.length > 0
+      ? options.weeks
+      : [{ weekNo: options.weekNo ?? 1, rows: options.rows ?? [] }]
+
+  const firstNo = weeks[0].weekNo
+  const lastNo = weeks[weeks.length - 1].weekNo
+  const fileName =
+    options.fileName ??
+    (weeks.length === 1
+      ? `weekly-report-week-${firstNo}.pdf`
+      : `weekly-report-weeks-${firstNo}-to-${lastNo}.pdf`)
 
   const school = {
     name: options.school?.name ?? 'OPOL COMMUNITY COLLEGE',
@@ -246,13 +261,13 @@ export async function buildWeeklyReportPdf(
     subject: options.school?.subject ?? 'IT405 – On-the-Job Training (OJT)',
   }
 
-  const { body, photoUrls } = buildBody(rows)
+  const built = weeks.map((w) => buildBody(w.rows))
 
   // Load everything first so the document can be built synchronously
-  const [leftLogo, rightLogo, ...photos] = await Promise.all([
+  const [leftLogo, rightLogo, ...allPhotos] = await Promise.all([
     loadImage(logos?.left, 'image/png', 400),
     loadImage(logos?.right, 'image/png', 400),
-    ...photoUrls.map((url) => loadImage(url)),
+    ...built.flatMap((b) => b.photoUrls.map((url) => loadImage(url))),
   ])
 
   const doc = new jsPDF({ unit: 'mm', format: 'a4' }) as DocWithTable
@@ -295,126 +310,144 @@ export async function buildWeeklyReportPdf(
     doc.line(MARGIN, 37, pageW - MARGIN, 37)
   }
 
-  // ── Page 1: header + student info ──
-  drawHeader()
+  function drawStudentInfo(weekNo: number | string) {
+    doc.setFontSize(10).setTextColor(...INK)
+    doc.setFont('helvetica', 'normal')
+    doc.text('Name of Student:', MARGIN + 4, 47)
+    doc.setFont('helvetica', 'bold')
+    doc.text(studentName, MARGIN + 4 + doc.getTextWidth('Name of Student:  '), 47)
 
-  doc.setFontSize(10).setTextColor(...INK)
-  doc.setFont('helvetica', 'normal')
-  doc.text('Name of Student:', MARGIN + 4, 47)
-  doc.setFont('helvetica', 'bold')
-  doc.text(studentName, MARGIN + 4 + doc.getTextWidth('Name of Student:  '), 47)
+    doc.setFont('helvetica', 'normal')
+    doc.text('Week No.:', MARGIN + 4, 54)
+    doc.setFont('helvetica', 'bold')
+    doc.text(String(weekNo), MARGIN + 4 + doc.getTextWidth('Week No.:  '), 54)
+  }
 
-  doc.setFont('helvetica', 'normal')
-  doc.text('Week No.:', MARGIN + 4, 54)
-  doc.setFont('helvetica', 'bold')
-  doc.text(String(weekNo), MARGIN + 4 + doc.getTextWidth('Week No.:  '), 54)
+  let photoOffset = 0
 
-  // ── Table ──
-  autoTable(doc, {
-    startY: 60,
-    margin: { top: 44, left: MARGIN, right: MARGIN, bottom: 20 },
-    head: [['DATE', 'Session', 'Accomplishments', 'No. of Hours', 'Attachments']],
-    body,
-    theme: 'grid',
-    styles: {
-      font: 'helvetica',
-      fontSize: 9,
-      textColor: INK,
-      cellPadding: 3,
-      valign: 'middle',
-      lineColor: ORANGE,
-      lineWidth: 0.2,
-    },
-    headStyles: {
-      fillColor: ORANGE,
-      textColor: WHITE,
-      fontStyle: 'bold',
-      halign: 'center',
-      valign: 'middle',
-    },
-    columnStyles: {
-      0: { cellWidth: 22 },
-      1: { cellWidth: 26 },
-      2: { cellWidth: 'auto', halign: 'left' },
-      3: { cellWidth: 20 },
-      4: { cellWidth: 46 },
-    },
-    didParseCell: (data) => {
-      // Give rows with an attachment enough height for the photo
-      if (
-        data.section === 'body' &&
-        data.column.index === 4 &&
-        photos[data.row.index]
-      ) {
-        data.cell.styles.minCellHeight = PHOTO_ROW_HEIGHT
-      }
-    },
-    didDrawCell: (data) => {
-      if (data.section !== 'body' || data.column.index !== 4) return
-      const img = photos[data.row.index]
-      if (!img) return
-      const pad = 2
-      const { w, h } = fit(img, data.cell.width - pad * 2, data.cell.height - pad * 2)
-      doc.addImage(
-        img.dataUrl,
-        'JPEG',
-        data.cell.x + (data.cell.width - w) / 2,
-        data.cell.y + (data.cell.height - h) / 2,
-        w,
-        h,
-      )
-    },
-    didDrawPage: (data) => {
-      if (data.pageNumber > 1) drawHeader()
-    },
+  weeks.forEach((week, weekIdx) => {
+    const { body, photoUrls } = built[weekIdx]
+    const photos = allPhotos.slice(photoOffset, photoOffset + photoUrls.length)
+    photoOffset += photoUrls.length
+
+    // Every week starts on a fresh page with its own header and week number
+    if (weekIdx > 0) doc.addPage()
+    drawHeader()
+    drawStudentInfo(week.weekNo)
+
+    const startPage = doc.getNumberOfPages()
+
+    // ── Table ──
+    autoTable(doc, {
+      startY: 60,
+      margin: { top: 44, left: MARGIN, right: MARGIN, bottom: 20 },
+      head: [['DATE', 'Session', 'Accomplishments', 'No. of Hours', 'Attachments']],
+      body,
+      theme: 'grid',
+      styles: {
+        font: 'helvetica',
+        fontSize: 9,
+        textColor: INK,
+        cellPadding: 3,
+        valign: 'middle',
+        lineColor: ORANGE,
+        lineWidth: 0.2,
+      },
+      headStyles: {
+        fillColor: ORANGE,
+        textColor: WHITE,
+        fontStyle: 'bold',
+        halign: 'center',
+        valign: 'middle',
+      },
+      columnStyles: {
+        0: { cellWidth: 22 },
+        1: { cellWidth: 26 },
+        2: { cellWidth: 'auto', halign: 'left' },
+        3: { cellWidth: 20 },
+        4: { cellWidth: 46 },
+      },
+      didParseCell: (data) => {
+        // Give rows with an attachment enough height for the photo
+        if (
+          data.section === 'body' &&
+          data.column.index === 4 &&
+          photos[data.row.index]
+        ) {
+          data.cell.styles.minCellHeight = PHOTO_ROW_HEIGHT
+        }
+      },
+      didDrawCell: (data) => {
+        if (data.section !== 'body' || data.column.index !== 4) return
+        const img = photos[data.row.index]
+        if (!img) return
+        const pad = 2
+        const { w, h } = fit(img, data.cell.width - pad * 2, data.cell.height - pad * 2)
+        doc.addImage(
+          img.dataUrl,
+          'JPEG',
+          data.cell.x + (data.cell.width - w) / 2,
+          data.cell.y + (data.cell.height - h) / 2,
+          w,
+          h,
+        )
+      },
+      didDrawPage: (data) => {
+        // Only the continuation pages of this week's table need the header redrawn
+        if (data.pageNumber > startPage) drawHeader()
+      },
+    })
+
+    // ── Signatures ──
+    let y = (doc.lastAutoTable?.finalY ?? 100) + 14
+    if (y + 36 > pageH - 10) {
+      doc.addPage()
+      drawHeader()
+      y = 50
+    }
+
+    const leftX = MARGIN + 8
+    const rightX = pageW - MARGIN - 62
+
+    // Labels
+    doc.setTextColor(...INK).setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.text('Noted by:', leftX, y)
+    doc.text('Prepared by:', rightX, y)
+
+    // Signature lines
+    doc.setDrawColor(...MUTED).setLineWidth(0.4)
+    doc.line(leftX, y + 18, leftX + 70, y + 18)
+    doc.line(rightX, y + 18, rightX + 70, y + 18)
+
+    // Names
+    doc.setFont('helvetica', 'bold').setFontSize(9)
+    doc.text(supervisorBy.name.toUpperCase(), leftX, y + 14)
+    doc.text(studentBy.name.toUpperCase(), rightX, y + 14)
+
+    // Sub-labels (position + company name | Intern)
+    doc.setFont('helvetica', 'normal').setFontSize(8.5)
+    let subY = y + 24
+    if (supervisorBy.title) {
+      doc.text(supervisorBy.title.toUpperCase(), leftX, subY)
+      subY += 4
+    }
+    if (supervisorBy.organization) {
+      doc.text(supervisorBy.organization.toUpperCase(), leftX, subY)
+    }
+    doc.text('Intern', rightX, y + 24)
   })
 
-  // ── Signatures ──
-  let y = (doc.lastAutoTable?.finalY ?? 100) + 14
-  if (y + 36 > pageH - 10) {
-    doc.addPage()
-    drawHeader()
-    y = 50
+  return {
+    blob: doc.output('blob'),
+    fileName,
   }
-
-  const leftX = MARGIN + 8
-  const rightX = pageW - MARGIN - 62
-
-  // Labels
-  doc.setTextColor(...INK).setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.text('Noted by:', leftX, y)
-  doc.text('Prepared by:', rightX, y)
-
-  // Signature lines
-  doc.setDrawColor(...MUTED).setLineWidth(0.4)
-  doc.line(leftX, y + 18, leftX + 70, y + 18)
-  doc.line(rightX, y + 18, rightX + 70, y + 18)
-
-  // Names
-  doc.setFont('helvetica', 'bold').setFontSize(9)
-  doc.text(supervisorBy.name.toUpperCase(), leftX, y + 14)
-  doc.text(studentBy.name.toUpperCase(), rightX, y + 14)
-
-  // Sub-labels (position + company name | Intern)
-  doc.setFont('helvetica', 'normal').setFontSize(8.5)
-  let subY = y + 24
-  if (supervisorBy.title) {
-    doc.text(supervisorBy.title.toUpperCase(), leftX, subY)
-    subY += 4
-  }
-  if (supervisorBy.organization) {
-    doc.text(supervisorBy.organization.toUpperCase(), leftX, subY)
-  }
-  doc.text('INTERN', rightX, y + 24)
-
-  return { blob: doc.output('blob'), fileName }
 }
 
-/**
- * Saves a PDF blob to the user's device.
- */
-export function downloadPdfBlob(blob: Blob, fileName: string): void {
+// ── Download ──────────────────────────────────────────────────────
+
+/** Triggers a browser download for a PDF blob. */
+export function downloadPdfBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -424,14 +457,4 @@ export function downloadPdfBlob(blob: Blob, fileName: string): void {
   a.remove()
   // Give the browser a moment to start the download before freeing the URL
   setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-
-/**
- * Builds and immediately downloads the report (the old behaviour).
- * Kept for any other callers; the student details page now uses
- * buildWeeklyReportPdf + the preview modal instead.
- */
-export async function exportWeeklyReportPdf(options: WeeklyReportOptions): Promise<void> {
-  const { blob, fileName } = await buildWeeklyReportPdf(options)
-  downloadPdfBlob(blob, fileName)
 }

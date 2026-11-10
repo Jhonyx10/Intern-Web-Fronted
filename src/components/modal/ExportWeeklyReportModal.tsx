@@ -8,7 +8,11 @@ import { backdropVariants, panelVariants } from './ModalVariant'
 export type WeeklyReportExportInput = {
     weekDate: Date // any date inside the chosen week
     weekNo: number
+    /** When set, every week overlapping this range is exported (one section per week). */
+    range?: { from: Date; to: Date }
 }
+
+type Mode = 'week' | 'range'
 
 const inputClass =
     'rounded-xl w-full border border-[var(--color-line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]'
@@ -20,6 +24,8 @@ export default function ExportWeeklyReportModal({
     isExporting,
     defaultWeekDate,
     firstLogDate,
+    initialFrom,
+    initialTo,
 }: {
     open: boolean
     onClose: () => void
@@ -27,18 +33,35 @@ export default function ExportWeeklyReportModal({
     isExporting?: boolean
     defaultWeekDate: Date
     firstLogDate: Date | null
+    /** Page-level date filter ("yyyy-MM-dd"). When both are set the modal opens in Date range mode. */
+    initialFrom?: string
+    initialTo?: string
 }) {
+    const [mode, setMode] = useState<Mode>('week')
     const [weekDateStr, setWeekDateStr] = useState(format(defaultWeekDate, 'yyyy-MM-dd'))
     const [weekNoOverride, setWeekNoOverride] = useState('')
+    const [fromStr, setFromStr] = useState(format(defaultWeekDate, 'yyyy-MM-dd'))
+    const [toStr, setToStr] = useState(format(defaultWeekDate, 'yyyy-MM-dd'))
 
     // Fresh defaults every time the modal opens
     useEffect(() => {
         if (!open) return
-        setWeekDateStr(format(defaultWeekDate, 'yyyy-MM-dd'))
+        const today = format(defaultWeekDate, 'yyyy-MM-dd')
+        setWeekDateStr(today)
         setWeekNoOverride('')
+        if (initialFrom && initialTo) {
+            setMode('range')
+            setFromStr(initialFrom)
+            setToStr(initialTo)
+        } else {
+            setMode('week')
+            setFromStr(today)
+            setToStr(today)
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open])
 
+    // ── Single week ──
     const weekDate = useMemo(() => {
         const parsed = weekDateStr ? parseISO(weekDateStr) : defaultWeekDate
         return Number.isNaN(parsed.getTime()) ? defaultWeekDate : parsed
@@ -51,11 +74,46 @@ export default function ExportWeeklyReportModal({
     const suggestedWeekNo = suggestWeekNo(firstLogDate, weekDate)
     const weekNo = weekNoOverride ? Number(weekNoOverride) : suggestedWeekNo
 
+    // ── Date range ──
+    const rangeFrom = fromStr ? parseISO(fromStr) : null
+    const rangeTo = toStr ? parseISO(toStr) : null
+    const rangeValid =
+        !!rangeFrom &&
+        !!rangeTo &&
+        !Number.isNaN(rangeFrom.getTime()) &&
+        !Number.isNaN(rangeTo.getTime()) &&
+        rangeFrom.getTime() <= rangeTo.getTime()
+
+    const rangeSummary =
+        rangeValid && rangeFrom && rangeTo
+            ? `${format(rangeFrom, 'MMM d, yyyy')} – ${format(rangeTo, 'MMM d, yyyy')} · weeks ${suggestWeekNo(
+                firstLogDate,
+                rangeFrom,
+            )} to ${suggestWeekNo(firstLogDate, rangeTo)}`
+            : 'Please choose a valid range (start must be before end).'
+
     function submit(e: React.FormEvent) {
         e.preventDefault()
+
+        if (mode === 'range') {
+            if (!rangeValid || !rangeFrom || !rangeTo) return
+            onExport({
+                weekDate: rangeFrom,
+                weekNo: suggestWeekNo(firstLogDate, rangeFrom),
+                range: { from: rangeFrom, to: rangeTo },
+            })
+            return
+        }
+
         if (!weekNo || weekNo < 1) return
         onExport({ weekDate, weekNo })
     }
+
+    const tabClass = (active: boolean) =>
+        `flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${active
+            ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
+            : 'text-[var(--color-muted)] hover:text-[var(--color-ink)]'
+        }`
 
     return (
         <AnimatePresence>
@@ -82,7 +140,7 @@ export default function ExportWeeklyReportModal({
                                     Export Weekly Report
                                 </h2>
                                 <p className="text-xs text-[var(--color-muted)]">
-                                    Pick the week to include in the PDF.
+                                    Export one week, or every week in a date range.
                                 </p>
                             </div>
                             <button
@@ -97,40 +155,99 @@ export default function ExportWeeklyReportModal({
 
                         <div className="flex-1 overflow-y-auto px-5 py-4">
                             <form onSubmit={submit} className="flex flex-col gap-3.5">
-                                <label className="flex flex-col gap-1.5 text-sm">
-                                    <span className="font-medium text-[var(--color-ink)]">
-                                        Any date in the week
-                                    </span>
-                                    <input
-                                        type="date"
-                                        value={weekDateStr}
-                                        onChange={(e) => setWeekDateStr(e.target.value)}
-                                        required
-                                        className={inputClass}
-                                    />
-                                    <span className="text-xs text-[var(--color-muted)]">
-                                        Covers {rangeLabel}
-                                    </span>
-                                </label>
+                                {/* Mode switch */}
+                                <div className="flex gap-1 rounded-xl border border-[var(--color-line)] bg-white p-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setMode('week')}
+                                        className={tabClass(mode === 'week')}
+                                    >
+                                        Single week
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setMode('range')}
+                                        className={tabClass(mode === 'range')}
+                                    >
+                                        Date range
+                                    </button>
+                                </div>
 
-                                <label className="flex flex-col gap-1.5 text-sm">
-                                    <span className="font-medium text-[var(--color-ink)]">Week no.</span>
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        value={weekNoOverride}
-                                        onChange={(e) => setWeekNoOverride(e.target.value)}
-                                        placeholder={String(suggestedWeekNo)}
-                                        className={inputClass}
-                                    />
-                                    <span className="text-xs text-[var(--color-muted)]">
-                                        Leave blank to use week {suggestedWeekNo} (counted from the first time log).
-                                    </span>
-                                </label>
+                                {mode === 'week' ? (
+                                    <>
+                                        <label className="flex flex-col gap-1.5 text-sm">
+                                            <span className="font-medium text-[var(--color-ink)]">
+                                                Any date in the week
+                                            </span>
+                                            <input
+                                                type="date"
+                                                value={weekDateStr}
+                                                onChange={(e) => setWeekDateStr(e.target.value)}
+                                                required
+                                                className={inputClass}
+                                            />
+                                            <span className="text-xs text-[var(--color-muted)]">
+                                                Covers {rangeLabel}
+                                            </span>
+                                        </label>
+
+                                        <label className="flex flex-col gap-1.5 text-sm">
+                                            <span className="font-medium text-[var(--color-ink)]">Week no.</span>
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                value={weekNoOverride}
+                                                onChange={(e) => setWeekNoOverride(e.target.value)}
+                                                placeholder={String(suggestedWeekNo)}
+                                                className={inputClass}
+                                            />
+                                            <span className="text-xs text-[var(--color-muted)]">
+                                                Leave blank to use week {suggestedWeekNo} (counted from the first time log).
+                                            </span>
+                                        </label>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <label className="flex flex-col gap-1.5 text-sm">
+                                                <span className="font-medium text-[var(--color-ink)]">From</span>
+                                                <input
+                                                    type="date"
+                                                    value={fromStr}
+                                                    max={toStr || undefined}
+                                                    onChange={(e) => setFromStr(e.target.value)}
+                                                    required
+                                                    className={inputClass}
+                                                />
+                                            </label>
+                                            <label className="flex flex-col gap-1.5 text-sm">
+                                                <span className="font-medium text-[var(--color-ink)]">To</span>
+                                                <input
+                                                    type="date"
+                                                    value={toStr}
+                                                    min={fromStr || undefined}
+                                                    onChange={(e) => setToStr(e.target.value)}
+                                                    required
+                                                    className={inputClass}
+                                                />
+                                            </label>
+                                        </div>
+                                        <p
+                                            className={`text-xs ${rangeValid ? 'text-[var(--color-muted)]' : 'text-rose-600'
+                                                }`}
+                                        >
+                                            {rangeSummary}
+                                        </p>
+                                        <p className="text-xs text-[var(--color-muted)]">
+                                            Each week goes on its own page. Only days inside the range are
+                                            included, and weeks with no time logs are skipped.
+                                        </p>
+                                    </>
+                                )}
 
                                 <button
                                     type="submit"
-                                    disabled={isExporting}
+                                    disabled={isExporting || (mode === 'range' && !rangeValid)}
                                     className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
                                 >
                                     {isExporting ? 'Generating…' : 'Export PDF'}

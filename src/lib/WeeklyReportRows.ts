@@ -1,4 +1,13 @@
-import { addDays, differenceInCalendarWeeks, format, startOfWeek } from 'date-fns'
+import {
+  addDays,
+  addWeeks,
+  differenceInCalendarWeeks,
+  endOfDay,
+  format,
+  parseISO,
+  startOfDay,
+  startOfWeek,
+} from 'date-fns'
 import type { TimeLog } from '@/types'
 import type { WeeklyReportRow, WeeklyReportSession } from './weeklyReportPdf'
 
@@ -158,9 +167,8 @@ function toSession(acc: Acc): WeeklyReportSession {
       : '—',
     hours: Math.round((acc.minutes / 60) * 10) / 10,
     timeRange: hasRange
-      ? `${format(acc.start as number, 'h:mm a')} – ${
-          acc.end !== null ? format(acc.end, 'h:mm a') : 'ongoing'
-        }`
+      ? `${format(acc.start as number, 'h:mm a')} – ${acc.end !== null ? format(acc.end, 'h:mm a') : 'ongoing'
+      }`
       : undefined,
     photoUrl: acc.photoUrl,
   }
@@ -273,4 +281,43 @@ export function buildWeeklyReportRows(
   }
 
   return rows
+}
+
+export type WeeklyReportWeek = {
+  weekNo: number
+  rows: WeeklyReportRow[]
+}
+
+/**
+ * Every Mon–Fri week that overlaps [from, to], one entry per week.
+ * Only the days inside the range are kept (so Jan 1 to Jan 20 starts on Jan 1,
+ * not on that week's Monday) and weeks with no time logs are skipped.
+ * Week numbers are counted from the student's first time log, like the
+ * single-week export.
+ */
+export function buildWeeklyReportWeeks(
+  timeLogs: TimeLog[],
+  from: Date,
+  to: Date,
+  firstLogDate: Date | null,
+): WeeklyReportWeek[] {
+  const start = startOfDay(from).getTime()
+  const end = endOfDay(to).getTime()
+  const weeks: WeeklyReportWeek[] = []
+
+  for (
+    let monday = startOfWeek(from, { weekStartsOn: 1 });
+    monday.getTime() <= end;
+    monday = addWeeks(monday, 1)
+  ) {
+    const rows = buildWeeklyReportRows(timeLogs, monday).filter((r) => {
+      const d = typeof r.date === 'string' ? parseISO(r.date) : r.date
+      return d.getTime() >= start && d.getTime() <= end
+    })
+
+    if (rows.length === 0 || rows.every((r) => r.empty)) continue
+    weeks.push({ weekNo: suggestWeekNo(firstLogDate, monday), rows })
+  }
+
+  return weeks
 }

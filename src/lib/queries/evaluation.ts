@@ -70,29 +70,28 @@ export interface EvaluationTemplateDetail {
   anchored_school_years_count?: number;
 }
 
-// Hook to fetch active courses for multi-selection
-export const useCourses = (token?: string | null) => {
-  return useQuery({
-    queryKey: queryKeys.courses?.all ?? ['courses'],
-    queryFn: () => apiRequest<Program[]>('/courses', { token }),
-  });
-};
+export interface EvaluationHistoryTemplate {
+  id: number;
+  title: string;
+  description: string | null;
+  is_active: boolean;
+  items_count: number;
+  assigned_count: number;
+  submitted_count: number;
+  pending_count: number;
+  average_score: number | null;
+}
 
-// Fetch a single evaluation template, including its questions and creator
-export const useEvaluationTemplate = (id?: number | string, token?: string | null) => {
-  return useQuery({
-    queryKey: queryKeys.evaluations.templateDetail(id!),
-    queryFn: () => apiRequest<EvaluationTemplateDetail>(`/show/evaluation/${id}`, { token }),
-    enabled: !!id,
-  });
-};
-
-export const useEvaluationTemplates = (token?: string | null) => {
-  return useQuery({
-    queryKey: queryKeys.evaluations.templates(),
-    queryFn: () => apiRequest<EvaluationTemplateDetail[]>('/evaluation-templates', { token }), // Adjust endpoint path if yours differs
-  });
-};
+export interface EvaluationHistoryYear {
+  id: number;
+  name: string;
+  semester: string | null;
+  is_current: boolean;
+  templates_count: number;
+  assigned_count: number;
+  submitted_count: number;
+  templates: EvaluationHistoryTemplate[];
+}
 
 export interface EvaluationSubmission {
   id: number;
@@ -118,6 +117,30 @@ export interface EvaluationSubmission {
   school_year: string | null;
   semester?: string | null;
 }
+
+// Hook to fetch active courses for multi-selection
+export const useCourses = (token?: string | null) => {
+  return useQuery({
+    queryKey: queryKeys.courses?.all ?? ['courses'],
+    queryFn: () => apiRequest<Program[]>('/courses', { token }),
+  });
+};
+
+// Fetch a single evaluation template, including its questions and creator
+export const useEvaluationTemplate = (id?: number | string, token?: string | null) => {
+  return useQuery({
+    queryKey: queryKeys.evaluations.templateDetail(id!),
+    queryFn: () => apiRequest<EvaluationTemplateDetail>(`/show/evaluation/${id}`, { token }),
+    enabled: !!id,
+  });
+};
+
+export const useEvaluationTemplates = (token?: string | null) => {
+  return useQuery({
+    queryKey: queryKeys.evaluations.templates(),
+    queryFn: () => apiRequest<EvaluationTemplateDetail[]>('/evaluation-templates', { token }), // Adjust endpoint path if yours differs
+  });
+};
 
 /** Fetch all supervisor-submitted evaluations for a given template. */
 export const useEvaluationSubmissions = (templateId?: number | string, token?: string | null) => {
@@ -239,3 +262,10 @@ export const useDuplicateEvaluationTemplate = (token?: string | null) => {
     onError: (error) => toastMutationError(error, 'Failed to duplicate template'),
   });
 };
+
+export const useEvaluationHistory = (enabled = true, token?: string | null) =>
+  useQuery({
+    queryKey: ['evaluation-history'],
+    queryFn: () => apiRequest<EvaluationHistoryYear[]>('/evaluation-history', { token }),
+    enabled,
+  });

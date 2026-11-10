@@ -11,18 +11,24 @@ import {
   Loader2,
   ClipboardList,
   CalendarDays,
+  History,
+  LayoutList,
 } from "lucide-react";
 import {
   useEvaluationTemplates,
   useDuplicateEvaluationTemplate,
+  useEvaluationHistory,
   type EvaluationTemplateDetail,
+  type EvaluationHistoryYear,
 } from "@/lib/queries/evaluation";
 import { useAuth } from "@/lib/auth";
 import { useCurrentSchoolYear } from "@/lib/queries/school-year";
 import { EvaluationPreviewModal } from "@/components/modal/EvaluationPreviewModal";
+import { EvaluationYearTemplatesModal } from "@/components/modal/EvaluationYearTemplatesModal";
 
 type QuickFilter = "all" | "editable" | "locked";
 type StatusFilter = "all" | "active" | "inactive";
+type LibraryView = "templates" | "history";
 
 // The list endpoint also returns how many evaluations were submitted
 type TemplateRow = EvaluationTemplateDetail & { submitted_count?: number };
@@ -56,6 +62,20 @@ function StatCard({
       </p>
       <p className="mt-1 text-xs text-[var(--color-muted)]">{caption}</p>
     </div>
+  );
+}
+
+// ── Status badge ──────────────────────────────────────────────────
+
+function StatusBadge({ active }: { active: boolean }) {
+  return active ? (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Active
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-300/60">
+      <span className="h-1.5 w-1.5 rounded-full bg-slate-400" /> Inactive
+    </span>
   );
 }
 
@@ -143,6 +163,39 @@ function RowMenu({ items }: { items: MenuItem[] }) {
   );
 }
 
+// ── Templates / History toggle ────────────────────────────────────
+
+function ViewToggle({
+  value,
+  onChange,
+}: {
+  value: LibraryView;
+  onChange: (v: LibraryView) => void;
+}) {
+  const options: { key: LibraryView; label: string; icon: React.ElementType }[] = [
+    { key: "templates", label: "Templates", icon: LayoutList },
+    { key: "history", label: "History", icon: History },
+  ];
+
+  return (
+    <div className="inline-flex rounded-xl border border-[var(--color-line)] bg-white p-1 shadow-xs">
+      {options.map(({ key, label, icon: Icon }) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${value === key
+            ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
+            : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+            }`}
+        >
+          <Icon size={13} /> {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────
 
 export const EvaluationPage: React.FC = () => {
@@ -151,6 +204,9 @@ export const EvaluationPage: React.FC = () => {
   const isSuperAdmin = user?.role?.name === "super_admin";
   const { data: currentSchoolYear } = useCurrentSchoolYear();
 
+  const [view, setView] = useState<LibraryView>("templates");
+  const [historyYear, setHistoryYear] = useState<EvaluationHistoryYear | null>(null);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -158,6 +214,9 @@ export const EvaluationPage: React.FC = () => {
   const [previewTemplateId, setPreviewTemplateId] = useState<number | string | null>(null);
 
   const { data: templates = [], isLoading } = useEvaluationTemplates();
+  const { data: history = [], isLoading: historyLoading } = useEvaluationHistory(
+    view === "history"
+  );
   const duplicateMutation = useDuplicateEvaluationTemplate();
 
   // Every school year that at least one template is anchored to
@@ -170,6 +229,7 @@ export const EvaluationPage: React.FC = () => {
   const editableCount = templates.filter((t) => !t.is_used).length;
   const lockedCount = templates.filter((t) => t.is_used).length;
   const activeCount = templates.filter((t) => t.is_active).length;
+  const inactiveCount = templates.length - activeCount;
 
   const filteredTemplates = templates.filter((template) => {
     if (quickFilter === "editable" && template.is_used) return false;
@@ -218,7 +278,7 @@ export const EvaluationPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2.5 flex-wrap">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--color-muted)]">
-              Evaluation setup / Templates
+              Evaluation setup / {view === "history" ? "History" : "Templates"}
             </p>
             {currentSchoolYear && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 shadow-2xs">
@@ -234,297 +294,365 @@ export const EvaluationPage: React.FC = () => {
             Evaluation library
           </h1>
           <p className="mt-1.5 text-sm text-[var(--color-muted)]">
-            Build, reuse, and preview OJT evaluation questionnaires.
+            {view === "history"
+              ? "Browse the evaluation templates used in each school year."
+              : "Build, reuse, and preview OJT evaluation questionnaires."}
           </p>
         </div>
 
-        {isSuperAdmin && (
-          <button
-            type="button"
-            onClick={() => navigate("/evaluation/create")}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
-          >
-            <Plus size={16} /> New template
-          </button>
-        )}
-      </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <ViewToggle value={view} onChange={setView} />
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard
-          label="All templates"
-          value={templates.length}
-          caption="Named templates"
-        />
-        <StatCard
-          label="Editable"
-          value={editableCount}
-          caption="Available to update"
-        />
-        <StatCard
-          label="Used / locked"
-          value={lockedCount}
-          caption="Duplicate to make changes"
-        />
-        <StatCard
-          label="Active"
-          value={activeCount}
-          caption="Open for assignment"
-        />
-      </div>
-
-      {/* Browse panel */}
-      <section className="rounded-2xl border border-[var(--color-line)] bg-white shadow-sm">
-        <div className="space-y-4 p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight text-[var(--color-ink)]">
-                Browse templates
-              </h2>
-              <p className="mt-0.5 text-sm text-[var(--color-muted)]">
-                {filteredTemplates.length} matching template
-                {filteredTemplates.length === 1 ? "" : "s"}.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-1.5">
-              {pills.map((pill) => {
-                const active = quickFilter === pill.key;
-                return (
-                  <button
-                    key={pill.key}
-                    type="button"
-                    onClick={() => setQuickFilter(pill.key)}
-                    className={`rounded-full px-3 py-1 text-xs font-semibold transition ${active
-                      ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
-                      : "text-[var(--color-muted)] hover:bg-slate-50 hover:text-[var(--color-ink)]"
-                      }`}
-                  >
-                    {pill.label} ({pill.count})
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <label className="flex flex-1 items-center gap-2.5 rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-sm text-[var(--color-muted)] transition focus-within:border-[var(--color-accent)] focus-within:ring-2 focus-within:ring-[var(--color-accent-soft)]">
-              <Search size={15} />
-              <input
-                type="text"
-                placeholder="Search name, description, or school year"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="flex-1 bg-transparent text-[var(--color-ink)] outline-none placeholder:text-[var(--color-muted)]"
-              />
-            </label>
-
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-              aria-label="Filter by status"
-              className="rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-sm text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)] sm:w-48"
+          {isSuperAdmin && (
+            <button
+              type="button"
+              onClick={() => navigate("/evaluation/create")}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
             >
-              <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-
-            <select
-              value={yearFilter}
-              onChange={(e) => setYearFilter(e.target.value)}
-              aria-label="Filter by school year"
-              className="rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-sm text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)] sm:w-52"
-            >
-              <option value="all">All school years</option>
-              {schoolYearOptions.map((sy) => (
-                <option key={sy} value={sy}>
-                  S.Y. {sy}
-                </option>
-              ))}
-            </select>
-          </div>
+              <Plus size={16} /> New template
+            </button>
+          )}
         </div>
+      </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto border-t border-[var(--color-line)]">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
-                <th className="px-6 py-3.5">Template</th>
-                <th className="px-4 py-3.5">School Year / Semester</th>
-                <th className="px-4 py-3.5">Questions</th>
-                <th className="px-4 py-3.5">Anchored Usage</th>
-                <th className="px-6 py-3.5 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-14 text-center">
-                    <Loader2
-                      className="mx-auto animate-spin text-[var(--color-accent)]"
-                      size={24}
-                    />
-                    <span className="mt-2 block text-xs text-[var(--color-muted)]">
-                      Loading templates…
-                    </span>
-                  </td>
-                </tr>
-              ) : filteredTemplates.length > 0 ? (
-                <AnimatePresence>
-                  {filteredTemplates.map((template: TemplateRow) => {
-                    const used = Boolean(template.is_used);
-                    const schoolYears = template.used_in_school_years ?? [];
-                    const submittedCount = template.submitted_count;
-                    const anchoredCount = template.anchored_school_years_count ?? schoolYears.length;
-                    const createdSchoolYear = template.created_school_year || (schoolYears[0] ?? "—");
-                    const createdSemester = template.created_semester ?? null;
+      {view === "templates" ? (
+        <>
+          {/* Stat cards */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <StatCard
+              label="All templates"
+              value={templates.length}
+              caption="Named templates"
+            />
+            <StatCard
+              label="Editable"
+              value={editableCount}
+              caption="Available to update"
+            />
+            <StatCard
+              label="Used / locked"
+              value={lockedCount}
+              caption="Duplicate to make changes"
+            />
+            <StatCard
+              label="Active"
+              value={activeCount}
+              caption={`${inactiveCount} inactive`}
+            />
+          </div>
 
+          {/* Browse panel */}
+          <section className="rounded-2xl border border-[var(--color-line)] bg-white shadow-sm">
+            <div className="space-y-4 p-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold tracking-tight text-[var(--color-ink)]">
+                    Browse templates
+                  </h2>
+                  <p className="mt-0.5 text-sm text-[var(--color-muted)]">
+                    {filteredTemplates.length} matching template
+                    {filteredTemplates.length === 1 ? "" : "s"}.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {pills.map((pill) => {
+                    const active = quickFilter === pill.key;
                     return (
-                      <motion.tr
-                        key={template.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="group transition-colors hover:bg-slate-50/70"
+                      <button
+                        key={pill.key}
+                        type="button"
+                        onClick={() => setQuickFilter(pill.key)}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold transition ${active
+                          ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
+                          : "text-[var(--color-muted)] hover:bg-slate-50 hover:text-[var(--color-ink)]"
+                          }`}
                       >
-                        {/* Template */}
-                        <td className="border-l-2 border-l-transparent px-6 py-4 group-hover:border-l-[var(--color-accent)]">
-                          <p className="font-semibold text-[var(--color-ink)]">
-                            {template.title}
-                          </p>
-                          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-                            Created {formatDate(template.created_at)} ·{" "}
-                            {used ? "Locked after assignment" : "Editable"}
-                          </p>
-                          {template.description && (
-                            <p
-                              className="mt-0.5 max-w-sm truncate text-xs text-[var(--color-muted)]"
-                              title={template.description}
-                            >
-                              {template.description}
-                            </p>
-                          )}
-                        </td>
-
-                        {/* School Year / Semester */}
-                        <td className="px-4 py-4 whitespace-nowrap">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
-                              S.Y. {createdSchoolYear}
-                            </span>
-                            {createdSemester && (
-                              <span className="inline-flex items-center rounded-md border border-[var(--color-line)] bg-slate-50 px-2.5 py-1 text-xs font-medium text-[var(--color-ink)]">
-                                {createdSemester}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Questions */}
-                        <td className="px-4 py-4">
-                          <span className="inline-flex items-center rounded-full border border-[var(--color-line)] bg-slate-50 px-2.5 py-0.5 text-xs font-semibold text-[var(--color-ink)]">
-                            {template.items_count ?? 0} item
-                            {(template.items_count ?? 0) === 1 ? "" : "s"}
-                          </span>
-                        </td>
-
-                        {/* Usage */}
-                        <td className="px-4 py-4 text-right">
-                          <span
-                            title={
-                              schoolYears.length > 0
-                                ? `Used in S.Y. ${schoolYears.join(", ")}`
-                                : "Not used yet"
-                            }
-                            className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700"
-                          >
-                            {anchoredCount}
-                          </span>
-                        </td>
-
-                        {/* Actions */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center justify-end gap-2">
-                            {/* Preview the questionnaire itself */}
-                            <button
-                              type="button"
-                              onClick={() => setPreviewTemplateId(template.id)}
-                              title="Preview the questionnaire"
-                              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-3 text-xs font-semibold text-[var(--color-ink)] transition hover:bg-slate-50"
-                            >
-                              <Eye size={13} /> Preview
-                            </button>
-
-                            {/* List of evaluations answered and submitted */}
-                            {user?.role?.name !== 'super_admin' && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  navigate(`/evaluation/submissions/${template.id}`)
-                                }
-                                title="View submitted evaluations"
-                                className="relative inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-3 text-xs font-semibold text-[var(--color-ink)] transition hover:bg-slate-50"
-                              >
-                                <ClipboardList size={13} /> Submissions
-                                {submittedCount !== undefined && submittedCount > 0 ? (
-                                  <span className="ml-0.5 inline-flex items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-xs animate-pulse">
-                                    {submittedCount}
-                                  </span>
-                                ) : (
-                                  <span className="ml-0.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
-                                    0
-                                  </span>
-                                )}
-                              </button>
-                            )}
-
-                            {isSuperAdmin && (
-                              <RowMenu
-                                items={
-                                  used
-                                    ? [
-                                      {
-                                        label: "Duplicate & edit",
-                                        icon: Copy,
-                                        onClick: () => duplicate(template),
-                                        disabled: duplicateMutation.isPending,
-                                      },
-                                    ]
-                                    : [
-                                      {
-                                        label: "Edit template",
-                                        icon: Edit3,
-                                        onClick: () =>
-                                          navigate(
-                                            `/evaluation/edit/${template.id}`
-                                          ),
-                                      },
-                                    ]
-                                }
-                              />
-                            )}
-                          </div>
-                        </td>
-                      </motion.tr>
+                        {pill.label} ({pill.count})
+                      </button>
                     );
                   })}
-                </AnimatePresence>
-              ) : (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-6 py-14 text-center text-sm text-[var(--color-muted)]"
-                  >
-                    No evaluation templates match your filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <label className="flex flex-1 items-center gap-2.5 rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-sm text-[var(--color-muted)] transition focus-within:border-[var(--color-accent)] focus-within:ring-2 focus-within:ring-[var(--color-accent-soft)]">
+                  <Search size={15} />
+                  <input
+                    type="text"
+                    placeholder="Search name, description, or school year"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="flex-1 bg-transparent text-[var(--color-ink)] outline-none placeholder:text-[var(--color-muted)]"
+                  />
+                </label>
+
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                  aria-label="Filter by status"
+                  className="rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-sm text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)] sm:w-48"
+                >
+                  <option value="all">All statuses</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+
+                <select
+                  value={yearFilter}
+                  onChange={(e) => setYearFilter(e.target.value)}
+                  aria-label="Filter by school year"
+                  className="rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2.5 text-sm text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)] sm:w-52"
+                >
+                  <option value="all">All school years</option>
+                  {schoolYearOptions.map((sy) => (
+                    <option key={sy} value={sy}>
+                      S.Y. {sy}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto border-t border-[var(--color-line)]">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
+                    <th className="px-4 py-3.5">Template</th>
+                    <th className="px-4 py-3.5">School Year / Semester</th>
+                    <th className="px-4 py-3.5">Questions</th>
+                    <th className="px-4 py-3.5">Status</th>
+                    <th className="px-4 py-3.5">Usage</th>
+                    <th className="px-4 py-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-line)] border-t border-[var(--color-line)]">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-14 text-center">
+                        <Loader2
+                          className="mx-auto animate-spin text-[var(--color-accent)]"
+                          size={24}
+                        />
+                        <span className="mt-2 block text-xs text-[var(--color-muted)]">
+                          Loading templates…
+                        </span>
+                      </td>
+                    </tr>
+                  ) : filteredTemplates.length > 0 ? (
+                    <AnimatePresence>
+                      {filteredTemplates.map((template: TemplateRow) => {
+                        const used = Boolean(template.is_used);
+                        const schoolYears = template.used_in_school_years ?? [];
+                        const submittedCount = template.submitted_count;
+                        const anchoredCount = template.anchored_school_years_count ?? schoolYears.length;
+                        const createdSchoolYear = template.created_school_year || (schoolYears[0] ?? "—");
+                        const createdSemester = template.created_semester ?? null;
+
+                        return (
+                          <motion.tr
+                            key={template.id}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="group transition-colors hover:bg-slate-50/70"
+                          >
+                            {/* Template */}
+                            <td className="border-l-2 border-l-transparent px-4 py-4 group-hover:border-l-[var(--color-accent)]">
+                              <p className="font-semibold text-[var(--color-ink)]">
+                                {template.title}
+                              </p>
+                              <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+                                Created {formatDate(template.created_at)} ·{" "}
+                                {used ? "Locked after assignment" : "Editable"}
+                              </p>
+                              {template.description && (
+                                <p
+                                  className="mt-0.5 max-w-[14rem] truncate text-xs text-[var(--color-muted)]"
+                                  title={template.description}
+                                >
+                                  {template.description}
+                                </p>
+                              )}
+                            </td>
+
+                            {/* School Year / Semester */}
+                            <td className="px-4 py-4">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                                  S.Y. {createdSchoolYear}
+                                </span>
+                                {createdSemester && (
+                                  <span className="inline-flex items-center rounded-md border border-[var(--color-line)] bg-slate-50 px-2.5 py-1 text-xs font-medium text-[var(--color-ink)]">
+                                    {createdSemester}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Questions */}
+                            <td className="px-4 py-4">
+                              <span className="inline-flex items-center rounded-full border border-[var(--color-line)] bg-slate-50 px-2.5 py-0.5 text-xs font-semibold text-[var(--color-ink)]">
+                                {template.items_count ?? 0} item
+                                {(template.items_count ?? 0) === 1 ? "" : "s"}
+                              </span>
+                            </td>
+
+                            {/* Status */}
+                            <td className="px-4 py-4">
+                              <StatusBadge active={Boolean(template.is_active)} />
+                            </td>
+
+                            {/* Usage */}
+                            <td className="px-4 py-4">
+                              <span
+                                title={
+                                  schoolYears.length > 0
+                                    ? `Used in S.Y. ${schoolYears.join(", ")}`
+                                    : "Not used yet"
+                                }
+                                className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700"
+                              >
+                                {anchoredCount}
+                              </span>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="px-4 py-4">
+                              <div className="flex flex-nowrap items-center justify-end gap-2">
+                                {/* Preview the questionnaire itself */}
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewTemplateId(template.id)}
+                                  title="Preview the questionnaire"
+                                  aria-label="Preview the questionnaire"
+                                  className="inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2 text-xs font-semibold text-[var(--color-ink)] transition hover:bg-slate-50"
+                                >
+                                  <Eye size={14} />
+                                  <span className="hidden 2xl:inline">Preview</span>
+                                </button>
+
+                                {/* List of evaluations answered and submitted */}
+                                {user?.role?.name !== "super_admin" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => navigate(`/evaluation/submissions/${template.id}`)}
+                                    title={`View submitted evaluations (${submittedCount ?? 0})`}
+                                    aria-label={`View submitted evaluations (${submittedCount ?? 0})`}
+                                    className="relative inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2 text-xs font-semibold text-[var(--color-ink)] transition hover:bg-slate-50"
+                                  >
+                                    <ClipboardList size={14} />
+                                    <span className="hidden 2xl:inline">Submissions</span>
+                                    {submittedCount !== undefined && submittedCount > 0 && (
+                                      <span className="absolute -right-1.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold leading-none text-white shadow-xs ring-2 ring-white">
+                                        {submittedCount > 99 ? "99+" : submittedCount}
+                                      </span>
+                                    )}
+                                  </button>
+                                )}
+
+                                {isSuperAdmin && (
+                                  <RowMenu
+                                    items={
+                                      used
+                                        ? [
+                                          {
+                                            label: "Duplicate & edit",
+                                            icon: Copy,
+                                            onClick: () => duplicate(template),
+                                            disabled: duplicateMutation.isPending,
+                                          },
+                                        ]
+                                        : [
+                                          {
+                                            label: "Edit template",
+                                            icon: Edit3,
+                                            onClick: () => navigate(`/evaluation/edit/${template.id}`),
+                                          },
+                                        ]
+                                    }
+                                  />
+                                )}
+                              </div>
+                            </td>
+                          </motion.tr>
+                        );
+                      })}
+                    </AnimatePresence>
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-6 py-14 text-center text-sm text-[var(--color-muted)]"
+                      >
+                        No evaluation templates match your filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      ) : historyLoading ? (
+        <div className="grid place-items-center py-24">
+          <Loader2 className="animate-spin text-[var(--color-accent)]" size={28} />
         </div>
-      </section>
+      ) : history.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-[var(--color-line)] py-20 text-center text-sm text-[var(--color-muted)]">
+          No school year has used an evaluation template yet.
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {history.map((y) => (
+            <button
+              key={y.id}
+              type="button"
+              onClick={() => setHistoryYear(y)}
+              className="rounded-2xl border border-[var(--color-line)] bg-white px-5 py-4 text-left shadow-sm transition hover:border-[var(--color-accent)] hover:shadow-md"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                  <CalendarDays size={12} /> S.Y. {y.name}
+                </span>
+                {y.is_current && (
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                    Current
+                  </span>
+                )}
+              </div>
+              {y.semester && (
+                <p className="mt-2 text-xs text-[var(--color-muted)]">{y.semester}</p>
+              )}
+              <p className="mt-3 text-2xl font-bold tracking-tight text-[var(--color-ink)]">
+                {y.templates_count}
+                <span className="ml-1.5 text-xs font-medium text-[var(--color-muted)]">
+                  template{y.templates_count === 1 ? "" : "s"} used
+                </span>
+              </p>
+              <p className="mt-1 text-xs text-[var(--color-muted)]">
+                {y.assigned_count} assigned · {y.submitted_count} submitted
+              </p>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Year → templates modal (before the preview modal so the preview opens on top) */}
+      <EvaluationYearTemplatesModal
+        year={historyYear}
+        onClose={() => setHistoryYear(null)}
+        onPreview={(tid) => setPreviewTemplateId(tid)}
+        onViewSubmissions={
+          user?.role?.name !== "super_admin"
+            ? (tid, sy) =>
+              navigate(
+                `/evaluation/submissions/${tid}?school_year=${encodeURIComponent(sy)}`
+              )
+            : undefined
+        }
+      />
 
       <EvaluationPreviewModal
         isOpen={!!previewTemplateId}

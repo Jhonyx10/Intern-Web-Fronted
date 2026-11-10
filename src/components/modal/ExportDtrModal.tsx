@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   format,
@@ -34,6 +34,9 @@ interface Props {
   onClose: () => void;
   onCSV: (range: DateRange | null) => void;
   onPDF: (range: DateRange | null) => void;
+  /** Page-level date filter ("yyyy-MM-dd"). When both are set the modal opens on "Custom dates" with them. */
+  initialFrom?: string;
+  initialTo?: string;
 }
 
 /** Collapses/expands its children smoothly when mounted/unmounted. */
@@ -52,7 +55,7 @@ function Reveal({ children, id }: { children: React.ReactNode; id: string }) {
   );
 }
 
-export function ExportDTRModal({ open, onClose, onCSV, onPDF }: Props) {
+export function ExportDTRModal({ open, onClose, onCSV, onPDF, initialFrom, initialTo }: Props) {
   const today = new Date();
   const [mode, setMode] = useState<Mode>("this_month");
   const [from, setFrom] = useState(format(today, "yyyy-MM-dd"));
@@ -60,6 +63,16 @@ export function ExportDTRModal({ open, onClose, onCSV, onPDF }: Props) {
   const [fromMonth, setFromMonth] = useState(format(today, "yyyy-MM"));
   const [toMonth, setToMonth] = useState(format(today, "yyyy-MM"));
   const [year, setYear] = useState(today.getFullYear());
+
+  useEffect(() => {
+    if (!open) return;
+    if (initialFrom && initialTo) {
+      setMode("custom");
+      setFrom(initialFrom);
+      setTo(initialTo);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const range: DateRange | null | "invalid" = useMemo(() => {
     const now = new Date();
@@ -116,9 +129,9 @@ export function ExportDTRModal({ open, onClose, onCSV, onPDF }: Props) {
     ? "Please choose a valid range (start must be before end)."
     : safeRange
       ? `${format(safeRange.from, "MMM d, yyyy")} – ${format(
-          safeRange.to,
-          "MMM d, yyyy"
-        )}`
+        safeRange.to,
+        "MMM d, yyyy"
+      )}`
       : "Every log on record";
 
   const input =
@@ -246,9 +259,8 @@ export function ExportDTRModal({ open, onClose, onCSV, onPDF }: Props) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -3 }}
                   transition={{ duration: 0.12 }}
-                  className={`text-[11px] ${
-                    invalid ? "text-rose-600" : "text-[var(--color-muted)]"
-                  }`}
+                  className={`text-[11px] ${invalid ? "text-rose-600" : "text-[var(--color-muted)]"
+                    }`}
                 >
                   {summary}
                 </motion.p>

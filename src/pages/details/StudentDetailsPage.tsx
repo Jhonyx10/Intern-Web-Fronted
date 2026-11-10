@@ -20,6 +20,7 @@ import {
   ClipboardCheck,
   Star,
   Map,
+  X,
 } from "lucide-react";
 import { useStudent } from "@/lib/queries/students";
 import {
@@ -43,6 +44,7 @@ import {
 } from "@/lib/weeklyReportPdf";
 import {
   buildWeeklyReportRows,
+  buildWeeklyReportWeeks,
   getFirstLogDate,
   getLatestLogDate,
 } from "@/lib/WeeklyReportRows";
@@ -215,6 +217,20 @@ function verificationLabel(method?: string | null): string {
   return method.replace(/_/g, " ");
 }
 
+function toDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// "YYYY-MM-DD" in local time. Handles ISO strings and MySQL "YYYY-MM-DD HH:mm:ss".
+function logDateKey(value?: string | null): string | null {
+  if (!value) return null;
+  const d = new Date(value.includes("T") ? value : value.replace(" ", "T"));
+  return isNaN(d.getTime()) ? null : toDateKey(d);
+}
+
 export function StudentDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -242,6 +258,7 @@ export function StudentDetailsPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [weeklyOpen, setWeeklyOpen] = useState(false);
   const [weeklyExporting, setWeeklyExporting] = useState(false);
+
   // Generated weekly report, shown in the preview modal before downloading.
   const [weeklyPreview, setWeeklyPreview] = useState<{
     blob: Blob;
@@ -250,6 +267,9 @@ export function StudentDetailsPage() {
   } | null>(null);
   const [timeLogView, setTimeLogView] = useState<"normal" | "dtr">("normal");
   const [dtrMonthKey, setDtrMonthKey] = useState<string | null>(null);
+  // Time log date range filter ("YYYY-MM-DD", empty = no limit)
+  const [rangeFrom, setRangeFrom] = useState("");
+  const [rangeTo, setRangeTo] = useState("");
   const { logoUrl } = useTheme();
 
   // Free the preview's object URL whenever it is replaced, closed, or the page unmounts.
@@ -307,8 +327,33 @@ export function StudentDetailsPage() {
   const supervisorName: string | undefined = assignedSupervisor?.user?.name;
   const supervisorTitle: string | undefined = assignedSupervisor?.position_title;
 
+  // ── Time log date range filter ──
+  // If the dates were entered in the wrong order, swap them instead of showing nothing
+  const [rangeStart, rangeEnd] =
+    rangeFrom && rangeTo && rangeFrom > rangeTo
+      ? [rangeTo, rangeFrom]
+      : [rangeFrom, rangeTo];
+  const hasRange = Boolean(rangeStart || rangeEnd);
+
+  const filteredTimeLogs = useMemo(() => {
+    if (!rangeStart && !rangeEnd) return timeLogs;
+    return timeLogs.filter((log) => {
+      const key = logDateKey(log.time_in);
+      if (!key) return false;
+      if (rangeStart && key < rangeStart) return false;
+      if (rangeEnd && key > rangeEnd) return false;
+      return true;
+    });
+  }, [timeLogs, rangeStart, rangeEnd]);
+
+  const filteredMinutes = useMemo(
+    () =>
+      filteredTimeLogs.reduce((acc, log) => acc + (log.duration_minutes ?? 0), 0),
+    [filteredTimeLogs]
+  );
+
   // ── DTR view data (same row-building logic as the PDF export) ──
-  const dtrByMonth = useMemo(() => groupByMonth(timeLogs), [timeLogs]);
+  const dtrByMonth = useMemo(() => groupByMonth(filteredTimeLogs), [filteredTimeLogs]);
   const dtrMonthKeys = useMemo(
     () => [...dtrByMonth.keys()].sort().reverse(),
     [dtrByMonth]
@@ -332,17 +377,64 @@ export function StudentDetailsPage() {
     };
   }, [activeDtrKey, dtrByMonth, student]);
 
+  const firstLog = getFirstLogDate(timeLogs);
+  const latestLog = getLatestLogDate(timeLogs);
+  const exportFrom = hasRange ? rangeStart || (firstLog ? toDateKey(firstLog) : "") : "";
+  const exportTo = hasRange ? rangeEnd || (latestLog ? toDateKey(latestLog) : "") : "";
+
+  function applyRangePreset(preset: "this_month" | "last_month" | "last_30" | "all") {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+
+    if (preset === "all") {
+      setRangeFrom("");
+      setRangeTo("");
+    } else if (preset === "this_month") {
+      setRangeFrom(toDateKey(new Date(y, m, 1)));
+      setRangeTo(toDateKey(new Date(y, m + 1, 0)));
+    } else if (preset === "last_month") {
+      setRangeFrom(toDateKey(new Date(y, m - 1, 1)));
+      setRangeTo(toDateKey(new Date(y, m, 0)));
+    } else {
+      setRangeFrom(toDateKey(new Date(y, m, now.getDate() - 29)));
+      setRangeTo(toDateKey(now));
+    }
+  }
+
   // Step 1: build the PDF and show it in the preview modal (no download yet).
   async function handleExportWeekly(input: WeeklyReportExportInput) {
     setWeeklyExporting(true);
     try {
+      const weeks = input.range
+        ? buildWeeklyReportWeeks(
+          timeLogs,
+          input.range.from,
+          input.range.to,
+          getFirstLogDate(timeLogs)
+        )
+        : [{ weekNo: input.weekNo, rows: buildWeeklyReportRows(timeLogs, input.weekDate) }];
+
+      if (weeks.length === 0) {
+        toastMutationError(
+          new Error("No time logs fall within the selected dates."),
+          "Nothing to export"
+        );
+        return;
+      }
+
       const middle = student!.middle_name
         ? ` ${student!.middle_name[0].toUpperCase()}.`
         : "";
-      const { blob, fileName } = await buildWeeklyReportPdf({
-        studentName: `${student!.last_name}, ${student!.first_name}${middle}`,
-        weekNo: input.weekNo,
-        rows: buildWeeklyReportRows(timeLogs, input.weekDate),
+      const lastName = student!.last_name;
+      const fileName =
+        weeks.length === 1
+          ? `weekly-report-week-${weeks[0].weekNo}-${lastName}.pdf`
+          : `weekly-report-weeks-${weeks[0].weekNo}-to-${weeks[weeks.length - 1].weekNo}-${lastName}.pdf`;
+
+      const { blob, fileName: builtName } = await buildWeeklyReportPdf({
+        studentName: `${lastName}, ${student!.first_name}${middle}`,
+        weeks,
         supervisorBy: {
           name: supervisorName ?? "",
           title: supervisorTitle,
@@ -351,9 +443,9 @@ export function StudentDetailsPage() {
         studentBy: { name: fullName },
         school: { college: student!.section?.course?.name },
         logos: { left: OCCLOGO, right: logoUrl },
-        fileName: `weekly-report-week-${input.weekNo}-${student!.last_name}.pdf`,
+        fileName,
       });
-      setWeeklyPreview({ blob, url: URL.createObjectURL(blob), fileName });
+      setWeeklyPreview({ blob, url: URL.createObjectURL(blob), fileName: builtName });
       setWeeklyOpen(false);
     } catch (err) {
       toastMutationError(err, "Failed to generate weekly report");
@@ -849,7 +941,8 @@ export function StudentDetailsPage() {
                   Student Time Logs
                 </h3>
                 <span className="text-xs text-[var(--color-muted)] font-medium">
-                  Total: {timeLogs.length} entries · {formatDuration(totalMinutes)} rendered
+                  Total: {filteredTimeLogs.length} entries · {formatDuration(filteredMinutes)} rendered
+                  {hasRange && ` (filtered from ${timeLogs.length})`}
                 </span>
               </div>
               <TimeLogToolbar
@@ -860,7 +953,77 @@ export function StudentDetailsPage() {
               />
             </div>
 
-            {timeLogs.length > 0 && timeLogView === "dtr" ? (
+            {/* Date range filter */}
+            <div className="flex flex-wrap items-end gap-x-4 gap-y-3 rounded-2xl border border-[var(--color-line)] bg-white p-4 shadow-[var(--shadow-soft)]">
+              <div className="flex items-end gap-2">
+                <label className="space-y-1">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+                    From
+                  </span>
+                  <input
+                    type="date"
+                    value={rangeFrom}
+                    max={rangeTo || undefined}
+                    onChange={(e) => setRangeFrom(e.target.value)}
+                    className="rounded-lg border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                  />
+                </label>
+                <span className="pb-2 text-xs text-[var(--color-muted)]">to</span>
+                <label className="space-y-1">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+                    To
+                  </span>
+                  <input
+                    type="date"
+                    value={rangeTo}
+                    min={rangeFrom || undefined}
+                    onChange={(e) => setRangeTo(e.target.value)}
+                    className="rounded-lg border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                  />
+                </label>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5 pb-0.5">
+                {(
+                  [
+                    { key: "this_month", label: "This month" },
+                    { key: "last_month", label: "Last month" },
+                    { key: "last_30", label: "Last 30 days" },
+                    { key: "all", label: "All time" },
+                  ] as const
+                ).map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => applyRangePreset(p.key)}
+                    className="rounded-full border border-[var(--color-line)] bg-white px-3 py-1 text-[11px] font-semibold text-[var(--color-muted)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="ml-auto flex items-center gap-3 pb-0.5">
+                <p className="text-xs text-[var(--color-muted)]">
+                  Showing{" "}
+                  <span className="font-semibold text-[var(--color-ink)]">
+                    {filteredTimeLogs.length}
+                  </span>{" "}
+                  of {timeLogs.length} entries
+                </p>
+                {hasRange && (
+                  <button
+                    type="button"
+                    onClick={() => applyRangePreset("all")}
+                    className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--color-ink)] transition hover:bg-slate-50"
+                  >
+                    <X size={12} /> Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {filteredTimeLogs.length > 0 && timeLogView === "dtr" ? (
               <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-line)] px-4 py-3">
                   <div>
@@ -946,7 +1109,7 @@ export function StudentDetailsPage() {
                   </div>
                 )}
               </div>
-            ) : timeLogs.length > 0 ? (
+            ) : filteredTimeLogs.length > 0 ? (
               <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
@@ -962,7 +1125,7 @@ export function StudentDetailsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--color-line)]">
-                      {timeLogs.map((log) => {
+                      {filteredTimeLogs.map((log) => {
                         const duration =
                           log.duration_minutes != null
                             ? formatDuration(log.duration_minutes)
@@ -1044,11 +1207,24 @@ export function StudentDetailsPage() {
               <div className="rounded-2xl border border-[var(--color-line)] bg-white p-12 text-center shadow-[var(--shadow-soft)]">
                 <Clock className="mx-auto text-slate-300 mb-2" size={32} />
                 <p className="text-sm font-medium text-[var(--color-ink)]">
-                  No Time Logs Recorded
+                  {timeLogs.length === 0
+                    ? "No Time Logs Recorded"
+                    : "No Time Logs in This Range"}
                 </p>
                 <p className="text-xs text-[var(--color-muted)] mt-1">
-                  This student has not submitted any time logs yet.
+                  {timeLogs.length === 0
+                    ? "This student has not submitted any time logs yet."
+                    : "Try a wider date range or clear the filter."}
                 </p>
+                {hasRange && (
+                  <button
+                    type="button"
+                    onClick={() => applyRangePreset("all")}
+                    className="mt-3 text-xs font-semibold text-[var(--color-accent)] hover:underline"
+                  >
+                    Clear filter
+                  </button>
+                )}
               </div>
             )}
           </motion.div>
@@ -1635,6 +1811,8 @@ export function StudentDetailsPage() {
       <ExportDTRModal
         open={exportOpen}
         onClose={() => setExportOpen(false)}
+        initialFrom={exportFrom}
+        initialTo={exportTo}
         onCSV={(range) => exportDTRAsCSV(student, timeLogs, range)}
         onPDF={(range) => exportDTRAsPDF(student, timeLogs, range)}
       />
@@ -1645,6 +1823,8 @@ export function StudentDetailsPage() {
         isExporting={weeklyExporting}
         defaultWeekDate={getLatestLogDate(timeLogs) ?? new Date()}
         firstLogDate={getFirstLogDate(timeLogs)}
+        initialFrom={exportFrom}
+        initialTo={exportTo}
       />
       <WeeklyReportPreviewModal
         open={weeklyPreview !== null}
