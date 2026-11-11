@@ -36,6 +36,7 @@ export interface TimeLogDetails {
   device_info: string | null;
   task_photos: TimeLogTaskPhoto[];
   student?: TimeLogStudent;
+  correction_reason?: string | null;
 }
 
 /**

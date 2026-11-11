@@ -62,6 +62,7 @@ export type SupervisorAttendanceLog = {
     duration_minutes: number | null
     task_note: string | null
     verification_method: string | null
+    needs_correction?: boolean
 }
 
 export type CompanyScheduleData = {
@@ -456,6 +457,7 @@ export function useUpdateTimeLogTimeOut() {
         onSuccess: () => {
             // prefix match also refreshes ['supervisor', 'interns', id]
             void queryClient.invalidateQueries({ queryKey: ['supervisor', 'interns'] })
+            void queryClient.invalidateQueries({ queryKey: ['supervisor', 'attendance'] })
             toastMutationSuccess('Time out updated')
         },
         onError: (error) => toastMutationError(error, 'Failed to update time out'),

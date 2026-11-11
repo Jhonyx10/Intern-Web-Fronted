@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   ImageOff,
   FileText,
+  MessageSquare,
 } from "lucide-react";
 import {
   useTimeLogDetails,
@@ -133,11 +134,10 @@ function StatusBadge({ status }: { status: TimeLogTaskPhoto["status"] }) {
   const isSubmitted = status === "submitted";
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
-        isSubmitted
-          ? "bg-emerald-100 text-emerald-700"
-          : "bg-slate-100 text-slate-600"
-      }`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${isSubmitted
+        ? "bg-emerald-100 text-emerald-700"
+        : "bg-slate-100 text-slate-600"
+        }`}
     >
       {isSubmitted ? "Submitted" : "Draft"}
     </span>
@@ -438,9 +438,8 @@ export const TimeLogDetails = ({
                           if (!match) return null;
                           return (
                             <span
-                              className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                                matchToneClasses[match.tone]
-                              }`}
+                              className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${matchToneClasses[match.tone]
+                                }`}
                               title="Face match distance — lower is better"
                             >
                               {match.label} ({match.percent}%)
@@ -450,7 +449,17 @@ export const TimeLogDetails = ({
                       </div>
                     </div>
                   </div>
-
+                  {/* Reason the intern gave for a missed time out */}
+                  {data.correction_reason && (
+                    <div className="rounded-md border border-sky-200 bg-sky-50/60 px-4 py-3">
+                      <p className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-sky-700">
+                        <MessageSquare size={12} /> Intern's reason for the correction
+                      </p>
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-ink)]">
+                        {data.correction_reason}
+                      </p>
+                    </div>
+                  )}
                   {/* Note that isn't tagged to a session */}
                   {notes.general && (
                     <div className="rounded-md border border-[var(--color-line)] bg-white/60 px-4 py-3">

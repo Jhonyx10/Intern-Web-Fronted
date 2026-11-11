@@ -57,7 +57,6 @@ export function EvaluationYearTemplatesModal({
                                             {t.items_count} item{t.items_count === 1 ? "" : "s"} · {t.assigned_count} assigned ·{" "}
                                             <span className="text-emerald-700">{t.submitted_count} submitted</span> ·{" "}
                                             <span className="text-amber-700">{t.pending_count} pending</span>
-                                            {t.average_score != null && ` · avg ${t.average_score}%`}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2">
