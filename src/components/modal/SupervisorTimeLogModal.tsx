@@ -9,6 +9,7 @@ import {
   ImageOff,
   FileText,
   AlertCircle,
+  PenLine,
 } from "lucide-react";
 import type {
   InternDetailTimelog,
@@ -17,9 +18,10 @@ import type {
 
 // Task photos come from Laravel's public disk. The API returns a resolved
 // file_url per photo; fall back to building one from VITE_API_URL if missing.
-const ASSET_BASE_URL = (
-  import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api"
-).replace(/\/api\/?$/, "");
+const ASSET_BASE_URL = (import.meta.env.VITE_API_URL ?? "").replace(
+  /\/api\/?$/,
+  ""
+);
 
 function photoUrl(photo: InternDetailTaskPhoto) {
   if (photo.file_url) return photo.file_url;
@@ -127,11 +129,10 @@ function StatusBadge({ status }: { status: InternDetailTaskPhoto["status"] }) {
   const isSubmitted = status === "submitted";
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
-        isSubmitted
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${isSubmitted
           ? "bg-emerald-100 text-emerald-700"
           : "bg-slate-100 text-slate-600"
-      }`}
+        }`}
     >
       {isSubmitted ? "Submitted" : "Draft"}
     </span>
@@ -398,6 +399,18 @@ export const SupervisorTimeLogModal = ({
                   </div>
                 )}
 
+                {/* Reason the supervisor gave when correcting the time out */}
+                {data.correction_reason && (
+                  <div className="rounded-md border border-sky-200 bg-sky-50/60 px-4 py-3">
+                    <p className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-sky-700">
+                      <PenLine size={12} /> Time out corrected by supervisor
+                    </p>
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-ink)]">
+                      {data.correction_reason}
+                    </p>
+                  </div>
+                )}
+
                 {/* Summary */}
                 <div className="grid grid-cols-1 gap-4 rounded-md border border-[var(--color-line)] bg-white/60 px-4 py-3 sm:grid-cols-2">
                   <StatRow
@@ -421,9 +434,8 @@ export const SupervisorTimeLogModal = ({
                         if (!match) return null;
                         return (
                           <span
-                            className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                              matchToneClasses[match.tone]
-                            }`}
+                            className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${matchToneClasses[match.tone]
+                              }`}
                             title="Face match distance — lower is better"
                           >
                             {match.label} ({match.percent}%)

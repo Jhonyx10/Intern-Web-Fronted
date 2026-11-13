@@ -7,8 +7,6 @@ type EditableLog = {
     time_in: string | null;
     break_out: string | null;
     break_in: string | null;
-    /** Reason the intern gave for forgetting to time out (optional). */
-    correction_reason?: string | null;
 };
 
 type Props = {
@@ -17,8 +15,8 @@ type Props = {
     scheduledTimeOut?: string | null;
     isSaving?: boolean;
     onClose: () => void;
-    /** Receives the time as "HH:mm". */
-    onSave: (timeOut: string) => void;
+    /** Receives the time as "HH:mm" and the supervisor's reason. */
+    onSave: (timeOut: string, reason: string) => void;
 };
 
 function fmtClock(d: Date) {
@@ -45,6 +43,7 @@ export function UpdateTimeOutModal({
 }: Props) {
     const reduce = useReducedMotion();
     const [value, setValue] = useState("");
+    const [reason, setReason] = useState("");
 
     // Keep the last log around so the content doesn't vanish during the exit animation.
     const [lastLog, setLastLog] = useState<EditableLog | null>(log);
@@ -52,6 +51,7 @@ export function UpdateTimeOutModal({
         if (log) {
             setLastLog(log);
             setValue("");
+            setReason("");
         }
     }, [log?.id]);
     const data = log ?? lastLog;
@@ -90,7 +90,8 @@ export function UpdateTimeOutModal({
     }, [data, value]);
 
     const scheduled = scheduledTimeOut ? scheduledTimeOut.slice(0, 5) : null;
-    const canSave = Boolean(result?.valid) && !isSaving;
+    const canSave =
+        Boolean(result?.valid) && reason.trim().length > 0 && !isSaving;
     const timeIn = data?.time_in ? new Date(data.time_in) : null;
 
     const spring = reduce
@@ -153,18 +154,6 @@ export function UpdateTimeOutModal({
                             </button>
                         </div>
 
-                        {/* Reason from the intern */}
-                        {data?.correction_reason && (
-                            <div className="mx-6 mt-4 rounded-xl border border-sky-200 bg-sky-50/60 px-4 py-3">
-                                <p className="text-xs font-semibold text-sky-700">
-                                    Intern's reason
-                                </p>
-                                <p className="mt-1 whitespace-pre-wrap text-sm text-[var(--color-ink)]">
-                                    {data.correction_reason}
-                                </p>
-                            </div>
-                        )}
-
                         {/* Time in → time out */}
                         <div className="mt-5 grid grid-cols-2 gap-3 px-6">
                             <div className="rounded-xl bg-slate-50 px-4 py-3">
@@ -175,8 +164,8 @@ export function UpdateTimeOutModal({
                             </div>
                             <label
                                 className={`rounded-xl border px-4 py-3 transition-colors focus-within:ring-2 ${result && !result.valid
-                                        ? "border-red-300 bg-red-50/50 focus-within:ring-red-200"
-                                        : "border-[var(--color-line)] bg-white focus-within:border-[var(--color-accent)] focus-within:ring-[var(--color-accent)]/20"
+                                    ? "border-red-300 bg-red-50/50 focus-within:ring-red-200"
+                                    : "border-[var(--color-line)] bg-white focus-within:border-[var(--color-accent)] focus-within:ring-[var(--color-accent)]/20"
                                     }`}
                             >
                                 <span className="text-xs text-[var(--color-muted)]">
@@ -188,7 +177,8 @@ export function UpdateTimeOutModal({
                                     value={value}
                                     onChange={(e) => setValue(e.target.value)}
                                     onKeyDown={(e) => {
-                                        if (e.key === "Enter" && canSave) onSave(value);
+                                        if (e.key === "Enter" && canSave)
+                                            onSave(value, reason.trim());
                                     }}
                                     className="mt-0.5 block w-full bg-transparent text-lg font-semibold tabular-nums text-[var(--color-ink)] outline-none"
                                 />
@@ -268,8 +258,27 @@ export function UpdateTimeOutModal({
                             </AnimatePresence>
                         </div>
 
+                        {/* Reason for the correction */}
+                        <div className="px-6 pt-2">
+                            <label className="block">
+                                <span className="text-xs font-medium text-[var(--color-muted)]">
+                                    Reason for correction{" "}
+                                    <span className="text-red-500">*</span>
+                                </span>
+                                <textarea
+                                    value={reason}
+                                    onChange={(e) => setReason(e.target.value)}
+                                    maxLength={1000}
+                                    rows={3}
+                                    disabled={isSaving}
+                                    placeholder="e.g. Intern forgot to time out; confirmed left at 5:00 PM."
+                                    className="mt-1 block w-full resize-none rounded-xl border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/20 disabled:opacity-60"
+                                />
+                            </label>
+                        </div>
+
                         {/* Footer */}
-                        <div className="mt-2 flex items-center justify-end gap-2 border-t border-[var(--color-line)] bg-slate-50/60 px-6 py-4">
+                        <div className="mt-4 flex items-center justify-end gap-2 border-t border-[var(--color-line)] bg-slate-50/60 px-6 py-4">
                             <button
                                 type="button"
                                 disabled={isSaving}
@@ -281,7 +290,7 @@ export function UpdateTimeOutModal({
                             <button
                                 type="button"
                                 disabled={!canSave}
-                                onClick={() => onSave(value)}
+                                onClick={() => onSave(value, reason.trim())}
                                 className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--color-accent-hover)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {isSaving && <Loader2 size={14} className="animate-spin" />}

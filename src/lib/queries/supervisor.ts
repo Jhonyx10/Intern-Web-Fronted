@@ -141,6 +141,7 @@ export type InternDetailTimelog = {
     system_note?: string | null
     needs_correction?: boolean
     task_photos?: InternDetailTaskPhoto[]
+    correction_reason?: string | null;
 }
 
 export type InternDetailSchedule = {
@@ -448,11 +449,11 @@ export function useUpdateTimeLogTimeOut() {
     const { token } = useAuth()
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: ({ logId, timeOut }: { logId: number; timeOut: string }) =>
+        mutationFn: ({ logId, timeOut, reason }: { logId: number; timeOut: string; reason: string }) =>
             apiRequest(`/supervisor/time-logs/${logId}/time-out`, {
                 method: 'PATCH',
                 token: token!,
-                body: { time_out: timeOut },
+                body: { time_out: timeOut, reason },
             }),
         onSuccess: () => {
             // prefix match also refreshes ['supervisor', 'interns', id]

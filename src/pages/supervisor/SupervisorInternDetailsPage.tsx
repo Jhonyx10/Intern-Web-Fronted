@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -14,6 +14,10 @@ import {
   Mail,
   UserX,
   Pencil,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  X,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -97,6 +101,37 @@ function fmtMethod(raw: string | null) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+// ─── time log filters ───────────────────────────────────────────────────────
+
+const PAGE_SIZE = 5;
+
+type LogStatus = "needs_correction" | "in_progress" | "corrected" | "completed";
+
+const STATUS_OPTIONS: { value: "all" | LogStatus; label: string }[] = [
+  { value: "all", label: "All statuses" },
+  { value: "needs_correction", label: "Needs correction" },
+  { value: "in_progress", label: "In progress" },
+  { value: "corrected", label: "Corrected by supervisor" },
+  { value: "completed", label: "Completed" },
+];
+
+function logStatus(log: InternDetailTimelog): LogStatus {
+  if (log.verification_method === "auto_closed_missed_punch_out")
+    return "needs_correction";
+  if (!log.time_out) return "in_progress";
+  if (log.needs_correction) return "needs_correction";
+  if (log.verification_method === "supervisor_corrected") return "corrected";
+  return "completed";
+}
+
+// ISO timestamp → local "YYYY-MM-DD" (matches <input type="date"> values)
+function toLocalDateKey(iso: string) {
+  const d = new Date(iso);
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
 type ScheduleRequest = {
   id: number;
   status: "pending" | "approved" | "rejected";
@@ -111,6 +146,9 @@ type ScheduleRequest = {
 
 const card =
   "rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]";
+
+const filterControl =
+  "rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/20";
 
 function SectionHeader({
   icon,
@@ -166,6 +204,52 @@ export default function SupervisorInternDetailsPage() {
   // Time-out correction (for logs the intern forgot to close)
   const updateTimeOut = useUpdateTimeLogTimeOut();
   const [editingLog, setEditingLog] = useState<InternDetailTimelog | null>(null);
+
+  // Time log filters + pagination.
+  // These hooks must stay above the early returns below.
+  const [statusFilter, setStatusFilter] = useState<"all" | LogStatus>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
+
+  const allLogs = useMemo(
+    () =>
+      [...(intern?.time_logs ?? [])].sort((a, b) => {
+        const aTime = a.time_in ? new Date(a.time_in).getTime() : 0;
+        const bTime = b.time_in ? new Date(b.time_in).getTime() : 0;
+        return bTime - aTime; // descending: latest first
+      }),
+    [intern]
+  );
+
+  const filteredLogs = useMemo(() => {
+    return allLogs.filter((log) => {
+      if (statusFilter !== "all" && logStatus(log) !== statusFilter)
+        return false;
+      if (dateFrom || dateTo) {
+        if (!log.time_in) return false;
+        const key = toLocalDateKey(log.time_in);
+        if (dateFrom && key < dateFrom) return false;
+        if (dateTo && key > dateTo) return false;
+      }
+      return true;
+    });
+  }, [allLogs, statusFilter, dateFrom, dateTo]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pagedLogs = filteredLogs.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
+  );
+  const hasFilters = statusFilter !== "all" || dateFrom !== "" || dateTo !== "";
+
+  function clearFilters() {
+    setStatusFilter("all");
+    setDateFrom("");
+    setDateTo("");
+    setPage(1);
+  }
 
   if (!user || user.role?.name !== "supervisor") {
     return (
@@ -264,10 +348,10 @@ export default function SupervisorInternDetailsPage() {
     );
   }
 
-  function handleSaveTimeOut(timeOut: string) {
+  function handleSaveTimeOut(timeOut: string, reason: string) {
     if (!editingLog) return;
     updateTimeOut.mutate(
-      { logId: editingLog.id, timeOut },
+      { logId: editingLog.id, timeOut, reason },
       { onSuccess: () => setEditingLog(null) }
     );
   }
@@ -374,8 +458,8 @@ export default function SupervisorInternDetailsPage() {
             <div
               style={{ width: `${pct ?? 0}%` }}
               className={`h-full rounded-full transition-[width] duration-700 ${pct !== null && pct >= 100
-                  ? "bg-emerald-500"
-                  : "bg-[var(--color-accent)]"
+                ? "bg-emerald-500"
+                : "bg-[var(--color-accent)]"
                 }`}
             />
           </div>
@@ -465,8 +549,8 @@ export default function SupervisorInternDetailsPage() {
                       <div
                         key={req.id}
                         className={`rounded-xl border p-3.5 ${isPending
-                            ? "border-amber-200 bg-amber-50/40"
-                            : "border-[var(--color-line)] bg-slate-50/60"
+                          ? "border-amber-200 bg-amber-50/40"
+                          : "border-[var(--color-line)] bg-slate-50/60"
                           }`}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -482,10 +566,10 @@ export default function SupervisorInternDetailsPage() {
                           </div>
                           <span
                             className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ring-1 ring-inset ${req.status === "approved"
-                                ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
-                                : req.status === "rejected"
-                                  ? "bg-red-50 text-red-600 ring-red-600/20"
-                                  : "bg-amber-100 text-amber-700 ring-amber-600/20"
+                              ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
+                              : req.status === "rejected"
+                                ? "bg-red-50 text-red-600 ring-red-600/20"
+                                : "bg-amber-100 text-amber-700 ring-amber-600/20"
                               }`}
                           >
                             {req.status}
@@ -552,75 +636,203 @@ export default function SupervisorInternDetailsPage() {
           <SectionHeader
             icon={<Clock size={15} />}
             title="Time logs"
-            meta={`${intern.time_logs.length} entries · ${intern.total_hours} hrs total`}
+            meta={
+              hasFilters
+                ? `${filteredLogs.length} of ${allLogs.length} entries · ${intern.total_hours} hrs total`
+                : `${allLogs.length} entries · ${intern.total_hours} hrs total`
+            }
           />
 
-          {intern.time_logs.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50/70 text-xs text-[var(--color-muted)]">
-                  <tr>
-                    <th className="px-5 py-2.5 font-medium">Date</th>
-                    <th className="px-2.5 py-2.5 font-medium">In</th>
-                    <th className="px-2.5 py-2.5 font-medium">Out</th>
-                    <th className="px-2.5 py-2.5 font-medium">Duration</th>
-                    <th className="px-2.5 py-2.5 font-medium">Verification</th>
-                    <th className="px-5 py-2.5 text-right font-medium">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
-                  {intern.time_logs.map((log) => (
-                    <tr key={log.id} className="transition hover:bg-slate-50/60">
-                      <td className="whitespace-nowrap px-5 py-3.5 font-medium">
-                        {log.time_in ? fmtDate(log.time_in) : "—"}
-                      </td>
-                      <td className="whitespace-nowrap px-2.5 py-3.5">
-                        {fmtClock(log.time_in)}
-                      </td>
-                      <td className="whitespace-nowrap px-2.5 py-3.5">
-                        {log.time_out && !log.needs_correction ? (
-                          fmtClock(log.time_out)
-                        ) : (
-                          <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">
-                            {log.time_out ? "Needs correction" : "In progress"}
-                          </span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-2.5 py-3.5 font-semibold tabular-nums text-[var(--color-accent)]">
-                        {fmtDuration(log.duration_minutes)}
-                      </td>
-                      <td className="px-2.5 py-3.5">
-                        <span className="inline-block max-w-[120px] rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium leading-tight text-slate-700">
-                          {fmtMethod(log.verification_method)}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-3.5">
-                        <div className="flex items-center justify-end gap-2">
-                          {log.needs_correction && (
-                            <button
-                              type="button"
-                              onClick={() => setEditingLog(log)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"
-                            >
-                              <Pencil size={11} /> Update
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setViewingLog(log)}
-                            title="View details"
-                            aria-label="View details"
-                            className="inline-flex items-center rounded-lg border border-[var(--color-line)] bg-white p-1.5 transition hover:bg-slate-50"
-                          >
-                            <Eye size={13} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {allLogs.length > 0 ? (
+            <>
+              {/* Filters */}
+              <div className="flex flex-wrap items-end gap-3 border-b border-[var(--color-line)] bg-slate-50/40 px-5 py-3">
+                <label className="block">
+                  <span className="mb-1 flex items-center gap-1 text-[11px] font-medium text-[var(--color-muted)]">
+                    <Filter size={11} /> Status
+                  </span>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value as "all" | LogStatus);
+                      setPage(1);
+                    }}
+                    className={filterControl}
+                  >
+                    {STATUS_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-medium text-[var(--color-muted)]">
+                    From
+                  </span>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    max={dateTo || undefined}
+                    onChange={(e) => {
+                      setDateFrom(e.target.value);
+                      setPage(1);
+                    }}
+                    className={filterControl}
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1 block text-[11px] font-medium text-[var(--color-muted)]">
+                    To
+                  </span>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    min={dateFrom || undefined}
+                    onChange={(e) => {
+                      setDateTo(e.target.value);
+                      setPage(1);
+                    }}
+                    className={filterControl}
+                  />
+                </label>
+
+                {hasFilters && (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[var(--color-muted)] transition hover:bg-slate-100 hover:text-[var(--color-ink)]"
+                  >
+                    <X size={12} /> Clear
+                  </button>
+                )}
+              </div>
+
+              {filteredLogs.length > 0 ? (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50/70 text-xs text-[var(--color-muted)]">
+                        <tr>
+                          <th className="px-5 py-2.5 font-medium">Date</th>
+                          <th className="px-2.5 py-2.5 font-medium">In</th>
+                          <th className="px-2.5 py-2.5 font-medium">Out</th>
+                          <th className="px-2.5 py-2.5 font-medium">Duration</th>
+                          <th className="px-2.5 py-2.5 font-medium">Verification</th>
+                          <th className="px-5 py-2.5 text-right font-medium">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
+                        {pagedLogs.map((log) => (
+                          <tr key={log.id} className="transition hover:bg-slate-50/60">
+                            <td className="whitespace-nowrap px-5 py-3.5 font-medium">
+                              {log.time_in ? fmtDate(log.time_in) : "—"}
+                            </td>
+                            <td className="whitespace-nowrap px-2.5 py-3.5">
+                              {fmtClock(log.time_in)}
+                            </td>
+                            <td className="whitespace-nowrap px-2.5 py-3.5">
+                              {log.time_out && !log.needs_correction ? (
+                                fmtClock(log.time_out)
+                              ) : (
+                                <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                                  {log.time_out ? "Needs correction" : "In progress"}
+                                </span>
+                              )}
+                            </td>
+                            <td className="whitespace-nowrap px-2.5 py-3.5 font-semibold tabular-nums text-[var(--color-accent)]">
+                              {fmtDuration(log.duration_minutes)}
+                            </td>
+                            <td className="px-2.5 py-3.5">
+                              <span className="inline-block max-w-[120px] rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium leading-tight text-slate-700">
+                                {fmtMethod(log.verification_method)}
+                              </span>
+                            </td>
+                            <td className="whitespace-nowrap px-5 py-3.5">
+                              <div className="flex items-center justify-end gap-2">
+                                {log.needs_correction && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingLog(log)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"
+                                  >
+                                    <Pencil size={11} /> Update
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingLog(log)}
+                                  title="View details"
+                                  aria-label="View details"
+                                  className="inline-flex items-center rounded-lg border border-[var(--color-line)] bg-white p-1.5 transition hover:bg-slate-50"
+                                >
+                                  <Eye size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-line)] bg-slate-50/40 px-5 py-3">
+                    <p className="text-xs text-[var(--color-muted)]">
+                      Showing{" "}
+                      <span className="font-semibold text-[var(--color-ink)]">
+                        {(safePage - 1) * PAGE_SIZE + 1}–
+                        {Math.min(safePage * PAGE_SIZE, filteredLogs.length)}
+                      </span>{" "}
+                      of {filteredLogs.length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPage(safePage - 1)}
+                        disabled={safePage <= 1}
+                        aria-label="Previous page"
+                        className="inline-flex items-center rounded-lg border border-[var(--color-line)] bg-white p-1.5 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+                      <span className="text-xs tabular-nums text-[var(--color-muted)]">
+                        Page{" "}
+                        <span className="font-semibold text-[var(--color-ink)]">
+                          {safePage}
+                        </span>{" "}
+                        of {totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPage(safePage + 1)}
+                        disabled={safePage >= totalPages}
+                        aria-label="Next page"
+                        className="inline-flex items-center rounded-lg border border-[var(--color-line)] bg-white p-1.5 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-14 text-center">
+                  <Filter size={26} className="mb-3 text-slate-300" />
+                  <p className="text-sm font-medium text-[var(--color-ink)]">
+                    No logs match these filters
+                  </p>
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="mt-2 text-xs font-semibold text-[var(--color-accent)] hover:underline"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              )}
+            </>
           ) : (
             <div className="flex flex-col items-center justify-center py-14 text-center">
               <Clock size={28} className="mb-3 text-slate-300" />
