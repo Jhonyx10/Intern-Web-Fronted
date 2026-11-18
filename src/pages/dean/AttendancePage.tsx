@@ -3,6 +3,7 @@ import {
     Clock,
     Calendar,
     CalendarDays,
+    CalendarX,
     Search,
     CheckCircle2,
     AlertCircle,
@@ -12,10 +13,18 @@ import {
     X,
     ChevronRight,
 } from "lucide-react";
-import { useAttendanceMonitoring, type AttendanceRecord } from "@/lib/queries/attendance";
+import {
+    useAttendanceMonitoring,
+    useAbsenceMonitoring,
+    useUnreadAbsenceNotifications,
+    useMarkNotificationRead,
+    type AttendanceRecord,
+} from "@/lib/queries/attendance";
 import { TimeLogDetails } from "@/components/modal/TimeLogDetails";
+import { AbsenceViewModal } from "@/components/modal/AbsenceViewModal";
 import { useAuth } from "@/lib/auth";
 import { useCurrentSchoolYear } from "@/lib/queries/school-year";
+import type { AbsenceRecord } from "@/lib/queries/attendance";
 
 /* ─────────────────────────── helpers ─────────────────────────── */
 
@@ -103,6 +112,17 @@ function parseISODate(s: string): Date | null {
     const [y, m, d] = s.split("-").map(Number);
     if (!y || !m || !d) return null;
     return new Date(y, m - 1, d);
+}
+
+/** "YYYY-MM-DD" absence date → "Nov 17, 2026" without a timezone shift. */
+function fmtAbsenceDate(s: string | null) {
+    const d = s ? parseISODate(s.slice(0, 10)) : null;
+    if (!d) return "—";
+    return d.toLocaleDateString([], {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    });
 }
 
 function getBounds(
@@ -437,6 +457,14 @@ function StudentAttendanceModal({
 
 /* ─────────────────────────── Main Page ─────────────────────────── */
 
+type ViewMode = "logs" | "summary" | "absences";
+
+const VIEW_OPTIONS: { key: ViewMode; label: string }[] = [
+    { key: "logs", label: "Logs" },
+    { key: "summary", label: "By Student" },
+    { key: "absences", label: "Absences" },
+];
+
 export default function AttendancePage() {
     const { token, user } = useAuth();
     const { data: currentSchoolYear } = useCurrentSchoolYear();
@@ -445,10 +473,12 @@ export default function AttendancePage() {
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
     const [selectedTimeLogId, setSelectedTimeLogId] = useState<number | null>(null);
-    const [viewMode, setViewMode] = useState<"logs" | "summary">("logs");
+    const [viewMode, setViewMode] = useState<ViewMode>("logs");
     const [selectedSummaryStudent, setSelectedSummaryStudent] = useState<StudentSummary | null>(null);
+    const [selectedAbsence, setSelectedAbsence] = useState<AbsenceRecord | null>(null);
 
     const isCustomRange = range === "custom";
+    const isAbsenceView = viewMode === "absences";
 
     // Week / Month in the Logs view: show one row per student instead of one per log.
     const groupByStudent = viewMode === "logs" && (range === "week" || range === "month");
@@ -471,14 +501,58 @@ export default function AttendancePage() {
                 date_from: isCustomRange ? dateFrom || undefined : undefined,
                 date_to: isCustomRange ? dateTo || undefined : undefined,
             },
-        token
+        token,
+        { enabled: !isAbsenceView }
+    );
+
+    // Absences use the same Today / Week / Month / Custom range as Logs.
+    const {
+        data: absences,
+        isLoading: absencesLoading,
+        isError: absencesError,
+        refetch: refetchAbsences,
+    } = useAbsenceMonitoring(
+        {
+            range,
+            search: search.trim() || undefined,
+            date_from: isCustomRange ? dateFrom || undefined : undefined,
+            date_to: isCustomRange ? dateTo || undefined : undefined,
+        },
+        token,
+        { enabled: isAbsenceView }
+    );
+
+    // Unread "absence filed" notifications, across all date ranges (drives the red badge)
+    const { data: unreadAbsenceNotifs = [] } = useUnreadAbsenceNotifications(token);
+    const markNotificationRead = useMarkNotificationRead(token);
+    const unreadAbsences = unreadAbsenceNotifs.length;
+
+    // absence id -> notification id, so opening a row can mark its notification read
+    const unreadByAbsenceId = useMemo(
+        () =>
+            new Map<number, string>(
+                unreadAbsenceNotifs.map((n) => [Number(n.data.absence_id), n.id])
+            ),
+        [unreadAbsenceNotifs]
     );
 
     const totalLogs = logs?.length ?? 0;
     const completedLogs = logs?.filter((l) => l.time_out !== null).length ?? 0;
     const inProgressLogs = logs?.filter((l) => l.time_in !== null && l.time_out === null).length ?? 0;
 
+    const totalAbsences = absences?.length ?? 0;
+    const filedAbsences = absences?.filter((a) => a.status === "justified").length ?? 0;
+    const awaitingAbsences = absences?.filter((a) => a.status !== "justified").length ?? 0;
+
     const userRoleLabel = user?.role?.label ?? "User";
+
+    // The table area follows whichever view is active
+    const activeLoading = isAbsenceView ? absencesLoading : isLoading;
+    const activeError = isAbsenceView ? absencesError : isError;
+    const activeRefetch = isAbsenceView ? refetchAbsences : refetch;
+    const activeEmpty = isAbsenceView
+        ? !absences || absences.length === 0
+        : !logs || logs.length === 0;
 
     // Per-student summary — one row per student, most recent session highlighted
     const studentSummary = useMemo<StudentSummary[]>(() => {
@@ -529,6 +603,69 @@ export default function AttendancePage() {
         return m;
     }, [logs]);
 
+    // Summary cards change with the view
+    const statCards = isAbsenceView
+        ? [
+            {
+                label: "Total Absences",
+                value: totalAbsences,
+                valueClass: "text-[var(--color-ink)]",
+                iconWrap: "bg-indigo-50 text-indigo-600",
+                icon: <CalendarX size={20} />,
+            },
+            {
+                label: "Awaiting Justification",
+                value: awaitingAbsences,
+                valueClass: "text-amber-700",
+                iconWrap: "bg-amber-50 text-amber-600",
+                icon: <Timer size={20} />,
+            },
+            {
+                label: "Filed",
+                value: filedAbsences,
+                valueClass: "text-emerald-700",
+                iconWrap: "bg-emerald-50 text-emerald-600",
+                icon: <CheckCircle2 size={20} />,
+            },
+        ]
+        : [
+            {
+                label: "Total Logs",
+                value: totalLogs,
+                valueClass: "text-[var(--color-ink)]",
+                iconWrap: "bg-indigo-50 text-indigo-600",
+                icon: <Users size={20} />,
+            },
+            {
+                label: "In Progress",
+                value: inProgressLogs,
+                valueClass: "text-amber-700",
+                iconWrap: "bg-amber-50 text-amber-600",
+                icon: <Timer size={20} />,
+            },
+            {
+                label: "Completed",
+                value: completedLogs,
+                valueClass: "text-emerald-700",
+                iconWrap: "bg-emerald-50 text-emerald-600",
+                icon: <CheckCircle2 size={20} />,
+            },
+        ];
+
+    const tableTitle = isAbsenceView
+        ? "Absence Requests"
+        : viewMode === "summary"
+            ? "Students — By Student"
+            : groupByStudent
+                ? `Students — ${range === "week" ? "This Week" : "This Month"}`
+                : "Attendance Time Logs";
+
+    const tableCount = isAbsenceView
+        ? totalAbsences
+        : showStudentTable
+            ? studentSummary.length
+            : totalLogs;
+
     return (
         <section className="space-y-6">
             {/* Top Banner */}
@@ -553,72 +690,54 @@ export default function AttendancePage() {
                         Interns Attendance Monitoring
                     </h1>
                     <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-                        Track daily, weekly, and monthly attendance time logs and verification records.
+                        Track daily, weekly, and monthly attendance time logs, verification records, and absences.
                     </p>
                 </div>
 
                 {/* View Mode Toggle (top of page) */}
                 <div className="flex items-center self-start rounded-xl border border-[var(--color-line)] bg-white p-1 shadow-sm md:self-auto">
-                    <button
-                        type="button"
-                        onClick={() => setViewMode("logs")}
-                        className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${viewMode === "logs"
-                            ? "bg-slate-700 text-white shadow-xs"
-                            : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-                            }`}
-                    >
-                        Logs
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setViewMode("summary")}
-                        className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${viewMode === "summary"
-                            ? "bg-slate-700 text-white shadow-xs"
-                            : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-                            }`}
-                    >
-                        By Student
-                    </button>
+                    {VIEW_OPTIONS.map((o) => (
+                        <button
+                            key={o.key}
+                            type="button"
+                            onClick={() => setViewMode(o.key)}
+                            className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${viewMode === o.key
+                                ? "bg-slate-700 text-white shadow-xs"
+                                : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                                }`}
+                        >
+                            {o.label}
+                            {o.key === "absences" && unreadAbsences > 0 && (
+                                <span
+                                    aria-label={`${unreadAbsences} new absence request${unreadAbsences !== 1 ? "s" : ""}`}
+                                    className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-rose-600 px-1.5 py-px text-[10px] font-bold leading-4 text-white"
+                                >
+                                    {unreadAbsences > 99 ? "99+" : unreadAbsences}
+                                </span>
+                            )}
+                        </button>
+                    ))}
                 </div>
             </header>
 
             {/* Summary Stat Cards */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="flex items-center gap-4 rounded-2xl border border-[var(--color-line)] bg-white p-4 shadow-[var(--shadow-soft)]">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                        <Users size={20} />
+                {statCards.map((c) => (
+                    <div
+                        key={c.label}
+                        className="flex items-center gap-4 rounded-2xl border border-[var(--color-line)] bg-white p-4 shadow-[var(--shadow-soft)]"
+                    >
+                        <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${c.iconWrap}`}>
+                            {c.icon}
+                        </div>
+                        <div>
+                            <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)]">
+                                {c.label}
+                            </p>
+                            <p className={`text-xl font-bold ${c.valueClass}`}>{c.value}</p>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)]">
-                            Total Logs
-                        </p>
-                        <p className="text-xl font-bold text-[var(--color-ink)]">{totalLogs}</p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-4 rounded-2xl border border-[var(--color-line)] bg-white p-4 shadow-[var(--shadow-soft)]">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                        <Timer size={20} />
-                    </div>
-                    <div>
-                        <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)]">
-                            In Progress
-                        </p>
-                        <p className="text-xl font-bold text-amber-700">{inProgressLogs}</p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-4 rounded-2xl border border-[var(--color-line)] bg-white p-4 shadow-[var(--shadow-soft)]">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                        <CheckCircle2 size={20} />
-                    </div>
-                    <div>
-                        <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--color-muted)]">
-                            Completed
-                        </p>
-                        <p className="text-xl font-bold text-emerald-700">{completedLogs}</p>
-                    </div>
-                </div>
+                ))}
             </div>
 
             {/* Table Container */}
@@ -627,20 +746,16 @@ export default function AttendancePage() {
                 <div className="flex flex-col gap-3 border-b border-[var(--color-line)] bg-slate-50/50 px-6 py-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-2">
                         <h2 className="text-base font-semibold text-[var(--color-ink)]">
-                            {viewMode === "summary"
-                                ? "Students — By Student"
-                                : groupByStudent
-                                    ? `Students — ${range === "week" ? "This Week" : "This Month"}`
-                                    : "Attendance Time Logs"}
+                            {tableTitle}
                         </h2>
                         <span className="rounded-full bg-slate-200/70 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                            {showStudentTable ? studentSummary.length : totalLogs}
+                            {tableCount}
                         </span>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3">
-                        {/* Range filter only applies to the Logs view */}
-                        {viewMode === "logs" && (
+                        {/* Range filter applies to Logs and Absences, not By Student */}
+                        {viewMode !== "summary" && (
                             <div className="flex items-center rounded-xl border border-[var(--color-line)] bg-white p-1 shadow-sm">
                                 {(["today", "week", "month", "custom"] as const).map((r) => (
                                     <button
@@ -682,8 +797,8 @@ export default function AttendancePage() {
                             )}
                         </div>
 
-                        {/* Custom Date Inputs if Range = Custom (Logs view only) */}
-                        {isCustomRange && viewMode === "logs" && (
+                        {/* Custom Date Inputs if Range = Custom (Logs and Absences) */}
+                        {isCustomRange && viewMode !== "summary" && (
                             <div className="flex items-center gap-1.5 rounded-xl border border-[var(--color-line)] bg-white px-3 py-1 text-xs">
                                 <Calendar size={13} className="text-[var(--color-muted)] shrink-0" />
                                 <input
@@ -707,29 +822,128 @@ export default function AttendancePage() {
                 </div>
 
                 {/* Table Content */}
-                {isLoading ? (
+                {activeLoading ? (
                     <div className="p-12 text-center text-xs text-[var(--color-muted)] animate-pulse">
-                        Loading attendance records...
+                        {isAbsenceView ? "Loading absence requests..." : "Loading attendance records..."}
                     </div>
-                ) : isError ? (
+                ) : activeError ? (
                     <div className="p-12 text-center">
                         <AlertCircle size={28} className="mx-auto text-rose-500 mb-2" />
-                        <p className="text-xs font-medium text-slate-700">Failed to load attendance logs.</p>
+                        <p className="text-xs font-medium text-slate-700">
+                            {isAbsenceView ? "Failed to load absence requests." : "Failed to load attendance logs."}
+                        </p>
                         <button
                             type="button"
-                            onClick={() => refetch()}
+                            onClick={() => activeRefetch()}
                             className="mt-2 text-xs text-[var(--color-accent)] underline font-medium"
                         >
                             Try again
                         </button>
                     </div>
-                ) : !logs || logs.length === 0 ? (
+                ) : activeEmpty ? (
                     <div className="p-12 text-center">
-                        <Clock size={32} className="mx-auto text-slate-300 mb-2" />
-                        <p className="text-sm font-semibold text-[var(--color-ink)]">No attendance records found</p>
-                        <p className="text-xs text-[var(--color-muted)] mt-0.5">
-                            No interns have logged attendance for the selected time range or search filter.
+                        {isAbsenceView ? (
+                            <CalendarX size={32} className="mx-auto text-slate-300 mb-2" />
+                        ) : (
+                            <Clock size={32} className="mx-auto text-slate-300 mb-2" />
+                        )}
+                        <p className="text-sm font-semibold text-[var(--color-ink)]">
+                            {isAbsenceView ? "No absence requests found" : "No attendance records found"}
                         </p>
+                        <p className="text-xs text-[var(--color-muted)] mt-0.5">
+                            {isAbsenceView
+                                ? "No interns have filed an absence for the selected time range or search filter."
+                                : "No interns have logged attendance for the selected time range or search filter."}
+                        </p>
+                    </div>
+                ) : isAbsenceView ? (
+                    /* ── Absences view ── */
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs text-[var(--color-muted)]">
+                            <thead className="bg-slate-50 text-[11px] uppercase font-semibold text-slate-600 border-b border-[var(--color-line)]">
+                                <tr>
+                                    <th className="px-6 py-3">Student</th>
+                                    <th className="px-6 py-3">Dept &amp; Section</th>
+                                    <th className="px-6 py-3">Absent On</th>
+                                    <th className="px-6 py-3">Reason</th>
+                                    <th className="px-6 py-3">Proof</th>
+                                    <th className="px-6 py-3">Status</th>
+                                    <th className="px-6 py-3 text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
+                                {(absences ?? []).map((a) => (
+                                    <tr key={a.id} className="transition hover:bg-slate-50/70">
+                                        <td className="px-6 py-3.5">
+                                            <p className="font-semibold text-xs text-[var(--color-ink)]">
+                                                {a.student_name}
+                                            </p>
+                                            <p className="font-mono text-[11px] text-[var(--color-muted)]">
+                                                {a.student_number}
+                                            </p>
+                                        </td>
+
+                                        <td className="px-6 py-3.5 whitespace-nowrap">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                                                    {a.course_code}
+                                                </span>
+                                                <span className="text-[11px] text-[var(--color-muted)]">
+                                                    {a.section_code}
+                                                </span>
+                                            </div>
+                                        </td>
+
+                                        <td className="px-6 py-3.5 whitespace-nowrap font-medium">
+                                            <span className="inline-flex items-center gap-2">
+                                                {fmtAbsenceDate(a.absence_date)}
+                                                {unreadByAbsenceId.has(a.id) && (
+                                                    <span className="rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600 ring-1 ring-inset ring-rose-600/20">
+                                                        New
+                                                    </span>
+                                                )}
+                                            </span>
+                                        </td>
+
+                                        <td className="max-w-[240px] truncate px-6 py-3.5 text-[var(--color-muted)]">
+                                            {a.reason || "—"}
+                                        </td>
+
+                                        <td className="px-6 py-3.5 whitespace-nowrap text-[11px]">
+                                            {a.proof_url ? "Attached" : (
+                                                <span className="italic text-slate-400">None</span>
+                                            )}
+                                        </td>
+
+                                        <td className="px-6 py-3.5 whitespace-nowrap">
+                                            <span
+                                                className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${a.status === "justified"
+                                                    ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
+                                                    : "bg-amber-50 text-amber-700 ring-amber-600/20"
+                                                    }`}
+                                            >
+                                                {a.status === "justified" ? "Filed" : "Awaiting"}
+                                            </span>
+                                        </td>
+
+                                        <td className="px-6 py-3.5 text-center whitespace-nowrap">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedAbsence(a);
+                                                    const notificationId = unreadByAbsenceId.get(a.id);
+                                                    if (notificationId) markNotificationRead.mutate(notificationId);
+                                                }}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--color-ink)] shadow-2xs transition hover:bg-slate-100 hover:text-[var(--color-accent)]"
+                                            >
+                                                <Eye size={13} />
+                                                View Record
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 ) : showStudentTable ? (
                     /* ── By Student view (also used for Week / Month in Logs) ── */
@@ -823,7 +1037,7 @@ export default function AttendancePage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
-                                {logs.map((record) => (
+                                {(logs ?? []).map((record) => (
                                     <tr key={record.id} className="transition hover:bg-slate-50/70">
                                         <td className="px-6 py-3.5">
                                             <p className="font-semibold text-xs text-[var(--color-ink)]">
@@ -900,6 +1114,13 @@ export default function AttendancePage() {
                 timeLogId={selectedTimeLogId}
                 visible={Boolean(selectedTimeLogId)}
                 onClose={() => setSelectedTimeLogId(null)}
+            />
+
+            {/* Absence Detail Modal (same one the supervisor page uses) */}
+            <AbsenceViewModal
+                absence={selectedAbsence}
+                studentName={selectedAbsence?.student_name ?? ""}
+                onClose={() => setSelectedAbsence(null)}
             />
 
             {/* Student Attendance Detail Modal */}

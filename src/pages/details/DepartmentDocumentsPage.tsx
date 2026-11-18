@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { AnimatePresence, motion } from "framer-motion";
@@ -15,6 +15,7 @@ import {
     Globe,
     History,
     Search,
+    UserCheck,
     Users,
     X,
     XCircle,
@@ -24,7 +25,9 @@ import {
     useUpdateDocumentStatus,
     useCourseDocumentRequirements,
     useSchoolYearOptions,
+    useInternDocumentProgress,
     type SubmittedDocument,
+    type InternDocumentProgress,
 } from "@/lib/queries/documents";
 import { useCurrentSchoolYear } from "@/lib/queries/school-year";
 import { DocumentPreviewModal } from "@/components/modal/DocumentPreviewModal";
@@ -378,6 +381,256 @@ function RequirementCard({ title, schoolYear, totalStudents, approved, pending, 
     );
 }
 
+// ─── Intern progress panel ────────────────────────────────────────────────────
+// ─── Intern progress panel ────────────────────────────────────────────────────
+interface InternProgressPanelProps {
+    interns: InternDocumentProgress[];
+    totalRequirements: number;
+    search: string;
+    isLoading: boolean;
+    isError: boolean;
+}
+
+const PAGE_SIZES = [10, 25, 50] as const;
+
+// 1 … 4 5 6 … 20  (always keeps first, last and the neighbours of the current page)
+function pageNumbers(current: number, total: number): (number | "…")[] {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    const pages = new Set<number>([1, total, current - 1, current, current + 1]);
+    const sorted = [...pages].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+    const out: (number | "…")[] = [];
+    sorted.forEach((p, idx) => {
+        if (idx > 0 && p - sorted[idx - 1] > 1) out.push("…");
+        out.push(p);
+    });
+    return out;
+}
+
+function InternProgressPanel({
+    interns,
+    totalRequirements,
+    search,
+    isLoading,
+    isError,
+}: InternProgressPanelProps) {
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState<number>(10);
+
+    // Back to the first page whenever the list or search changes
+    useEffect(() => {
+        setPage(1);
+    }, [search, pageSize, interns]);
+
+    const q = search.trim().toLowerCase();
+    const matched = q
+        ? interns.filter(
+            (i) =>
+                i.name.toLowerCase().includes(q) ||
+                (i.student_number ?? "").toLowerCase().includes(q) ||
+                (i.section?.name ?? "").toLowerCase().includes(q)
+        )
+        : interns;
+
+    // Complete interns first; everyone else keeps the backend's name order
+    const rows = [...matched].sort(
+        (a, b) =>
+            Number(b.is_complete) - Number(a.is_complete) ||
+            b.approved_documents - a.approved_documents
+    );
+
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    const safePage = Math.min(page, totalPages);
+    const start = (safePage - 1) * pageSize;
+    const pageRows = rows.slice(start, start + pageSize);
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center gap-3 py-24 text-[var(--color-muted)]">
+                <span className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
+                <p className="text-sm">Loading intern progress…</p>
+            </div>
+        );
+    }
+
+    if (isError) {
+        return (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                <p className="text-sm font-medium text-red-700">
+                    Couldn't load intern progress. Please try again.
+                </p>
+            </div>
+        );
+    }
+
+    if (rows.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-[var(--color-line)] py-24 text-center">
+                <Users size={36} className="text-[var(--color-line)]" />
+                <p className="text-sm font-medium text-[var(--color-muted)]">
+                    {search ? "No interns match your search." : "No interns found for this school year."}
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
+            <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] border-collapse text-left">
+                    <thead>
+                        <tr className="border-b border-[var(--color-line)] bg-slate-50/80">
+                            {["Intern", "Section", "School year", "Documents approved"].map((h) => (
+                                <th
+                                    key={h}
+                                    className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]"
+                                >
+                                    {h}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {pageRows.map((i) => {
+                            const pct =
+                                i.total_requirements > 0
+                                    ? Math.round((i.approved_documents / i.total_requirements) * 100)
+                                    : 0;
+                            return (
+                                <tr
+                                    key={i.id}
+                                    className="border-b border-[var(--color-line)] last:border-0 transition hover:bg-slate-50/60"
+                                >
+                                    <td className="px-5 py-3">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-violet-100 text-xs font-semibold text-violet-700">
+                                                {i.name
+                                                    .split(",")
+                                                    .map((s) => s.trim()[0] ?? "")
+                                                    .reverse()
+                                                    .join("")}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-medium text-[var(--color-ink)]">
+                                                    {i.name}
+                                                </p>
+                                                <p className="font-mono text-[11px] text-[var(--color-muted)]">
+                                                    {i.student_number}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="whitespace-nowrap px-5 py-3 text-sm text-[var(--color-ink)]">
+                                        {i.section?.name ?? "—"}
+                                    </td>
+                                    <td className="whitespace-nowrap px-5 py-3">
+                                        {i.school_year ? (
+                                            <span className="inline-flex items-center rounded-md border border-amber-200/60 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                                                S.Y. {i.school_year.name}
+                                                {i.school_year.semester ? ` · ${i.school_year.semester}` : ""}
+                                            </span>
+                                        ) : (
+                                            "—"
+                                        )}
+                                    </td>
+                                    <td className="px-5 py-3">
+                                        <div className="flex min-w-[200px] items-center gap-3">
+                                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                                                <div
+                                                    className={`h-full rounded-full transition-all duration-500 ${i.is_complete ? "bg-emerald-500" : "bg-[var(--color-accent)]"
+                                                        }`}
+                                                    style={{ width: `${pct}%` }}
+                                                />
+                                            </div>
+                                            <span
+                                                className={`whitespace-nowrap text-xs font-semibold tabular-nums ${i.is_complete ? "text-emerald-700" : "text-[var(--color-ink)]"
+                                                    }`}
+                                            >
+                                                {i.approved_documents} / {i.total_requirements}
+                                            </span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Pagination footer */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-line)] bg-slate-50/60 px-5 py-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--color-muted)]">
+                    <p>
+                        Showing{" "}
+                        <span className="font-semibold text-[var(--color-ink)]">
+                            {start + 1}–{Math.min(start + pageSize, rows.length)}
+                        </span>{" "}
+                        of <span className="font-semibold text-[var(--color-ink)]">{rows.length}</span> intern
+                        {rows.length !== 1 ? "s" : ""} · {totalRequirements} required document
+                        {totalRequirements !== 1 ? "s" : ""}
+                    </p>
+                    <label className="flex items-center gap-1.5">
+                        Rows
+                        <select
+                            value={pageSize}
+                            onChange={(e) => setPageSize(Number(e.target.value))}
+                            className="rounded-lg border border-[var(--color-line)] bg-white px-2 py-1 text-xs font-semibold text-[var(--color-ink)] outline-none focus:border-[var(--color-accent)]"
+                        >
+                            {PAGE_SIZES.map((n) => (
+                                <option key={n} value={n}>
+                                    {n}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                </div>
+
+                {totalPages > 1 && (
+                    <nav className="flex items-center gap-1" aria-label="Pagination">
+                        <button
+                            type="button"
+                            onClick={() => setPage(safePage - 1)}
+                            disabled={safePage === 1}
+                            className="rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            Prev
+                        </button>
+
+                        {pageNumbers(safePage, totalPages).map((p, idx) =>
+                            p === "…" ? (
+                                <span key={`gap-${idx}`} className="px-1.5 text-xs text-[var(--color-muted)]">
+                                    …
+                                </span>
+                            ) : (
+                                <button
+                                    key={p}
+                                    type="button"
+                                    onClick={() => setPage(p)}
+                                    aria-current={p === safePage ? "page" : undefined}
+                                    className={`min-w-8 rounded-lg px-2.5 py-1.5 text-xs font-semibold tabular-nums transition ${p === safePage
+                                        ? "bg-[var(--color-accent)] text-white shadow-sm"
+                                        : "border border-[var(--color-line)] bg-white text-[var(--color-ink)] hover:bg-slate-50"
+                                        }`}
+                                >
+                                    {p}
+                                </button>
+                            )
+                        )}
+
+                        <button
+                            type="button"
+                            onClick={() => setPage(safePage + 1)}
+                            disabled={safePage === totalPages}
+                            className="rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink)] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            Next
+                        </button>
+                    </nav>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function DepartmentDocumentsPage() {
     const { id } = useParams<{ id: string }>();
@@ -410,9 +663,9 @@ export default function DepartmentDocumentsPage() {
         pickedYear && pickedYear.id === activeSchoolYearId
             ? pickedYear
             : ((yearOptions?.find((sy) => sy.id === activeSchoolYearId) as unknown as
-                  | SchoolYear
-                  | undefined) ??
-              (isCurrentYear ? (currentSchoolYear as unknown as SchoolYear) : null));
+                | SchoolYear
+                | undefined) ??
+                (isCurrentYear ? (currentSchoolYear as unknown as SchoolYear) : null));
 
     // The year shown in the header badge: the resolved active school year or current school year
     const shownYear = selectedYear ?? currentSchoolYear;
@@ -430,12 +683,16 @@ export default function DepartmentDocumentsPage() {
     });
 
     const [search, setSearch] = useState("");
+    const [view, setView] = useState<"requirements" | "interns">("requirements");
     const [selectedReqId, setSelectedReqId] = useState<number | string | null>(null);
     const [previewDoc, setPreviewDoc] = useState<{
         id: number; title: string; filename?: string; fileSize?: number;
         mimeType?: string; notes?: string | null; status?: string;
         rejectionReason?: string | null; reviewedAt?: string | null; reviewedByName?: string | null;
     } | null>(null);
+
+    // Per-intern document progress (only fetched while that view is open)
+    const progressQuery = useInternDocumentProgress(id, activeSchoolYearId, view === "interns");
 
     // Group submitted docs by document_requirement_id
     const docsByReq = useMemo(() => {
@@ -577,11 +834,10 @@ export default function DepartmentDocumentsPage() {
                         <button
                             type="button"
                             onClick={() => setShowYearModal(true)}
-                            className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm font-medium shadow-xs transition hover:border-[var(--color-accent)] hover:bg-slate-50 ${
-                                !isCurrentYear && selectedYear
-                                    ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
-                                    : "border-[var(--color-line)] bg-white text-[var(--color-ink)]"
-                            }`}
+                            className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm font-medium shadow-xs transition hover:border-[var(--color-accent)] hover:bg-slate-50 ${!isCurrentYear && selectedYear
+                                ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
+                                : "border-[var(--color-line)] bg-white text-[var(--color-ink)]"
+                                }`}
                         >
                             <History size={15} className="text-[var(--color-accent)]" />
                             School Year
@@ -643,16 +899,43 @@ export default function DepartmentDocumentsPage() {
                     </motion.div>
                 )}
 
-                {/* ── Search ───────────────────────────────────── */}
-                <motion.div variants={item}>
-                    <label className="flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm text-[var(--color-muted)] focus-within:border-[var(--color-accent)] focus-within:ring-2 focus-within:ring-[var(--color-accent)]/20 transition shadow-sm">
+                {/* ── View toggle + search ─────────────────────── */}
+                <motion.div variants={item} className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center rounded-xl border border-[var(--color-line)] bg-slate-50/70 p-1">
+                        {([
+                            { key: "requirements", label: "Requirements", icon: FileText },
+                            { key: "interns", label: "Intern progress", icon: UserCheck },
+                        ] as const).map(({ key, label, icon: Icon }) => (
+                            <button
+                                key={key}
+                                type="button"
+                                aria-pressed={view === key}
+                                onClick={() => {
+                                    setView(key);
+                                    setSearch("");
+                                }}
+                                className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition ${view === key
+                                    ? "bg-white text-[var(--color-accent)] shadow-sm ring-1 ring-[var(--color-line)]"
+                                    : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                                    }`}
+                            >
+                                <Icon size={13} /> {label}
+                            </button>
+                        ))}
+                    </div>
+
+                    <label className="flex min-w-[240px] flex-1 items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-4 py-2.5 text-sm text-[var(--color-muted)] shadow-sm transition focus-within:border-[var(--color-accent)] focus-within:ring-2 focus-within:ring-[var(--color-accent)]/20">
                         <Search size={14} />
                         <input
                             type="search"
-                            placeholder="Search document requirements…"
+                            placeholder={
+                                view === "interns"
+                                    ? "Search by intern name, ID, or section…"
+                                    : "Search document requirements…"
+                            }
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="flex-1 bg-transparent outline-none placeholder:text-[var(--color-muted)] text-[var(--color-ink)]"
+                            className="flex-1 bg-transparent text-[var(--color-ink)] outline-none placeholder:text-[var(--color-muted)]"
                         />
                         {search && (
                             <button type="button" onClick={() => setSearch("")} className="hover:text-[var(--color-ink)]">
@@ -662,8 +945,18 @@ export default function DepartmentDocumentsPage() {
                     </label>
                 </motion.div>
 
-                {/* ── Cards, grouped: Common / Departmental ────── */}
-                {isLoading ? (
+                {/* ── Intern progress / Cards grouped: Common / Departmental ── */}
+                {view === "interns" ? (
+                    <motion.div variants={item}>
+                        <InternProgressPanel
+                            interns={progressQuery.data?.data ?? []}
+                            totalRequirements={progressQuery.data?.total_requirements ?? 0}
+                            search={search}
+                            isLoading={progressQuery.isLoading}
+                            isError={progressQuery.isError}
+                        />
+                    </motion.div>
+                ) : isLoading ? (
                     <div className="flex flex-col items-center justify-center gap-3 py-24 text-[var(--color-muted)]">
                         <span className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
                         <p className="text-sm">Loading requirements…</p>

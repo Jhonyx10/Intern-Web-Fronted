@@ -2,6 +2,8 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { toast } from "@/components/Toaster";
+import { logoWidthFor, scopeText, type PdfBranding } from "@/lib/pdf-branding";
+import type { PdfResult } from "@/lib/pdf-result"
 
 /* ── Date range filter ────────────────────────────────────────── */
 
@@ -209,12 +211,15 @@ function drawCopy(
     ctx: {
         name: string;
         company: string;
+        /** Course and section, e.g. "BSIT · BSIT 4A" */
+        scope: string;
         monthLabel: string;
         year: number;
         official: string;
         rows: Cell[][];
         underTotal: number;
         workedTotal: number;
+        branding?: PdfBranding | null;
     },
 ) {
     const w = COPY_WIDTH;
@@ -222,6 +227,25 @@ function drawCopy(
     doc.setTextColor(0);
     doc.setDrawColor(0);
     doc.setLineWidth(0.2);
+
+    // School header: logo on the left, name centered, both above the title
+    if (ctx.branding) {
+        const { logo, schoolName } = ctx.branding;
+        if (logo) {
+            doc.addImage(logo.dataUrl, "PNG", x + 4, 4, logoWidthFor(logo, 8), 8);
+        }
+        if (schoolName) {
+            doc.setFont("helvetica", "bold");
+            let size = 8;
+            doc.setFontSize(size);
+            // Shrink long names so they don't run into the logo
+            while (size > 5 && doc.getTextWidth(schoolName) > w - (logo ? 30 : 10)) {
+                size -= 0.5;
+                doc.setFontSize(size);
+            }
+            doc.text(schoolName, mid, 8.5, { align: "center" });
+        }
+    }
 
     // Title
     doc.setFont("helvetica", "bold");
@@ -235,6 +259,14 @@ function drawCopy(
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.text("(Name)", mid, 30, { align: "center" });
+
+    // Course / section
+    if (ctx.scope) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
+        doc.text(ctx.scope, mid, 34.2, { align: "center", maxWidth: w - 10 });
+        doc.setFont("helvetica", "normal");
+    }
 
     // For the month of
     doc.setFontSize(8);
@@ -357,24 +389,33 @@ function drawCopy(
     doc.text("In-Charge", x + 20 + (w - 24) / 2, y + 3.5, { align: "center" });
 }
 
-export const exportDTRAsPDF = (
+/**
+ * Draws one intern's DTR pages (one page per month with logs) into an existing doc.
+ * Returns false when the intern has nothing to draw.
+ */
+function renderStudentDTR(
+    doc: jsPDF,
     student: any,
     allLogs: any[],
-    range?: DateRange | null,
-) => {
-    const timeLogs = filterLogsByRange(allLogs, range);
-    if (!timeLogs || timeLogs.length === 0) {
-        toast.error("No time logs in the selected period.");
-        return;
-    }
-
-    const doc = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
+    range: DateRange | null | undefined,
+    hasPreviousPage: boolean,
+    branding?: PdfBranding | null,
+): boolean {
+    const grouped = groupByMonth(filterLogsByRange(allLogs, range));
+    const keys = [...grouped.keys()].sort();
+    if (!keys.length) return false;
 
     const name = [student.first_name, student.middle_name, student.last_name]
         .filter(Boolean)
         .join(" ");
-
     const company: string = student.companies?.[0]?.name ?? "";
+
+    // Each intern may be in a different course/section, so prefer their own
+    // and fall back to the report's scope (filter or the logged-in user's).
+    const scope = scopeText({
+        course: student.course_code ?? branding?.scope?.course,
+        section: student.section ?? branding?.scope?.section,
+    });
 
     // Official hours come from the company's first schedule, if there is one
     const schedule = student.companies?.[0]?.schedules?.[0];
@@ -385,36 +426,92 @@ export const exportDTRAsPDF = (
     // Undertime is measured against this many hours per day
     const requiredMinutes = (Number(student.ojt_schedule?.hours_per_day) || 8) * 60;
 
-    // One page per month that has logs
-    const grouped = groupByMonth(timeLogs);
-    const keys = [...grouped.keys()].sort();
-
-    if (!keys.length) {
-        toast.error("No valid time logs available to export.");
-        return;
-    }
-
     keys.forEach((key, i) => {
-        if (i > 0) doc.addPage();
+        if (hasPreviousPage || i > 0) doc.addPage();
         const [year, month] = key.split("-").map(Number);
-        const { rows, underTotal, workedTotal } = buildRows(
-            grouped.get(key) ?? [],
-            requiredMinutes,
-        );
-        const ctx = {
+        const { rows, underTotal, workedTotal } = buildRows(grouped.get(key) ?? [], requiredMinutes);
+
+        drawCopy(doc, (215.9 - COPY_WIDTH) / 2, {
             name,
             company,
+            scope,
             monthLabel: MONTHS[month - 1],
             year,
             official,
             rows,
             underTotal,
             workedTotal,
-        };
-
-        drawCopy(doc, (215.9 - COPY_WIDTH) / 2, ctx);
+            branding,
+        });
     });
 
-    doc.save(`${student.first_name}_${student.last_name}_DTR${fileSuffix(range)}.pdf`);
+    return true;
+}
+
+/** Builds one intern's DTR PDF without saving it, so it can be previewed first. */
+export const buildDTRPDF = (
+    student: any,
+    allLogs: any[],
+    range?: DateRange | null,
+    branding?: PdfBranding | null,
+): PdfResult | null => {
+    const timeLogs = filterLogsByRange(allLogs, range);
+    if (!timeLogs || timeLogs.length === 0) {
+        toast.error("No time logs in the selected period.");
+        return null;
+    }
+
+    const doc = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
+
+    if (!renderStudentDTR(doc, student, allLogs, range, false, branding)) {
+        toast.error("No valid time logs available to export.");
+        return null;
+    }
+
+    return {
+        doc,
+        fileName: `${student.first_name}_${student.last_name}_DTR${fileSuffix(range)}.pdf`,
+    };
+};
+
+/** Direct download (no preview). */
+export const exportDTRAsPDF = (...args: Parameters<typeof buildDTRPDF>) => {
+    const r = buildDTRPDF(...args);
+    if (!r) return;
+    r.doc.save(r.fileName);
     toast.success("PDF Exported successfully.");
+};
+
+/** Many interns, one PDF: each intern's months back to back. Built, not saved. */
+export const buildBulkDTRPDF = (
+    students: any[],
+    range?: DateRange | null,
+    branding?: PdfBranding | null,
+): (PdfResult & { count: number }) | null => {
+    const doc = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
+
+    let exported = 0;
+    for (const s of students) {
+        // The bulk endpoint returns each intern's logs as `time_logs`
+        if (renderStudentDTR(doc, s, s.time_logs ?? [], range, exported > 0, branding)) exported++;
+    }
+
+    if (!exported) {
+        toast.error("No time logs in the selected period.");
+        return null;
+    }
+
+    return {
+        doc,
+        count: exported,
+        fileName: `DTR_${exported}_interns${fileSuffix(range)}.pdf`,
+    };
+};
+
+/** Direct download (no preview). */
+export const exportBulkDTRAsPDF = (...args: Parameters<typeof buildBulkDTRPDF>) => {
+    const r = buildBulkDTRPDF(...args);
+    if (!r) return;
+    r.doc.save(r.fileName);
+    toast.success(`Exported DTRs for ${r.count} intern${r.count !== 1 ? "s" : ""}.`);
 };

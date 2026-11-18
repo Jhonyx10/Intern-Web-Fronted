@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   Calendar,
+  CalendarX,
   Clock,
   GraduationCap,
   Loader2,
@@ -25,6 +26,7 @@ import {
   useRemoveIntern,
   useUpdateTimeLogTimeOut,
   type InternDetailTimelog,
+  type InternDetailAbsence,
 } from "@/lib/queries/supervisor";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/api";
@@ -32,6 +34,7 @@ import { toastMutationError, toastMutationSuccess } from "@/lib/mutationToast";
 import { RemoveInternModal } from "@/components/modal/RemoveInternModal";
 import { SupervisorTimeLogModal } from "@/components/modal/SupervisorTimeLogModal";
 import { UpdateTimeOutModal } from "@/components/modal/UpdateTimeOutModal";
+import { AbsenceViewModal } from "@/components/modal/AbsenceViewModal";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -205,6 +208,12 @@ export default function SupervisorInternDetailsPage() {
   const updateTimeOut = useUpdateTimeLogTimeOut();
   const [editingLog, setEditingLog] = useState<InternDetailTimelog | null>(null);
 
+  // Time logs / absences toggle
+  const [view, setView] = useState<"logs" | "absences">("logs");
+  const [viewingAbsence, setViewingAbsence] =
+    useState<InternDetailAbsence | null>(null);
+  const [absencePage, setAbsencePage] = useState(1);
+
   // Time log filters + pagination.
   // These hooks must stay above the early returns below.
   const [statusFilter, setStatusFilter] = useState<"all" | LogStatus>("all");
@@ -236,6 +245,16 @@ export default function SupervisorInternDetailsPage() {
     });
   }, [allLogs, statusFilter, dateFrom, dateTo]);
 
+  const absences = useMemo(
+    () =>
+      [...(intern?.absences ?? [])].sort(
+        (a, b) =>
+          new Date(b.absence_date).getTime() -
+          new Date(a.absence_date).getTime()
+      ),
+    [intern]
+  );
+
   const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const pagedLogs = filteredLogs.slice(
@@ -243,6 +262,13 @@ export default function SupervisorInternDetailsPage() {
     safePage * PAGE_SIZE
   );
   const hasFilters = statusFilter !== "all" || dateFrom !== "" || dateTo !== "";
+
+  const absenceTotalPages = Math.max(1, Math.ceil(absences.length / PAGE_SIZE));
+  const safeAbsencePage = Math.min(absencePage, absenceTotalPages);
+  const pagedAbsences = absences.slice(
+    (safeAbsencePage - 1) * PAGE_SIZE,
+    safeAbsencePage * PAGE_SIZE
+  );
 
   function clearFilters() {
     setStatusFilter("all");
@@ -631,139 +657,288 @@ export default function SupervisorInternDetailsPage() {
           </div>
         </aside>
 
-        {/* Time logs */}
+        {/* Time logs / Absences */}
         <div className={`${card} min-w-0 overflow-hidden lg:col-start-2 lg:row-start-1`}>
           <SectionHeader
-            icon={<Clock size={15} />}
-            title="Time logs"
+            icon={view === "logs" ? <Clock size={15} /> : <CalendarX size={15} />}
+            title={view === "logs" ? "Time logs" : "Absence requests"}
             meta={
-              hasFilters
-                ? `${filteredLogs.length} of ${allLogs.length} entries · ${intern.total_hours} hrs total`
-                : `${allLogs.length} entries · ${intern.total_hours} hrs total`
+              <div className="inline-flex rounded-lg border border-[var(--color-line)] bg-slate-50 p-0.5">
+                {(
+                  [
+                    { key: "logs", label: "Time logs", count: allLogs.length },
+                    { key: "absences", label: "Absences", count: absences.length },
+                  ] as const
+                ).map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setView(t.key)}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${view === t.key
+                      ? "bg-white text-[var(--color-ink)] shadow-sm"
+                      : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                      }`}
+                  >
+                    {t.label} ({t.count})
+                  </button>
+                ))}
+              </div>
             }
           />
 
-          {allLogs.length > 0 ? (
+          {view === "logs" ? (
             <>
-              {/* Filters */}
-              <div className="flex flex-wrap items-end gap-3 border-b border-[var(--color-line)] bg-slate-50/40 px-5 py-3">
-                <label className="block">
-                  <span className="mb-1 flex items-center gap-1 text-[11px] font-medium text-[var(--color-muted)]">
-                    <Filter size={11} /> Status
-                  </span>
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => {
-                      setStatusFilter(e.target.value as "all" | LogStatus);
-                      setPage(1);
-                    }}
-                    className={filterControl}
-                  >
-                    {STATUS_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              {allLogs.length > 0 ? (
+                <>
+                  {/* Filters */}
+                  <div className="flex flex-wrap items-end gap-3 border-b border-[var(--color-line)] bg-slate-50/40 px-5 py-3">
+                    <label className="block">
+                      <span className="mb-1 flex items-center gap-1 text-[11px] font-medium text-[var(--color-muted)]">
+                        <Filter size={11} /> Status
+                      </span>
+                      <select
+                        value={statusFilter}
+                        onChange={(e) => {
+                          setStatusFilter(e.target.value as "all" | LogStatus);
+                          setPage(1);
+                        }}
+                        className={filterControl}
+                      >
+                        {STATUS_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
 
-                <label className="block">
-                  <span className="mb-1 block text-[11px] font-medium text-[var(--color-muted)]">
-                    From
-                  </span>
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    max={dateTo || undefined}
-                    onChange={(e) => {
-                      setDateFrom(e.target.value);
-                      setPage(1);
-                    }}
-                    className={filterControl}
-                  />
-                </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-medium text-[var(--color-muted)]">
+                        From
+                      </span>
+                      <input
+                        type="date"
+                        value={dateFrom}
+                        max={dateTo || undefined}
+                        onChange={(e) => {
+                          setDateFrom(e.target.value);
+                          setPage(1);
+                        }}
+                        className={filterControl}
+                      />
+                    </label>
 
-                <label className="block">
-                  <span className="mb-1 block text-[11px] font-medium text-[var(--color-muted)]">
-                    To
-                  </span>
-                  <input
-                    type="date"
-                    value={dateTo}
-                    min={dateFrom || undefined}
-                    onChange={(e) => {
-                      setDateTo(e.target.value);
-                      setPage(1);
-                    }}
-                    className={filterControl}
-                  />
-                </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-medium text-[var(--color-muted)]">
+                        To
+                      </span>
+                      <input
+                        type="date"
+                        value={dateTo}
+                        min={dateFrom || undefined}
+                        onChange={(e) => {
+                          setDateTo(e.target.value);
+                          setPage(1);
+                        }}
+                        className={filterControl}
+                      />
+                    </label>
 
-                {hasFilters && (
-                  <button
-                    type="button"
-                    onClick={clearFilters}
-                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[var(--color-muted)] transition hover:bg-slate-100 hover:text-[var(--color-ink)]"
-                  >
-                    <X size={12} /> Clear
-                  </button>
-                )}
-              </div>
+                    {hasFilters && (
+                      <button
+                        type="button"
+                        onClick={clearFilters}
+                        className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[var(--color-muted)] transition hover:bg-slate-100 hover:text-[var(--color-ink)]"
+                      >
+                        <X size={12} /> Clear
+                      </button>
+                    )}
 
-              {filteredLogs.length > 0 ? (
+                    <p className="ml-auto text-xs text-[var(--color-muted)]">
+                      {hasFilters
+                        ? `${filteredLogs.length} of ${allLogs.length} entries`
+                        : `${allLogs.length} entries`}{" "}
+                      · {intern.total_hours} hrs total
+                    </p>
+                  </div>
+
+                  {filteredLogs.length > 0 ? (
+                    <>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-slate-50/70 text-xs text-[var(--color-muted)]">
+                            <tr>
+                              <th className="px-5 py-2.5 font-medium">Date</th>
+                              <th className="px-2.5 py-2.5 font-medium">In</th>
+                              <th className="px-2.5 py-2.5 font-medium">Out</th>
+                              <th className="px-2.5 py-2.5 font-medium">Duration</th>
+                              <th className="px-2.5 py-2.5 font-medium">Verification</th>
+                              <th className="px-5 py-2.5 text-right font-medium">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
+                            {pagedLogs.map((log) => (
+                              <tr key={log.id} className="transition hover:bg-slate-50/60">
+                                <td className="whitespace-nowrap px-5 py-3.5 font-medium">
+                                  {log.time_in ? fmtDate(log.time_in) : "—"}
+                                </td>
+                                <td className="whitespace-nowrap px-2.5 py-3.5">
+                                  {fmtClock(log.time_in)}
+                                </td>
+                                <td className="whitespace-nowrap px-2.5 py-3.5">
+                                  {log.time_out && !log.needs_correction ? (
+                                    fmtClock(log.time_out)
+                                  ) : (
+                                    <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                                      {log.time_out ? "Needs correction" : "In progress"}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="whitespace-nowrap px-2.5 py-3.5 font-semibold tabular-nums text-[var(--color-accent)]">
+                                  {fmtDuration(log.duration_minutes)}
+                                </td>
+                                <td className="px-2.5 py-3.5">
+                                  <span className="inline-block max-w-[120px] rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium leading-tight text-slate-700">
+                                    {fmtMethod(log.verification_method)}
+                                  </span>
+                                </td>
+                                <td className="whitespace-nowrap px-5 py-3.5">
+                                  <div className="flex items-center justify-end gap-2">
+                                    {log.needs_correction && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingLog(log)}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"
+                                      >
+                                        <Pencil size={11} /> Update
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingLog(log)}
+                                      title="View details"
+                                      aria-label="View details"
+                                      className="inline-flex items-center rounded-lg border border-[var(--color-line)] bg-white p-1.5 transition hover:bg-slate-50"
+                                    >
+                                      <Eye size={13} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Pagination */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-line)] bg-slate-50/40 px-5 py-3">
+                        <p className="text-xs text-[var(--color-muted)]">
+                          Showing{" "}
+                          <span className="font-semibold text-[var(--color-ink)]">
+                            {(safePage - 1) * PAGE_SIZE + 1}–
+                            {Math.min(safePage * PAGE_SIZE, filteredLogs.length)}
+                          </span>{" "}
+                          of {filteredLogs.length}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPage(safePage - 1)}
+                            disabled={safePage <= 1}
+                            aria-label="Previous page"
+                            className="inline-flex items-center rounded-lg border border-[var(--color-line)] bg-white p-1.5 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <ChevronLeft size={14} />
+                          </button>
+                          <span className="text-xs tabular-nums text-[var(--color-muted)]">
+                            Page{" "}
+                            <span className="font-semibold text-[var(--color-ink)]">
+                              {safePage}
+                            </span>{" "}
+                            of {totalPages}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setPage(safePage + 1)}
+                            disabled={safePage >= totalPages}
+                            aria-label="Next page"
+                            className="inline-flex items-center rounded-lg border border-[var(--color-line)] bg-white p-1.5 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <ChevronRight size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-14 text-center">
+                      <Filter size={26} className="mb-3 text-slate-300" />
+                      <p className="text-sm font-medium text-[var(--color-ink)]">
+                        No logs match these filters
+                      </p>
+                      <button
+                        type="button"
+                        onClick={clearFilters}
+                        className="mt-2 text-xs font-semibold text-[var(--color-accent)] hover:underline"
+                      >
+                        Clear filters
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-14 text-center">
+                  <Clock size={28} className="mb-3 text-slate-300" />
+                  <p className="text-sm font-medium text-[var(--color-ink)]">
+                    No time logs yet
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--color-muted)]">
+                    This intern hasn't recorded any sessions at your company.
+                  </p>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {absences.length > 0 ? (
                 <>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
                       <thead className="bg-slate-50/70 text-xs text-[var(--color-muted)]">
                         <tr>
-                          <th className="px-5 py-2.5 font-medium">Date</th>
-                          <th className="px-2.5 py-2.5 font-medium">In</th>
-                          <th className="px-2.5 py-2.5 font-medium">Out</th>
-                          <th className="px-2.5 py-2.5 font-medium">Duration</th>
-                          <th className="px-2.5 py-2.5 font-medium">Verification</th>
+                          <th className="px-5 py-2.5 font-medium">Absent on</th>
+                          <th className="px-2.5 py-2.5 font-medium">Reason</th>
+                          <th className="px-2.5 py-2.5 font-medium">Proof</th>
+                          <th className="px-2.5 py-2.5 font-medium">Status</th>
                           <th className="px-5 py-2.5 text-right font-medium">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
-                        {pagedLogs.map((log) => (
-                          <tr key={log.id} className="transition hover:bg-slate-50/60">
+                        {pagedAbsences.map((a) => (
+                          <tr key={a.id} className="transition hover:bg-slate-50/60">
                             <td className="whitespace-nowrap px-5 py-3.5 font-medium">
-                              {log.time_in ? fmtDate(log.time_in) : "—"}
+                              {fmtDate(a.absence_date)}
+                            </td>
+                            <td className="max-w-[220px] truncate px-2.5 py-3.5 text-[var(--color-muted)]">
+                              {a.reason || "—"}
+                            </td>
+                            <td className="whitespace-nowrap px-2.5 py-3.5 text-xs">
+                              {a.proof_url ? "Attached" : "None"}
                             </td>
                             <td className="whitespace-nowrap px-2.5 py-3.5">
-                              {fmtClock(log.time_in)}
-                            </td>
-                            <td className="whitespace-nowrap px-2.5 py-3.5">
-                              {log.time_out && !log.needs_correction ? (
-                                fmtClock(log.time_out)
-                              ) : (
-                                <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">
-                                  {log.time_out ? "Needs correction" : "In progress"}
-                                </span>
-                              )}
-                            </td>
-                            <td className="whitespace-nowrap px-2.5 py-3.5 font-semibold tabular-nums text-[var(--color-accent)]">
-                              {fmtDuration(log.duration_minutes)}
-                            </td>
-                            <td className="px-2.5 py-3.5">
-                              <span className="inline-block max-w-[120px] rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium leading-tight text-slate-700">
-                                {fmtMethod(log.verification_method)}
+                              <span
+                                className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${a.status === "justified"
+                                  ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
+                                  : "bg-amber-50 text-amber-700 ring-amber-600/20"
+                                  }`}
+                              >
+                                {a.status === "justified" ? "Filed" : "Awaiting"}
                               </span>
                             </td>
                             <td className="whitespace-nowrap px-5 py-3.5">
-                              <div className="flex items-center justify-end gap-2">
-                                {log.needs_correction && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingLog(log)}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"
-                                  >
-                                    <Pencil size={11} /> Update
-                                  </button>
-                                )}
+                              <div className="flex justify-end">
                                 <button
                                   type="button"
-                                  onClick={() => setViewingLog(log)}
+                                  onClick={() => setViewingAbsence(a)}
                                   title="View details"
                                   aria-label="View details"
                                   className="inline-flex items-center rounded-lg border border-[var(--color-line)] bg-white p-1.5 transition hover:bg-slate-50"
@@ -778,21 +953,21 @@ export default function SupervisorInternDetailsPage() {
                     </table>
                   </div>
 
-                  {/* Pagination */}
+                  {/* Absence pagination */}
                   <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-line)] bg-slate-50/40 px-5 py-3">
                     <p className="text-xs text-[var(--color-muted)]">
                       Showing{" "}
                       <span className="font-semibold text-[var(--color-ink)]">
-                        {(safePage - 1) * PAGE_SIZE + 1}–
-                        {Math.min(safePage * PAGE_SIZE, filteredLogs.length)}
+                        {(safeAbsencePage - 1) * PAGE_SIZE + 1}–
+                        {Math.min(safeAbsencePage * PAGE_SIZE, absences.length)}
                       </span>{" "}
-                      of {filteredLogs.length}
+                      of {absences.length}
                     </p>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setPage(safePage - 1)}
-                        disabled={safePage <= 1}
+                        onClick={() => setAbsencePage(safeAbsencePage - 1)}
+                        disabled={safeAbsencePage <= 1}
                         aria-label="Previous page"
                         className="inline-flex items-center rounded-lg border border-[var(--color-line)] bg-white p-1.5 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                       >
@@ -801,14 +976,14 @@ export default function SupervisorInternDetailsPage() {
                       <span className="text-xs tabular-nums text-[var(--color-muted)]">
                         Page{" "}
                         <span className="font-semibold text-[var(--color-ink)]">
-                          {safePage}
+                          {safeAbsencePage}
                         </span>{" "}
-                        of {totalPages}
+                        of {absenceTotalPages}
                       </span>
                       <button
                         type="button"
-                        onClick={() => setPage(safePage + 1)}
-                        disabled={safePage >= totalPages}
+                        onClick={() => setAbsencePage(safeAbsencePage + 1)}
+                        disabled={safeAbsencePage >= absenceTotalPages}
                         aria-label="Next page"
                         className="inline-flex items-center rounded-lg border border-[var(--color-line)] bg-white p-1.5 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                       >
@@ -819,30 +994,16 @@ export default function SupervisorInternDetailsPage() {
                 </>
               ) : (
                 <div className="flex flex-col items-center justify-center py-14 text-center">
-                  <Filter size={26} className="mb-3 text-slate-300" />
+                  <CalendarX size={28} className="mb-3 text-slate-300" />
                   <p className="text-sm font-medium text-[var(--color-ink)]">
-                    No logs match these filters
+                    No absence requests
                   </p>
-                  <button
-                    type="button"
-                    onClick={clearFilters}
-                    className="mt-2 text-xs font-semibold text-[var(--color-accent)] hover:underline"
-                  >
-                    Clear filters
-                  </button>
+                  <p className="mt-1 text-xs text-[var(--color-muted)]">
+                    This intern hasn't filed any absences.
+                  </p>
                 </div>
               )}
             </>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-14 text-center">
-              <Clock size={28} className="mb-3 text-slate-300" />
-              <p className="text-sm font-medium text-[var(--color-ink)]">
-                No time logs yet
-              </p>
-              <p className="mt-1 text-xs text-[var(--color-muted)]">
-                This intern hasn't recorded any sessions at your company.
-              </p>
-            </div>
           )}
         </div>
       </div>
@@ -867,6 +1028,11 @@ export default function SupervisorInternDetailsPage() {
         studentName={fullName}
         visible={Boolean(viewingLog)}
         onClose={() => setViewingLog(null)}
+      />
+      <AbsenceViewModal
+        absence={viewingAbsence}
+        studentName={fullName}
+        onClose={() => setViewingAbsence(null)}
       />
     </section>
   );

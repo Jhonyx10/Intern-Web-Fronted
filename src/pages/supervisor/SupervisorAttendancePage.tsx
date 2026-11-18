@@ -15,6 +15,7 @@ import {
   Timer,
   CheckCircle2,
   UserCheck,
+  UserPlus,
 } from "lucide-react";
 import {
   useSupervisorAttendance,
@@ -24,14 +25,18 @@ import {
   useUpdateSupervisorSchedule,
   useDeleteSupervisorSchedule,
   useUpdateTimeLogTimeOut,
+  useSupervisorInternOptions,
+  useCreateSupervisorTimeLog,
   type CompanyScheduleData,
   type ScheduleInput,
   type SupervisorAttendanceLog,
+  type ManualTimeLogInput,
 } from "@/lib/queries/supervisor";
 import { useAuth } from "@/lib/auth";
 import { useCurrentSchoolYear } from "@/lib/queries/school-year";
 import AddEditScheduleModal from "@/components/modal/AddEditScheduleModal";
 import { UpdateTimeOutModal } from "@/components/modal/UpdateTimeOutModal";
+import { AddTimeLogModal } from "@/components/modal/AddTimeLogModal";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -125,13 +130,19 @@ const RANGES = [
   { key: "custom", label: "Custom" },
 ] as const;
 
-type LogState = "in_progress" | "needs_correction" | "corrected" | "completed";
+type LogState =
+  | "in_progress"
+  | "needs_correction"
+  | "corrected"
+  | "manual"
+  | "completed";
 
 function logState(log: SupervisorAttendanceLog): LogState {
   if (log.needs_correction) return log.time_out ? "needs_correction" : "in_progress";
   if (!log.time_out) return "in_progress";
   const method = (log as { verification_method?: string | null })
     .verification_method;
+  if (method === "supervisor_created") return "manual";
   if (method === "supervisor_corrected") return "corrected";
   return "completed";
 }
@@ -148,6 +159,10 @@ const STATE_STYLES: Record<LogState, { label: string; cls: string }> = {
   corrected: {
     label: "Corrected",
     cls: "bg-violet-50 text-violet-700 ring-violet-600/20",
+  },
+  manual: {
+    label: "Manual entry",
+    cls: "bg-slate-100 text-slate-700 ring-slate-500/20",
   },
   completed: {
     label: "Completed",
@@ -225,7 +240,12 @@ export function SupervisorAttendancePage() {
     useDeleteSupervisorSchedule();
   const updateTimeOut = useUpdateTimeLogTimeOut();
 
+  const { data: internOptions = [], isLoading: isLoadingInterns } =
+    useSupervisorInternOptions();
+  const createLog = useCreateSupervisorTimeLog();
+
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAddLogOpen, setIsAddLogOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] =
     useState<CompanyScheduleData | null>(null);
   const [editingLog, setEditingLog] = useState<SupervisorAttendanceLog | null>(
@@ -377,6 +397,20 @@ export function SupervisorAttendancePage() {
       { logId: editingLog.id, timeOut, reason },
       { onSuccess: () => setEditingLog(null) }
     );
+  }
+
+  function handleCreateLog(input: ManualTimeLogInput) {
+    createLog.mutate(input, {
+      onSuccess: () => {
+        setIsAddLogOpen(false);
+        // make sure the new row is visible in the current view
+        if (input.date < rangeFrom || input.date > rangeTo) {
+          setRange("custom");
+          setDateFrom(input.date);
+          setDateTo(input.date);
+        }
+      },
+    });
   }
 
   function clearFilters() {
@@ -619,15 +653,24 @@ export function SupervisorAttendancePage() {
               </p>
             </div>
 
-            {hasFilters && (
+            <div className="flex items-center gap-2">
+              {hasFilters && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[var(--color-muted)] transition hover:bg-slate-100 hover:text-[var(--color-ink)]"
+                >
+                  <X size={12} /> Reset filters
+                </button>
+              )}
               <button
                 type="button"
-                onClick={clearFilters}
-                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[var(--color-muted)] transition hover:bg-slate-100 hover:text-[var(--color-ink)]"
+                onClick={() => setIsAddLogOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--color-accent)] px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--color-accent-hover)] active:scale-[0.98]"
               >
-                <X size={12} /> Reset filters
+                <UserPlus size={15} /> Add time log
               </button>
-            )}
+            </div>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -862,6 +905,16 @@ export function SupervisorAttendancePage() {
         isSaving={updateTimeOut.isPending}
         onClose={() => setEditingLog(null)}
         onSave={handleSaveTimeOut}
+      />
+
+      <AddTimeLogModal
+        open={isAddLogOpen}
+        interns={internOptions}
+        isLoadingInterns={isLoadingInterns}
+        isSaving={createLog.isPending}
+        defaultDate={today}
+        onClose={() => setIsAddLogOpen(false)}
+        onSave={handleCreateLog}
       />
     </section>
   );

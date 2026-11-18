@@ -44,6 +44,7 @@ import HistoryPage from "./pages/admin/HistoryPage";
 import HistoryDetailsPage from "./pages/details/HistoryDetailsPage";
 import SchoolYearDetailsPage from "./pages/details/SchoolYearDetailsPage";
 import DepartmentDocumentsPage from "./pages/details/DepartmentDocumentsPage";
+import ReportsPage from "./pages/ReportsPage";
 
 import AttendancePage from "./pages/dean/AttendancePage";
 
@@ -142,6 +143,7 @@ function AppContent() {
                 path="/attendance"
                 element={<AttendancePage />}
               />
+              <Route path="/reports" element={<ReportsPage />} />
               <Route
                 path="/intern-evaluations"
                 element={<InternEvaluationsPage />}

@@ -165,7 +165,24 @@ export type InternDetail = {
     total_hours: number
     schedules: InternDetailSchedule[]
     time_logs: InternDetailTimelog[]
+    absences?: InternDetailAbsence[]
     ojt_evaluations?: SupervisorInternEvaluation[]
+}
+
+export type SupervisorInternOption = {
+    id: number
+    student_name: string // "Last, First"
+    student_number: string | null
+}
+
+export type ManualTimeLogInput = {
+    student_id: number
+    date: string // YYYY-MM-DD
+    time_in: string // HH:mm
+    break_out?: string | null
+    break_in?: string | null
+    time_out?: string | null
+    reason: string
 }
 
 export function useSupervisorProfile() {
@@ -505,6 +522,17 @@ export type InternEvaluationRow = {
     } | null
 }
 
+export type InternDetailAbsence = {
+    id: number
+    absence_date: string
+    status: 'detected' | 'justified'
+    reason: string | null
+    proof_url: string | null
+    proof_original_filename: string | null
+    proof_mime_type: string | null
+    justification_submitted_at: string | null
+}
+
 export function useInternEvaluations() {
     const { token } = useAuth()
     return useQuery({
@@ -515,3 +543,35 @@ export function useInternEvaluations() {
     })
 }
 
+export function useSupervisorInternOptions() {
+    const { token } = useAuth()
+    return useQuery({
+        queryKey: ['supervisor', 'intern-options'],
+        queryFn: () =>
+            apiRequest<{ data: SupervisorInternOption[] }>('/supervisor/interns/options', {
+                token: token!,
+            }),
+        enabled: Boolean(token),
+        select: (res) => res.data,
+    })
+}
+
+export function useCreateSupervisorTimeLog() {
+    const { token } = useAuth()
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (input: ManualTimeLogInput) =>
+            apiRequest('/supervisor/attendance', {
+                method: 'POST',
+                token: token!,
+                body: input,
+            }),
+        onSuccess: () => {
+            // prefix match also refreshes ['supervisor', 'interns', id] and total hours
+            void queryClient.invalidateQueries({ queryKey: ['supervisor', 'interns'] })
+            void queryClient.invalidateQueries({ queryKey: ['supervisor', 'attendance'] })
+            toastMutationSuccess('Time log added')
+        },
+        onError: (error) => toastMutationError(error, 'Failed to add time log'),
+    })
+}

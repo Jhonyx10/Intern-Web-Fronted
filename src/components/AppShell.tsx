@@ -4,7 +4,7 @@ import { NavLink, Outlet, useLocation, matchPath } from "react-router-dom";
 import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/context/ThemeContext'
 import OCCLOGO from '@/assets/OCC logo.webp'
-import { Calendar1Icon, UserIcon, Settings, BuildingIcon, FolderIcon, FolderCheckIcon, Building2Icon, CalendarDays, Loader2, ClipboardList } from 'lucide-react'
+import { Calendar1Icon, UserIcon, Settings, BuildingIcon, FolderIcon, FolderCheckIcon, Building2Icon, CalendarDays, Loader2, ClipboardList, FileText } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { apiRequest } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
@@ -72,6 +72,14 @@ const navItems: NavItem[] = [
     icon: FolderIcon,
     section: 'academic',
     roles: ["dean", "super_admin"],
+  },
+  {
+    to: "/reports",
+    label: "Reports",
+    end: true,
+    icon: FileText,
+    section: 'academic',
+    roles: ["super_admin", "dean", "coordinator"],
   },
   // People
   {

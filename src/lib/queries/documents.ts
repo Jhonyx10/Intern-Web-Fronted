@@ -48,6 +48,17 @@ type CreateRequirementPayload = {
   school_year_id?: number
 }
 
+export type InternDocumentProgress = {
+  id: number
+  student_number: string | null
+  name: string // "Last, First"
+  section: { id: number; name: string } | null
+  school_year: { id: number; name: string; semester: string | null } | null
+  approved_documents: number
+  total_requirements: number
+  is_complete: boolean
+}
+
 // Appends ?school_year_id=… to a path when a school year is selected
 const withSchoolYear = (path: string, schoolYearId?: number) =>
   schoolYearId ? `${path}?school_year_id=${schoolYearId}` : path
@@ -305,5 +316,27 @@ export function useUpdateDocumentStatus() {
       )
     },
     onError: (error) => toastMutationError(error, 'Failed to update document status'),
+  })
+}
+
+export function useInternDocumentProgress(
+  courseId: string | number | undefined,
+  schoolYearId: number | undefined,
+  enabled = true
+) {
+  const { token } = useAuth()
+  const qs = new URLSearchParams()
+  if (courseId) qs.set('course_id', String(courseId))
+  if (schoolYearId) qs.set('school_year_id', String(schoolYearId))
+
+  return useQuery({
+    queryKey: ['document-progress', courseId ?? null, schoolYearId ?? null],
+    queryFn: () =>
+      apiRequest<{ data: InternDocumentProgress[]; total_requirements: number }>(
+        `/document-progress?${qs.toString()}`,
+        { token: token! }
+      ),
+    enabled: Boolean(token) && enabled,
+    select: (res) => res,
   })
 }

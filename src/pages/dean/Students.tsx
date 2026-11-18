@@ -11,6 +11,7 @@ import type { Student } from '@/types'
 
 type InternshipStatus = 'pending' | 'ongoing' | 'completed'
 type PlacementFilter = 'all' | 'assigned' | 'unassigned'
+type SortKey = 'progress' | 'name'
 
 type StudentListItem = Student & {
     section?: {
@@ -53,6 +54,11 @@ const PLACEMENT_OPTIONS: Array<{ key: PlacementFilter; label: string }> = [
     { key: 'unassigned', label: 'Not yet placed' },
 ]
 
+const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
+    { key: 'progress', label: 'Most progress first' },
+    { key: 'name', label: 'Name A–Z' },
+]
+
 const selectClass =
     'rounded-lg border border-[var(--color-line)] bg-white/80 px-3 py-1.5 text-xs font-medium text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]'
 
@@ -86,6 +92,17 @@ function initialsOf(student: StudentListItem) {
 
 const toArray = (value: any): any[] => (Array.isArray(value) ? value : value?.data ?? [])
 
+// Color by how far along the intern is, so it reads at a glance
+function progressTone(p: number) {
+    if (p >= 100) return { bar: 'bg-emerald-600', text: 'text-emerald-700' }
+    if (p >= 67) return { bar: 'bg-emerald-400', text: 'text-emerald-600' }
+    if (p >= 34) return { bar: 'bg-sky-500', text: 'text-sky-600' }
+    if (p > 0) return { bar: 'bg-amber-500', text: 'text-amber-600' }
+    return { bar: 'bg-slate-300', text: 'text-[var(--color-muted)]' }
+}
+
+const fmtHours = (h: number) => (Math.round(h * 10) / 10).toString()
+
 // Read the initial filters from the URL, e.g. /students?status=completed or /students?placement=assigned
 function parseStatusParam(value: string | null): InternshipStatus | 'all' {
     return value === 'pending' || value === 'ongoing' || value === 'completed' ? value : 'all'
@@ -111,6 +128,7 @@ const StudentsPage = () => {
     )
     const [companyFilter, setCompanyFilter] = useState<string>('all')
     const [departmentFilter, setDepartmentFilter] = useState<string>('all')
+    const [sortKey, setSortKey] = useState<SortKey>('progress')
     // null = not initialised yet (waiting for school years to load)
     const [schoolYearFilter, setSchoolYearFilter] = useState<string | null>(null)
     const schoolYearValue = schoolYearFilter ?? 'all'
@@ -154,8 +172,9 @@ const StudentsPage = () => {
             company_id: companyFilter === 'all' ? undefined : companyFilter,
             course_id: departmentFilter === 'all' ? undefined : departmentFilter,
             school_year_id: schoolYearValue === 'all' ? undefined : schoolYearValue,
+            sort: sortKey,
         }),
-        [debouncedQuery, statusFilter, placementFilter, companyFilter, departmentFilter, schoolYearValue],
+        [debouncedQuery, statusFilter, placementFilter, companyFilter, departmentFilter, schoolYearValue, sortKey],
     )
 
     // Wait for the default school year so we don't fetch everything first
@@ -234,11 +253,11 @@ const StudentsPage = () => {
                     <p className="mt-1 text-sm text-[var(--color-muted)]">
                         {totalStudents} student intern{totalStudents === 1 ? '' : 's'}
                         {schoolYearValue === 'all' &&
-                        departmentFilter === 'all' &&
-                        companyFilter === 'all' &&
-                        statusFilter === 'all' &&
-                        placementFilter === 'all' &&
-                        !debouncedQuery
+                            departmentFilter === 'all' &&
+                            companyFilter === 'all' &&
+                            statusFilter === 'all' &&
+                            placementFilter === 'all' &&
+                            !debouncedQuery
                             ? ' on record'
                             : ' match your filters'}
                     </p>
@@ -331,6 +350,19 @@ const StudentsPage = () => {
                             </option>
                         ))}
                     </select>
+
+                    <select
+                        value={sortKey}
+                        onChange={(event) => onFilterChange(setSortKey)(event.target.value as SortKey)}
+                        className={selectClass}
+                        aria-label="Sort students"
+                    >
+                        {SORT_OPTIONS.map((option) => (
+                            <option key={option.key} value={option.key}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
                 </div>
             </motion.div>
 
@@ -340,7 +372,7 @@ const StudentsPage = () => {
                     isFetching && !isLoading ? 'opacity-70' : 'opacity-100',
                 ].join(' ')}
             >
-                <div className="hidden grid-cols-[1.5fr_1.1fr_1.1fr_1.1fr_0.8fr_0.7fr] gap-3 border-b border-[var(--color-line)] px-4 py-2.5 text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase sm:grid">
+                <div className="hidden grid-cols-[1.5fr_1.1fr_1.1fr_1.5fr_0.8fr_0.7fr] gap-3 border-b border-[var(--color-line)] px-4 py-2.5 text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase sm:grid">
                     <span>Student</span>
                     <span>Section / S.Y.</span>
                     <span>Company</span>
@@ -363,6 +395,10 @@ const StudentsPage = () => {
                                 const hoursRequired = student.hours_required ?? 486
                                 const status = student.status ?? 'pending'
                                 const progress = Math.min(100, Math.round((hoursCompleted / hoursRequired) * 100))
+                                // any logged time counts as "started", even if it rounds to 0%
+                                const started = hoursCompleted > 0
+                                const tone = progressTone(started ? Math.max(progress, 1) : 0)
+                                const barWidth = started ? Math.max(progress, 3) : 0
                                 const schoolYearName =
                                     student.section?.school_year?.name ?? student.section?.schoolYear?.name
 
@@ -375,7 +411,7 @@ const StudentsPage = () => {
                                         animate="show"
                                         exit="exit"
                                         onClick={() => navigate(`/students/${student.id}`)}
-                                        className="grid grid-cols-1 gap-3 border-b border-[var(--color-line)] px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-slate-50 cursor-pointer sm:grid-cols-[1.5fr_1.1fr_1.1fr_1.1fr_0.8fr_0.7fr] sm:items-center"
+                                        className="grid grid-cols-1 gap-3 border-b border-[var(--color-line)] px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-slate-50 cursor-pointer sm:grid-cols-[1.5fr_1.1fr_1.1fr_1.5fr_0.8fr_0.7fr] sm:items-center"
                                     >
                                         <div className="flex min-w-0 items-center gap-3">
                                             <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--color-accent-soft)] text-[11px] font-semibold text-[var(--color-accent)]">
@@ -412,16 +448,23 @@ const StudentsPage = () => {
                                             )}
                                         </span>
 
-                                        <div className="flex items-center gap-2">
-                                            <div className="h-1.5 w-full max-w-[100px] overflow-hidden rounded-full bg-slate-100">
+                                        <div className="min-w-0">
+                                            <div className="mb-1 flex items-baseline justify-between gap-2">
+                                                <span className={`text-sm font-bold tabular-nums ${tone.text}`}>
+                                                    {progress}%
+                                                </span>
+                                                <span className="truncate text-[11px] tabular-nums text-[var(--color-muted)]">
+                                                    {fmtHours(hoursCompleted)} / {hoursRequired} hrs
+                                                </span>
+                                            </div>
+                                            <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
                                                 <motion.div
                                                     initial={{ width: 0 }}
-                                                    animate={{ width: `${progress}%` }}
+                                                    animate={{ width: `${barWidth}%` }}
                                                     transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                                                    className="h-full rounded-full bg-[var(--color-accent)]"
+                                                    className={`h-full rounded-full ${tone.bar}`}
                                                 />
                                             </div>
-                                            <span className="shrink-0 text-xs text-[var(--color-muted)]">{progress}%</span>
                                         </div>
 
                                         <span
