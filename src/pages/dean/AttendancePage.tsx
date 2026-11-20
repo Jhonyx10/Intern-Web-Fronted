@@ -22,6 +22,7 @@ import {
 } from "@/lib/queries/attendance";
 import { TimeLogDetails } from "@/components/modal/TimeLogDetails";
 import { AbsenceViewModal } from "@/components/modal/AbsenceViewModal";
+import { SessionBadge } from "@/components/SessionBadge";
 import { useAuth } from "@/lib/auth";
 import { useCurrentSchoolYear } from "@/lib/queries/school-year";
 import type { AbsenceRecord } from "@/lib/queries/attendance";
@@ -391,6 +392,7 @@ function StudentAttendanceModal({
                                     <th className="px-6 py-3">Date</th>
                                     <th className="px-6 py-3">Day</th>
                                     <th className="px-6 py-3">Time In</th>
+                                    <th className="px-6 py-3">Arrival</th>
                                     <th className="px-6 py-3">Break</th>
                                     <th className="px-6 py-3">Time Out</th>
                                     <th className="px-6 py-3">Duration</th>
@@ -410,6 +412,9 @@ function StudentAttendanceModal({
                                         </td>
                                         <td className="px-6 py-3.5 whitespace-nowrap font-medium text-slate-800">
                                             {fmtTime(log.time_in)}
+                                        </td>
+                                        <td className="px-6 py-3.5 whitespace-nowrap">
+                                            <SessionBadge value={log.session_period} />
                                         </td>
                                         <td className="px-6 py-3.5 whitespace-nowrap text-[11px]">
                                             {log.break_out ? (
@@ -1030,6 +1035,7 @@ export default function AttendancePage() {
                                     <th className="px-6 py-3">Dept &amp; Section</th>
                                     <th className="px-6 py-3">Date</th>
                                     <th className="px-6 py-3">Time In</th>
+                                    <th className="px-6 py-3">Arrival</th>
                                     <th className="px-6 py-3">Break Out / In</th>
                                     <th className="px-6 py-3">Time Out</th>
                                     <th className="px-6 py-3">Duration</th>
@@ -1065,6 +1071,10 @@ export default function AttendancePage() {
 
                                         <td className="px-6 py-3.5 whitespace-nowrap font-medium text-slate-800">
                                             {fmtTime(record.time_in)}
+                                        </td>
+
+                                        <td className="px-6 py-3.5 whitespace-nowrap">
+                                            <SessionBadge value={record.session_period} />
                                         </td>
 
                                         <td className="px-6 py-3.5 whitespace-nowrap text-[11px]">

@@ -59,6 +59,7 @@ import { TimeLogDetails } from "@/components/modal/TimeLogDetails";
 import { GeofenceExcursionDetailsModal } from "@/components/modal/GeofenceExcursionDetailsModal";
 import { ExportDTRModal } from "@/components/modal/ExportDtrModal";
 import { TimeLogToolbar } from "@/components/TimeLogToolbar";
+import { SessionBadge } from "@/components/SessionBadge";
 import { useUpdateDocumentStatus } from "@/lib/queries/documents";
 import { toastMutationError, toastMutationSuccess } from "@/lib/mutationToast";
 // --- Shapes matching the actual /students/{id} payload ---
@@ -229,6 +230,16 @@ function logDateKey(value?: string | null): string | null {
   if (!value) return null;
   const d = new Date(value.includes("T") ? value : value.replace(" ", "T"));
   return isNaN(d.getTime()) ? null : toDateKey(d);
+}
+
+// Short date label used where a time log is referenced (excursions tab / modal)
+function logDateLabel(log?: TimeLog | null): string | undefined {
+  if (!log) return undefined;
+  return new Date(log.time_in).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export function StudentDetailsPage() {
@@ -1115,7 +1126,7 @@ export function StudentDetailsPage() {
                   <table className="w-full text-left text-xs">
                     <thead className="border-b border-[var(--color-line)] bg-slate-50/80 font-semibold text-[var(--color-muted)] uppercase tracking-wider">
                       <tr>
-                        <th className="px-4 py-3">Session</th>
+                        <th className="px-4 py-3">Arrival</th>
                         <th className="px-4 py-3">Day</th>
                         <th className="px-4 py-3">Time In</th>
                         <th className="px-4 py-3">Time Out</th>
@@ -1136,8 +1147,8 @@ export function StudentDetailsPage() {
                             key={log.id}
                             className="hover:bg-slate-50/60 transition"
                           >
-                            <td className="px-4 py-3 font-semibold text-[var(--color-ink)] capitalize">
-                              {log.session_period || "Regular"}
+                            <td className="px-4 py-3">
+                              <SessionBadge value={log.session_period} />
                             </td>
                             <td className="px-4 py-3">
                               <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
@@ -1268,10 +1279,8 @@ export function StudentDetailsPage() {
                         const timeLog = timeLogs.find(
                           (l) => l.id === exc.time_log_id
                         );
-                        const session = timeLog?.session_period
-                          || (timeLog
-                            ? new Date(timeLog.time_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                            : undefined);
+                        // session_period now holds early / on_time / late, so label by date instead
+                        const session = logDateLabel(timeLog);
                         const isActive =
                           !exc.return_at || exc.status === "active";
 
@@ -1280,7 +1289,7 @@ export function StudentDetailsPage() {
                             key={exc.id}
                             className="hover:bg-slate-50/60 transition"
                           >
-                            <td className="px-4 py-3 font-semibold text-[var(--color-ink)] capitalize">
+                            <td className="px-4 py-3 font-semibold text-[var(--color-ink)]">
                               {session ?? '—'}
                             </td>
                             <td className="px-4 py-3 text-[var(--color-muted)]">
@@ -1798,11 +1807,9 @@ export function StudentDetailsPage() {
         geofencePolygon={assignedCompany?.geofence_polygon ?? null}
         sessionLabel={
           viewingExcursion
-            ? (() => {
-              const l = timeLogs.find((l) => l.id === viewingExcursion.time_log_id);
-              return l?.session_period
-                || (l ? new Date(l.time_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : undefined);
-            })()
+            ? logDateLabel(
+              timeLogs.find((l) => l.id === viewingExcursion.time_log_id)
+            )
             : null
         }
         onClose={() => setViewingExcursion(null)}

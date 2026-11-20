@@ -63,6 +63,7 @@ export type SupervisorAttendanceLog = {
     task_note: string | null
     verification_method: string | null
     needs_correction?: boolean
+    session_period?: "early" | "on_time" | "late" | null;
 }
 
 export type CompanyScheduleData = {

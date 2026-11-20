@@ -37,6 +37,7 @@ import { useCurrentSchoolYear } from "@/lib/queries/school-year";
 import AddEditScheduleModal from "@/components/modal/AddEditScheduleModal";
 import { UpdateTimeOutModal } from "@/components/modal/UpdateTimeOutModal";
 import { AddTimeLogModal } from "@/components/modal/AddTimeLogModal";
+import { SessionBadge } from "@/components/SessionBadge";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -776,6 +777,7 @@ export function SupervisorAttendancePage() {
                   <th className="px-5 py-2.5 font-medium">Intern</th>
                   <th className="px-3 py-2.5 font-medium">Date</th>
                   <th className="px-3 py-2.5 font-medium">In</th>
+                  <th className="px-3 py-2.5 font-medium">Arrival</th>
                   <th className="px-3 py-2.5 font-medium">Break</th>
                   <th className="px-3 py-2.5 font-medium">Out</th>
                   <th className="px-3 py-2.5 font-medium">Duration</th>
@@ -814,6 +816,9 @@ export function SupervisorAttendancePage() {
                       </td>
                       <td className="whitespace-nowrap px-3 py-3.5 tabular-nums">
                         {fmtTime(log.time_in)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3.5">
+                        <SessionBadge value={log.session_period} />
                       </td>
                       <td className="whitespace-nowrap px-3 py-3.5">
                         {log.break_out || log.break_in ? (
