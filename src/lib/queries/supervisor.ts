@@ -467,19 +467,18 @@ export function useUpdateTimeLogTimeOut() {
     const { token } = useAuth()
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: ({ logId, timeOut, reason }: { logId: number; timeOut: string; reason: string }) =>
+        mutationFn: ({ logId, ...body }: UpdateTimeLogInput) =>
             apiRequest(`/supervisor/time-logs/${logId}/time-out`, {
                 method: 'PATCH',
                 token: token!,
-                body: { time_out: timeOut, reason },
+                body,
             }),
         onSuccess: () => {
-            // prefix match also refreshes ['supervisor', 'interns', id]
             void queryClient.invalidateQueries({ queryKey: ['supervisor', 'interns'] })
             void queryClient.invalidateQueries({ queryKey: ['supervisor', 'attendance'] })
-            toastMutationSuccess('Time out updated')
+            toastMutationSuccess('Time log updated')
         },
-        onError: (error) => toastMutationError(error, 'Failed to update time out'),
+        onError: (error) => toastMutationError(error, 'Failed to update time log'),
     })
 }
 
@@ -532,6 +531,15 @@ export type InternDetailAbsence = {
     proof_original_filename: string | null
     proof_mime_type: string | null
     justification_submitted_at: string | null
+}
+
+export type UpdateTimeLogInput = {
+    logId: number
+    time_in?: string
+    break_out?: string | null
+    break_in?: string | null
+    time_out?: string | null
+    reason: string
 }
 
 export function useInternEvaluations() {

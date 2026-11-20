@@ -7,6 +7,16 @@ type EditableLog = {
     time_in: string | null;
     break_out: string | null;
     break_in: string | null;
+    time_out: string | null;
+    needs_correction?: boolean;
+};
+
+export type TimeLogEditInput = {
+    time_in: string; // HH:mm
+    break_out: string | null;
+    break_in: string | null;
+    time_out: string | null;
+    reason: string;
 };
 
 type Props = {
@@ -15,13 +25,12 @@ type Props = {
     scheduledTimeOut?: string | null;
     isSaving?: boolean;
     onClose: () => void;
-    /** Receives the time as "HH:mm" and the supervisor's reason. */
-    onSave: (timeOut: string, reason: string) => void;
+    /** Receives every time as "HH:mm" (or null when empty) and the supervisor's reason. */
+    onSave: (input: TimeLogEditInput) => void;
 };
 
-function fmtClock(d: Date) {
-    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
+type FieldKey = "time_in" | "break_out" | "break_in" | "time_out";
+
 
 function fmtDuration(minutes: number) {
     const h = Math.floor(minutes / 60);
@@ -34,6 +43,59 @@ function hhmmToLabel(hhmm: string) {
     return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 
+// ISO string -> local "HH:mm" for <input type="time">
+function toHm(iso: string | null | undefined) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function TimeField({
+    label,
+    value,
+    onChange,
+    onEnter,
+    invalid,
+    required,
+    autoFocus,
+    disabled,
+}: {
+    label: string;
+    value: string;
+    onChange: (v: string) => void;
+    onEnter: () => void;
+    invalid?: boolean;
+    required?: boolean;
+    autoFocus?: boolean;
+    disabled?: boolean;
+}) {
+    return (
+        <label
+            className={`rounded-xl border px-4 py-3 transition-colors focus-within:ring-2 ${invalid
+                ? "border-red-300 bg-red-50/50 focus-within:ring-red-200"
+                : "border-[var(--color-line)] bg-white focus-within:border-[var(--color-accent)] focus-within:ring-[var(--color-accent)]/20"
+                }`}
+        >
+            <span className="text-xs text-[var(--color-muted)]">
+                {label}
+                {required && <span className="text-red-500"> *</span>}
+            </span>
+            <input
+                type="time"
+                autoFocus={autoFocus}
+                disabled={disabled}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter") onEnter();
+                }}
+                className="mt-0.5 block w-full bg-transparent text-lg font-semibold tabular-nums text-[var(--color-ink)] outline-none disabled:opacity-60"
+            />
+        </label>
+    );
+}
+
 export function UpdateTimeOutModal({
     log,
     scheduledTimeOut,
@@ -42,7 +104,10 @@ export function UpdateTimeOutModal({
     onSave,
 }: Props) {
     const reduce = useReducedMotion();
-    const [value, setValue] = useState("");
+    const [timeIn, setTimeIn] = useState("");
+    const [breakOut, setBreakOut] = useState("");
+    const [breakIn, setBreakIn] = useState("");
+    const [timeOut, setTimeOut] = useState("");
     const [reason, setReason] = useState("");
 
     // Keep the last log around so the content doesn't vanish during the exit animation.
@@ -50,11 +115,16 @@ export function UpdateTimeOutModal({
     useEffect(() => {
         if (log) {
             setLastLog(log);
-            setValue("");
+            setTimeIn(toHm(log.time_in));
+            setBreakOut(toHm(log.break_out));
+            setBreakIn(toHm(log.break_in));
+            // An auto-closed log holds a placeholder time out, so start empty
+            setTimeOut(log.needs_correction ? "" : toHm(log.time_out));
             setReason("");
         }
     }, [log?.id]);
     const data = log ?? lastLog;
+    const needsTimeOut = Boolean(data?.needs_correction);
 
     // Close on Escape
     useEffect(() => {
@@ -66,33 +136,72 @@ export function UpdateTimeOutModal({
         return () => window.removeEventListener("keydown", onKey);
     }, [log, isSaving, onClose]);
 
-    const result = useMemo(() => {
-        if (!data?.time_in || !value) return null;
-        const [h, m] = value.split(":").map(Number);
-        const timeIn = new Date(data.time_in);
-        const out = new Date(timeIn);
-        out.setHours(h, m, 0, 0);
+    // Same ordering rules as the API: in < break out < break in < out
+    const check = useMemo(() => {
+        if (!timeIn) {
+            return {
+                error: { field: "time_in" as FieldKey, message: "Time in is required." },
+                net: null as number | null,
+                brk: 0,
+            };
+        }
 
-        const gross = Math.round((out.getTime() - timeIn.getTime()) / 60000);
-        const brk =
-            data.break_out && data.break_in
-                ? Math.max(
-                    0,
-                    Math.round(
-                        (new Date(data.break_in).getTime() -
-                            new Date(data.break_out).getTime()) /
-                        60000
-                    )
-                )
-                : 0;
+        let error: { field: FieldKey; message: string } | null = null;
 
-        return { valid: gross > 0, net: Math.max(0, gross - brk), brk };
-    }, [data, value]);
+        if ((breakOut && !breakIn) || (!breakOut && breakIn)) {
+            error = {
+                field: breakOut ? "break_in" : "break_out",
+                message: "Enter both break out and break in, or leave both empty.",
+            };
+        } else if (breakOut && breakOut <= timeIn) {
+            error = {
+                field: "break_out",
+                message: `Break out must be after the time in (${hhmmToLabel(timeIn)}).`,
+            };
+        } else if (breakOut && breakIn && breakIn <= breakOut) {
+            error = {
+                field: "break_in",
+                message: `Break in must be after the break out (${hhmmToLabel(breakOut)}).`,
+            };
+        } else if (timeOut && timeOut <= (breakIn || breakOut || timeIn)) {
+            error = {
+                field: "time_out",
+                message: breakIn
+                    ? `Time out must be after the break in (${hhmmToLabel(breakIn)}).`
+                    : `Time out must be after the time in (${hhmmToLabel(timeIn)}).`,
+            };
+        }
+
+        if (error || !timeOut) return { error, net: null, brk: 0 };
+
+        const mins = (hm: string) => {
+            const [h, m] = hm.split(":").map(Number);
+            return h * 60 + m;
+        };
+        const brk = breakOut && breakIn ? mins(breakIn) - mins(breakOut) : 0;
+        const net = Math.max(0, mins(timeOut) - mins(timeIn) - brk);
+        return { error: null, net, brk };
+    }, [timeIn, breakOut, breakIn, timeOut]);
 
     const scheduled = scheduledTimeOut ? scheduledTimeOut.slice(0, 5) : null;
     const canSave =
-        Boolean(result?.valid) && reason.trim().length > 0 && !isSaving;
-    const timeIn = data?.time_in ? new Date(data.time_in) : null;
+        !check.error &&
+        Boolean(timeIn) &&
+        (!needsTimeOut || Boolean(timeOut)) &&
+        reason.trim().length > 0 &&
+        !isSaving;
+    const logDate = data?.time_in ? new Date(data.time_in) : null;
+
+    function submit() {
+        if (!canSave) return;
+        onSave({
+            time_in: timeIn,
+            break_out: breakOut || null,
+            break_in: breakIn || null,
+            time_out: timeOut || null,
+            reason: reason.trim(),
+        });
+    }
 
     const spring = reduce
         ? { duration: 0 }
@@ -100,7 +209,7 @@ export function UpdateTimeOutModal({
 
     return (
         <AnimatePresence>
-            {log && timeIn && (
+            {log && logDate && (
                 <motion.div
                     key="backdrop"
                     className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 backdrop-blur-sm sm:items-center"
@@ -115,8 +224,8 @@ export function UpdateTimeOutModal({
                     <motion.div
                         role="dialog"
                         aria-modal="true"
-                        aria-labelledby="update-timeout-title"
-                        className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-black/5"
+                        aria-labelledby="update-timelog-title"
+                        className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white shadow-2xl ring-1 ring-black/5"
                         initial={{ opacity: 0, y: 24, scale: 0.96 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 12, scale: 0.97 }}
@@ -129,18 +238,18 @@ export function UpdateTimeOutModal({
                             </div>
                             <div className="min-w-0 flex-1">
                                 <h3
-                                    id="update-timeout-title"
+                                    id="update-timelog-title"
                                     className="text-base font-semibold text-[var(--color-ink)]"
                                 >
-                                    Update time out
+                                    Update time log
                                 </h3>
                                 <p className="mt-0.5 text-sm text-[var(--color-muted)]">
-                                    {timeIn.toLocaleDateString([], {
+                                    {logDate.toLocaleDateString([], {
                                         weekday: "long",
                                         month: "short",
                                         day: "numeric",
                                     })}
-                                    . Enter when the intern actually left.
+                                    . Fix any time that was missed or recorded wrong.
                                 </p>
                             </div>
                             <button
@@ -154,55 +263,76 @@ export function UpdateTimeOutModal({
                             </button>
                         </div>
 
-                        {/* Time in → time out */}
+                        {/* Time fields */}
                         <div className="mt-5 grid grid-cols-2 gap-3 px-6">
-                            <div className="rounded-xl bg-slate-50 px-4 py-3">
-                                <p className="text-xs text-[var(--color-muted)]">Timed in</p>
-                                <p className="mt-0.5 text-lg font-semibold tabular-nums text-[var(--color-ink)]">
-                                    {fmtClock(timeIn)}
-                                </p>
-                            </div>
-                            <label
-                                className={`rounded-xl border px-4 py-3 transition-colors focus-within:ring-2 ${result && !result.valid
-                                    ? "border-red-300 bg-red-50/50 focus-within:ring-red-200"
-                                    : "border-[var(--color-line)] bg-white focus-within:border-[var(--color-accent)] focus-within:ring-[var(--color-accent)]/20"
-                                    }`}
-                            >
-                                <span className="text-xs text-[var(--color-muted)]">
-                                    Time out
-                                </span>
-                                <input
-                                    type="time"
-                                    autoFocus
-                                    value={value}
-                                    onChange={(e) => setValue(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Enter" && canSave)
-                                            onSave(value, reason.trim());
-                                    }}
-                                    className="mt-0.5 block w-full bg-transparent text-lg font-semibold tabular-nums text-[var(--color-ink)] outline-none"
-                                />
-                            </label>
+                            <TimeField
+                                label="Time in"
+                                required
+                                autoFocus={!needsTimeOut}
+                                value={timeIn}
+                                onChange={setTimeIn}
+                                onEnter={submit}
+                                disabled={isSaving}
+                                invalid={check.error?.field === "time_in"}
+                            />
+                            <TimeField
+                                label="Time out"
+                                required={needsTimeOut}
+                                autoFocus={needsTimeOut}
+                                value={timeOut}
+                                onChange={setTimeOut}
+                                onEnter={submit}
+                                disabled={isSaving}
+                                invalid={check.error?.field === "time_out"}
+                            />
+                            <TimeField
+                                label="Break out"
+                                value={breakOut}
+                                onChange={setBreakOut}
+                                onEnter={submit}
+                                disabled={isSaving}
+                                invalid={check.error?.field === "break_out"}
+                            />
+                            <TimeField
+                                label="Break in"
+                                value={breakIn}
+                                onChange={setBreakIn}
+                                onEnter={submit}
+                                disabled={isSaving}
+                                invalid={check.error?.field === "break_in"}
+                            />
                         </div>
 
-                        {/* Shortcut */}
-                        {scheduled && value !== scheduled && (
-                            <div className="px-6 pt-3">
+                        {/* Shortcuts */}
+                        <div className="flex flex-wrap items-center gap-2 px-6 pt-3">
+                            {scheduled && timeOut !== scheduled && (
                                 <button
                                     type="button"
-                                    onClick={() => setValue(scheduled)}
+                                    onClick={() => setTimeOut(scheduled)}
                                     className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-line)] bg-white px-3 py-1 text-xs font-medium text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
                                 >
                                     <Zap size={12} />
                                     Use scheduled end, {hhmmToLabel(scheduled)}
                                 </button>
-                            </div>
-                        )}
+                            )}
+                            {(breakOut || breakIn) && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setBreakOut("");
+                                        setBreakIn("");
+                                    }}
+                                    className="rounded-full px-3 py-1 text-xs font-medium text-[var(--color-muted)] transition hover:bg-slate-100 hover:text-[var(--color-ink)]"
+                                >
+                                    Clear break
+                                </button>
+                            )}
+                        </div>
 
                         {/* Live result / validation */}
                         <div className="min-h-[68px] px-6 pt-4">
                             <AnimatePresence mode="wait" initial={false}>
-                                {result && result.valid && (
+                                {!check.error && check.net !== null && (
                                     <motion.div
                                         key="ok"
                                         initial={{ opacity: 0, y: 6 }}
@@ -213,24 +343,24 @@ export function UpdateTimeOutModal({
                                     >
                                         <div>
                                             <p className="text-xs text-emerald-700">Time worked</p>
-                                            {result.brk > 0 && (
+                                            {check.brk > 0 && (
                                                 <p className="text-xs text-emerald-700/70">
-                                                    after {fmtDuration(result.brk)} break
+                                                    after {fmtDuration(check.brk)} break
                                                 </p>
                                             )}
                                         </div>
                                         <motion.p
-                                            key={result.net}
+                                            key={check.net}
                                             initial={{ scale: reduce ? 1 : 1.12 }}
                                             animate={{ scale: 1 }}
                                             transition={spring}
                                             className="text-xl font-bold tabular-nums text-emerald-800"
                                         >
-                                            {fmtDuration(result.net)}
+                                            {fmtDuration(check.net)}
                                         </motion.p>
                                     </motion.div>
                                 )}
-                                {result && !result.valid && (
+                                {check.error && (
                                     <motion.div
                                         key="err"
                                         initial={{ opacity: 0, y: 6 }}
@@ -241,10 +371,10 @@ export function UpdateTimeOutModal({
                                         className="flex items-start gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-inset ring-red-600/15"
                                     >
                                         <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                                        Time out must be after {fmtClock(timeIn)} on the same day.
+                                        {check.error.message}
                                     </motion.div>
                                 )}
-                                {!result && (
+                                {!check.error && check.net === null && (
                                     <motion.p
                                         key="hint"
                                         initial={{ opacity: 0 }}
@@ -252,7 +382,9 @@ export function UpdateTimeOutModal({
                                         exit={{ opacity: 0 }}
                                         className="px-1 text-xs text-[var(--color-muted)]"
                                     >
-                                        The time worked is calculated once you pick a time out.
+                                        {needsTimeOut
+                                            ? "Enter the actual time out. The time worked is calculated once you do."
+                                            : "The time worked is calculated once there is a time out."}
                                     </motion.p>
                                 )}
                             </AnimatePresence>
@@ -271,7 +403,7 @@ export function UpdateTimeOutModal({
                                     maxLength={1000}
                                     rows={3}
                                     disabled={isSaving}
-                                    placeholder="e.g. Intern forgot to time out; confirmed left at 5:00 PM."
+                                    placeholder="e.g. Intern forgot to break out; confirmed 12:00 PM."
                                     className="mt-1 block w-full resize-none rounded-xl border border-[var(--color-line)] bg-white px-3 py-2 text-sm text-[var(--color-ink)] outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/20 disabled:opacity-60"
                                 />
                             </label>
@@ -290,11 +422,11 @@ export function UpdateTimeOutModal({
                             <button
                                 type="button"
                                 disabled={!canSave}
-                                onClick={() => onSave(value, reason.trim())}
+                                onClick={submit}
                                 className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--color-accent-hover)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 {isSaving && <Loader2 size={14} className="animate-spin" />}
-                                {isSaving ? "Saving…" : "Save time out"}
+                                {isSaving ? "Saving…" : "Save changes"}
                             </button>
                         </div>
                     </motion.div>

@@ -35,7 +35,10 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useCurrentSchoolYear } from "@/lib/queries/school-year";
 import AddEditScheduleModal from "@/components/modal/AddEditScheduleModal";
-import { UpdateTimeOutModal } from "@/components/modal/UpdateTimeOutModal";
+import {
+  UpdateTimeOutModal,
+  type TimeLogEditInput,
+} from "@/components/modal/UpdateTimeOutModal";
 import { AddTimeLogModal } from "@/components/modal/AddTimeLogModal";
 import { SessionBadge } from "@/components/SessionBadge";
 
@@ -392,10 +395,10 @@ export function SupervisorAttendancePage() {
     }
   }
 
-  function handleSaveTimeOut(timeOut: string, reason: string) {
+  function handleSaveTimeOut(input: TimeLogEditInput) {
     if (!editingLog) return;
     updateTimeOut.mutate(
-      { logId: editingLog.id, timeOut, reason },
+      { logId: editingLog.id, ...input },
       { onSuccess: () => setEditingLog(null) }
     );
   }

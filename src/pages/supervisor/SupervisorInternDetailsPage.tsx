@@ -33,7 +33,10 @@ import { apiRequest } from "@/lib/api";
 import { toastMutationError, toastMutationSuccess } from "@/lib/mutationToast";
 import { RemoveInternModal } from "@/components/modal/RemoveInternModal";
 import { SupervisorTimeLogModal } from "@/components/modal/SupervisorTimeLogModal";
-import { UpdateTimeOutModal } from "@/components/modal/UpdateTimeOutModal";
+import {
+  UpdateTimeOutModal,
+  type TimeLogEditInput,
+} from "@/components/modal/UpdateTimeOutModal";
 import { AbsenceViewModal } from "@/components/modal/AbsenceViewModal";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -374,10 +377,10 @@ export default function SupervisorInternDetailsPage() {
     );
   }
 
-  function handleSaveTimeOut(timeOut: string, reason: string) {
+  function handleSaveTimeOut(input: TimeLogEditInput) {
     if (!editingLog) return;
     updateTimeOut.mutate(
-      { logId: editingLog.id, timeOut, reason },
+      { logId: editingLog.id, ...input },
       { onSuccess: () => setEditingLog(null) }
     );
   }
