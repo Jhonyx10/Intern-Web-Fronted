@@ -186,6 +186,28 @@ export type ManualTimeLogInput = {
     reason: string
 }
 
+export type SupervisorInternAttendanceRow = {
+    id: number
+    student_name: string
+    student_number: string
+    section: string | null
+    days_present: number
+    total_logs: number
+    late_logs: number
+    late_percent: number
+    absences: number
+    justified: number
+    awaiting: number
+    late_dates: string
+    absence_dates: string
+}
+
+export type SupervisorReportFilters = {
+    date_from?: string
+    date_to?: string
+    search?: string
+}
+
 export function useSupervisorProfile() {
     const { token } = useAuth()
     return useQuery({
@@ -582,5 +604,26 @@ export function useCreateSupervisorTimeLog() {
             toastMutationSuccess('Time log added')
         },
         onError: (error) => toastMutationError(error, 'Failed to add time log'),
+    })
+}
+
+export function useSupervisorInternAttendanceReport(filters: SupervisorReportFilters, enabled = true) {
+    const { token } = useAuth()
+
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(filters)) {
+        if (value) params.set(key, value)
+    }
+    const qs = params.toString() ? `?${params.toString()}` : ''
+
+    return useQuery({
+        queryKey: ['supervisor', 'reports', 'intern-attendance', filters],
+        queryFn: () =>
+            apiRequest<{ data: SupervisorInternAttendanceRow[] }>(
+                `/supervisor/reports/intern-attendance${qs}`,
+                { token: token! }
+            ),
+        enabled: Boolean(token) && enabled,
+        select: (res) => res.data,
     })
 }

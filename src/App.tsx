@@ -25,6 +25,7 @@ import Companies from "./pages/Companies";
 import { CoordinatorSectionPage } from "./pages/coordinator/CoordinatorSectionPage";
 import { SupervisorInternsPage } from "./pages/supervisor/SupervisorInternsPage";
 import { SupervisorAttendancePage } from "./pages/supervisor/SupervisorAttendancePage";
+import { SupervisorReportsPage } from "./pages/supervisor/SupervisorReportsPage";
 import SupervisorInternDetailsPage from "./pages/supervisor/SupervisorInternDetailsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import StudentLiveTracker from "./pages/coordinator/StudentLiveTracker";
@@ -44,7 +45,15 @@ import HistoryPage from "./pages/admin/HistoryPage";
 import HistoryDetailsPage from "./pages/details/HistoryDetailsPage";
 import SchoolYearDetailsPage from "./pages/details/SchoolYearDetailsPage";
 import DepartmentDocumentsPage from "./pages/details/DepartmentDocumentsPage";
-import ReportsPage from "./pages/ReportsPage";
+import {
+  AttendanceReportsPage,
+  ComplianceReportsPage,
+  EvaluationReportsPage,
+  CompletionReportsPage,
+  PlacementReportsPage,
+  AuditReportsPage,
+  SummaryReportsPage,
+} from "./pages/ReportsPage";
 
 import AttendancePage from "./pages/dean/AttendancePage";
 
@@ -143,7 +152,14 @@ function AppContent() {
                 path="/attendance"
                 element={<AttendancePage />}
               />
-              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/reports" element={<Navigate to="/reports/attendance" replace />} />
+              <Route path="/reports/attendance" element={<AttendanceReportsPage />} />
+              <Route path="/reports/compliance" element={<ComplianceReportsPage />} />
+              <Route path="/reports/evaluations" element={<EvaluationReportsPage />} />
+              <Route path="/reports/completion" element={<CompletionReportsPage />} />
+              <Route path="/reports/placements" element={<PlacementReportsPage />} />
+              <Route path="/reports/audit" element={<AuditReportsPage />} />
+              <Route path="/reports/summary" element={<SummaryReportsPage />} />
               <Route
                 path="/intern-evaluations"
                 element={<InternEvaluationsPage />}
@@ -151,6 +167,10 @@ function AppContent() {
               <Route
                 path="/supervisor/attendance"
                 element={<SupervisorAttendancePage />}
+              />
+              <Route
+                path="/supervisor/reports"
+                element={<SupervisorReportsPage />}
               />
               <Route
                 path="/supervisor/company-info"

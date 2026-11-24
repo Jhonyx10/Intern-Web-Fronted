@@ -4,7 +4,25 @@ import { NavLink, Outlet, useLocation, matchPath } from "react-router-dom";
 import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/context/ThemeContext'
 import OCCLOGO from '@/assets/OCC logo.webp'
-import { Calendar1Icon, UserIcon, Settings, BuildingIcon, FolderIcon, FolderCheckIcon, Building2Icon, CalendarDays, Loader2, ClipboardList, FileText } from 'lucide-react'
+import {
+  Calendar1Icon,
+  UserIcon,
+  Settings,
+  BuildingIcon,
+  FolderIcon,
+  FolderCheckIcon,
+  Building2Icon,
+  CalendarDays,
+  Loader2,
+  ClipboardList,
+  FileText,
+  Clock,
+  ClipboardCheck,
+  Award,
+  GraduationCap,
+  ShieldCheck,
+  BarChart3,
+} from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { apiRequest } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
@@ -16,6 +34,15 @@ type Role = 'super_admin' | 'supervisor' | 'dean' | 'admin' | 'coordinator' | 's
 
 type SectionKey = 'overview' | 'academic' | 'people' | 'internship'
 
+// A page inside a dropdown nav item.
+type NavChild = {
+  to: string
+  label: string
+  icon: React.ElementType
+  // If omitted, the child is visible to every role that can see the parent.
+  roles?: Role[]
+}
+
 type NavItem = {
   to: string
   label: string
@@ -26,6 +53,8 @@ type NavItem = {
   section: SectionKey
   // If omitted, the item is visible to every role.
   roles?: Role[]
+  // When set, the item is a dropdown and `to` is only its key.
+  children?: NavChild[]
 }
 
 // Sidebar groups, in display order. A null label shows no heading.
@@ -74,12 +103,22 @@ const navItems: NavItem[] = [
     roles: ["dean", "super_admin"],
   },
   {
+    // Dropdown: one page per report category
     to: "/reports",
     label: "Reports",
-    end: true,
+    end: false,
     icon: FileText,
     section: 'academic',
     roles: ["super_admin", "dean", "coordinator"],
+    children: [
+      { to: "/reports/attendance", label: "Attendance", icon: Clock },
+      { to: "/reports/compliance", label: "Compliance", icon: ClipboardCheck },
+      { to: "/reports/evaluations", label: "Evaluations", icon: Award },
+      { to: "/reports/completion", label: "Completion", icon: GraduationCap },
+      { to: "/reports/placements", label: "Placements", icon: Building2Icon },
+      { to: "/reports/audit", label: "Audit", icon: ShieldCheck },
+      { to: "/reports/summary", label: "Summary", icon: BarChart3, roles: ["super_admin"] },
+    ],
   },
   // People
   {
@@ -165,6 +204,14 @@ const navItems: NavItem[] = [
     roles: ["supervisor"],
   },
   {
+    to: "/supervisor/reports",
+    label: "Intern Reports",
+    end: true,
+    icon: FileText,
+    section: 'internship',
+    roles: ["supervisor"],
+  },
+  {
     to: "/student/live/location",
     label: "Interns Logs",
     end: true,
@@ -189,6 +236,14 @@ const pageTitles: Array<{ path: string; title: string; end?: boolean }> = [
   { path: "/courses", title: "Departments" },
   { path: "/administrator", title: "Administrator" },
   { path: "/documents", title: "Documents" },
+  { path: "/reports/attendance", title: "Attendance Reports", end: true },
+  { path: "/reports/compliance", title: "Compliance Reports", end: true },
+  { path: "/reports/evaluations", title: "Evaluation Reports", end: true },
+  { path: "/reports/completion", title: "Completion Reports", end: true },
+  { path: "/reports/placements", title: "Placement Reports", end: true },
+  { path: "/reports/audit", title: "Audit Reports", end: true },
+  { path: "/reports/summary", title: "Summary Reports", end: true },
+  { path: "/reports", title: "Reports", end: true },
   { path: "/coordinator/my-section", title: "My Section", end: true },
   { path: "/school-year-section", title: "Year & Section" },
   { path: "/coordinators", title: "Coordinators" },
@@ -197,6 +252,7 @@ const pageTitles: Array<{ path: string; title: string; end?: boolean }> = [
   { path: "/supervisor/company-info", title: "Company Info", end: true },
   { path: "/supervisor/interns", title: "Interns", end: true },
   { path: "/supervisor/attendance", title: "Attendance", end: true },
+  { path: "/supervisor/reports", title: "Intern Reports", end: true },
   { path: "/settings", title: "Account & Department Settings", end: true },
   {
     path: "/student/live/location",
@@ -253,6 +309,10 @@ export function AppShell() {
     }
   })
   const [profileOpen, setProfileOpen] = useState(false)
+  // Which dropdown nav items are expanded, keyed by the item's `to`
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(() =>
+    location.pathname.startsWith('/reports') ? { '/reports': true } : {}
+  )
   const profileMenuRef = useRef<HTMLDivElement>(null)
   const isOnLiveTracker = location.pathname === LIVE_TRACKER_PATH;
   const [hasVisitedLiveTracker, setHasVisitedLiveTracker] = useState(isOnLiveTracker);
@@ -300,29 +360,41 @@ export function AppShell() {
       .join('') || '?'
 
   // Role-based navigation visibility.
-  // Add a `roles` array to a nav item to restrict it; omit `roles` to show it to everyone.
+  // Add a `roles` array to a nav item (or a dropdown child) to restrict it; omit `roles` to show it to everyone.
   const userRole = user?.role?.name as Role | undefined
 
   // Visible items grouped into their sidebar sections (empty sections are dropped).
   // Labels are resolved per role here, so the JSX below just renders `label`.
   const groupedNav = useMemo(() => {
+    const roleOk = (roles?: Role[]) =>
+      !roles || (userRole !== undefined && roles.includes(userRole))
+
     const visible = navItems
-      .filter(
-        (item) => !item.roles || (userRole !== undefined && item.roles.includes(userRole))
-      )
+      .filter((item) => roleOk(item.roles))
       .map((item) => ({
         ...item,
         label: (userRole && item.roleLabels?.[userRole]) ?? item.label,
+        children: item.children?.filter((child) => roleOk(child.roles)),
       }))
+      // A dropdown with no visible pages disappears
+      .filter((item) => !item.children || item.children.length > 0)
+
     return SECTIONS.map((section) => ({
       ...section,
       items: visible.filter((item) => item.section === section.key),
     })).filter((section) => section.items.length > 0)
   }, [userRole])
 
-  // Flat list of the nav items this role can see
-  const visibleItems = useMemo(
-    () => groupedNav.flatMap((group) => group.items),
+  // Every clickable page this role can see (dropdown children count, the dropdown itself doesn't)
+  const navLeaves = useMemo(
+    () =>
+      groupedNav.flatMap((group) =>
+        group.items.flatMap((item) =>
+          item.children
+            ? item.children.map((child) => ({ to: child.to, end: false }))
+            : [{ to: item.to, end: item.end }]
+        )
+      ),
     [groupedNav]
   )
 
@@ -331,17 +403,30 @@ export function AppShell() {
   const [stickyNavTo, setStickyNavTo] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!userRole || visibleItems.length === 0) return
+    if (!userRole || navLeaves.length === 0) return
 
     const path = location.pathname.replace(/\/$/, '') || '/'
-    const match = visibleItems
+    const match = navLeaves
       .filter((item) =>
         item.end ? path === item.to : path === item.to || path.startsWith(item.to + '/')
       )
       .sort((a, b) => b.to.length - a.to.length)[0] // most specific match wins
 
     if (match) setStickyNavTo(match.to)
-  }, [visibleItems, userRole, location.pathname])
+  }, [navLeaves, userRole, location.pathname])
+
+  // Open the dropdown that contains the current page
+  useEffect(() => {
+    if (!stickyNavTo) return
+
+    const parent = groupedNav
+      .flatMap((group) => group.items)
+      .find((item) => item.children?.some((child) => child.to === stickyNavTo))
+
+    if (parent) {
+      setOpenMenus((prev) => (prev[parent.to] ? prev : { ...prev, [parent.to]: true }))
+    }
+  }, [stickyNavTo, groupedNav])
 
   // Super admin manages the list of school years; everyone else (e.g. dean)
   // goes straight to their own department, filtered to the current school year.
@@ -426,7 +511,140 @@ export function AppShell() {
                 ) : null}
 
                 <div className={`flex flex-col gap-1 ${!sidebarOpen ? 'items-center w-full' : ''}`}>
-                  {group.items.map(({ to, label, end, icon: Icon }) => {
+                  {group.items.map((item) => {
+                    const { to, label, end, icon: Icon, children } = item
+
+                    /* ── Dropdown item (Reports) ── */
+                    if (children && children.length > 0) {
+                      const menuOpen = Boolean(openMenus[to]) && sidebarOpen
+                      const childActive = children.some((child) => child.to === stickyNavTo)
+                      // While closed, the dropdown button carries the highlight itself
+                      const highlighted = childActive && !menuOpen
+
+                      return (
+                        <div
+                          key={to}
+                          className={`flex flex-col ${!sidebarOpen ? 'items-center w-full' : ''}`}
+                        >
+                          <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.97 }}
+                            aria-expanded={menuOpen}
+                            aria-haspopup="true"
+                            onClick={() => {
+                              if (!sidebarOpen) {
+                                // Collapsed sidebar has no room for a dropdown: expand and open it
+                                setSidebarOpen(true)
+                                setOpenMenus((prev) => ({ ...prev, [to]: true }))
+                              } else {
+                                setOpenMenus((prev) => ({ ...prev, [to]: !prev[to] }))
+                              }
+                            }}
+                            className={[
+                              'group relative flex items-center rounded-xl text-sm font-medium transition-colors shrink-0',
+                              sidebarOpen ? 'w-full gap-3 px-3 py-2.5 text-left' : 'justify-center p-2',
+                              highlighted || menuOpen ? 'text-white' : 'text-white/70 hover:text-white',
+                            ].join(' ')}
+                          >
+                            {highlighted ? (
+                              <motion.span
+                                layoutId="nav-active"
+                                className="absolute inset-0 rounded-xl bg-white/10"
+                                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                              />
+                            ) : null}
+                            <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white shadow-sm ring-1 ring-white/10">
+                              <Icon />
+                            </span>
+                            <AnimatePresence initial={false}>
+                              {sidebarOpen ? (
+                                <motion.span
+                                  key="label"
+                                  initial={{ opacity: 0, width: 0 }}
+                                  animate={{ opacity: 1, width: 'auto' }}
+                                  exit={{ opacity: 0, width: 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="relative z-10 overflow-hidden whitespace-nowrap"
+                                >
+                                  {label}
+                                </motion.span>
+                              ) : (
+                                <div
+                                  className="absolute left-full ml-3 hidden items-center whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold tracking-wide text-white opacity-0 shadow-lg transition-all delay-75 duration-200 group-hover:flex group-hover:opacity-100 z-50"
+                                  style={{ backgroundColor: themeColor || 'var(--color-accent)' }}
+                                >
+                                  {label}
+                                </div>
+                              )}
+                            </AnimatePresence>
+                            {sidebarOpen ? (
+                              <motion.span
+                                animate={{ rotate: menuOpen ? 180 : 0 }}
+                                transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                                className="relative z-10 ml-auto text-white/70"
+                              >
+                                <ChevronDownIcon />
+                              </motion.span>
+                            ) : null}
+                          </motion.button>
+
+                          {/* Dropdown pages: slide open, then each one fades in a beat after the other */}
+                          <AnimatePresence initial={false}>
+                            {menuOpen ? (
+                              <motion.div
+                                key="submenu"
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                                className="overflow-hidden"
+                              >
+                                <div className="ml-7 mt-1 flex flex-col gap-0.5 border-l border-white/20 pl-2">
+                                  {children.map((child, index) => {
+                                    const ChildIcon = child.icon
+                                    const active = stickyNavTo === child.to
+                                    return (
+                                      <motion.div
+                                        key={child.to}
+                                        initial={{ opacity: 0, x: -8 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.05 + index * 0.04, duration: 0.2 }}
+                                      >
+                                        <NavLink
+                                          to={child.to}
+                                          end
+                                          onClick={() => setStickyNavTo(child.to)}
+                                          className={[
+                                            'relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors',
+                                            active ? 'text-white' : 'text-white/65 hover:text-white',
+                                          ].join(' ')}
+                                        >
+                                          {active ? (
+                                            <motion.span
+                                              layoutId="nav-sub-active"
+                                              className="absolute inset-0 rounded-lg bg-white/10"
+                                              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                                            />
+                                          ) : null}
+                                          <span className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/15">
+                                            <ChildIcon size={13} />
+                                          </span>
+                                          <span className="relative z-10 whitespace-nowrap">
+                                            {child.label}
+                                          </span>
+                                        </NavLink>
+                                      </motion.div>
+                                    )
+                                  })}
+                                </div>
+                              </motion.div>
+                            ) : null}
+                          </AnimatePresence>
+                        </div>
+                      )
+                    }
+
+                    /* ── Normal item ── */
                     // Highlight follows the last sidenav click, not the current URL
                     const isActive = stickyNavTo === to
                     return (
