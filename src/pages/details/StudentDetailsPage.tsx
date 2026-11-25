@@ -249,6 +249,7 @@ export function StudentDetailsPage() {
   const [activeTab, setActiveTab] = useState<
     "overview" | "company" | "timelogs" | "reports" | "evaluations" | "geo_excursions"
   >("overview");
+  const [docFilter, setDocFilter] = useState<"requirements" | "reports">("requirements");
   const updateStatus = useUpdateDocumentStatus();
   const [previewDoc, setPreviewDoc] = useState<{
     id: number;
@@ -315,6 +316,26 @@ export function StudentDetailsPage() {
   const companySchedules: CompanySchedule[] = assignedCompany?.schedules ?? [];
   const timeLogs: TimeLog[] = student?.time_logs ?? [];
   const documents: StudentDocument[] = student?.documents ?? [];
+  const isRecurringDoc = (d: StudentDocument) => {
+    const r = (d.document_requirement as any)?.recurrence;
+    return !!r && r !== "none";
+  };
+
+  // Requirements = only the one-time requirements currently assigned to the
+  // course (same list the Documents page uses). Falls back to all one-time
+  // docs if the API didn't send the list.
+  const onboardingIds: number[] | null =
+    (student as any)?.onboarding_requirement_ids ?? null;
+
+  const requirementDocs = documents.filter((d) => {
+    if (isRecurringDoc(d)) return false;
+    if (!onboardingIds) return true;
+    const reqId =
+      (d as any).document_requirement_id ?? d.document_requirement?.id;
+    return onboardingIds.includes(Number(reqId));
+  });
+  const reportDocs = documents.filter(isRecurringDoc);
+  const visibleDocuments = docFilter === "requirements" ? requirementDocs : reportDocs;
   const evaluations: OjtEvaluation[] = (student as any)?.ojt_evaluations ?? [];
   const excursions: GeofenceExcursion[] = student?.geofence_excursions ?? [];
   const [viewingEvaluation, setViewingEvaluation] =
@@ -1352,17 +1373,41 @@ export function StudentDetailsPage() {
             transition={{ duration: 0.2 }}
             className="space-y-4"
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-[var(--color-ink)]">
-                Weekly Reports &amp; Submitted Documents
-              </h3>
-              <span className="text-xs text-[var(--color-muted)] font-medium">
-                {documents.length} document{documents.length === 1 ? "" : "s"}{" "}
-                on record
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-[var(--color-ink)]">
+                  {docFilter === "requirements"
+                    ? "Document Requirements"
+                    : "Daily & Weekly Reports"}
+                </h3>
+                <span className="text-xs text-[var(--color-muted)] font-medium">
+                  {visibleDocuments.length} document{visibleDocuments.length === 1 ? "" : "s"} on record
+                </span>
+              </div>
+
+              <div className="inline-flex rounded-xl border border-[var(--color-line)] bg-slate-50 p-1">
+                {(
+                  [
+                    { key: "requirements", label: "Requirements", count: requirementDocs.length },
+                    { key: "reports", label: "Daily / Weekly Reports", count: reportDocs.length },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setDocFilter(opt.key)}
+                    className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition whitespace-nowrap ${docFilter === opt.key
+                      ? "bg-white text-[var(--color-accent)] shadow-sm"
+                      : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                      }`}
+                  >
+                    {opt.label} ({opt.count})
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {documents.length > 0 ? (
+            {visibleDocuments.length > 0 ? (
               <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
@@ -1377,7 +1422,7 @@ export function StudentDetailsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--color-line)]">
-                      {documents.map((doc) => {
+                      {visibleDocuments.map((doc) => {
                         const statusColor =
                           doc.review_status === "approved"
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200"
@@ -1476,11 +1521,14 @@ export function StudentDetailsPage() {
               <div className="rounded-2xl border border-[var(--color-line)] bg-white p-12 text-center shadow-[var(--shadow-soft)]">
                 <FileText className="mx-auto text-slate-300 mb-2" size={32} />
                 <p className="text-sm font-medium text-[var(--color-ink)]">
-                  No Reports or Documents Uploaded
+                  {docFilter === "requirements"
+                    ? "No Requirements Uploaded"
+                    : "No Reports Uploaded"}
                 </p>
                 <p className="text-xs text-[var(--color-muted)] mt-1">
-                  Weekly reports or required documents will appear here once
-                  submitted by the student.
+                  {docFilter === "requirements"
+                    ? "Required documents will appear here once submitted by the student."
+                    : "Daily and weekly reports will appear here once submitted by the student."}
                 </p>
               </div>
             )}

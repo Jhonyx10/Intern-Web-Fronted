@@ -310,8 +310,9 @@ export function AppShell() {
   })
   const [profileOpen, setProfileOpen] = useState(false)
   // Which dropdown nav items are expanded, keyed by the item's `to`
-  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(() =>
-    location.pathname.startsWith('/reports') ? { '/reports': true } : {}
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(
+    (): Record<string, boolean> =>
+      location.pathname.startsWith('/reports') ? { '/reports': true } : {}
   )
   const profileMenuRef = useRef<HTMLDivElement>(null)
   const isOnLiveTracker = location.pathname === LIVE_TRACKER_PATH;
