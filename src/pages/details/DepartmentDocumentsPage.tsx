@@ -9,6 +9,7 @@ import {
     Building2,
     CalendarDays,
     CheckCircle2,
+    ChevronRight,
     Clock,
     ExternalLink,
     FileText,
@@ -89,6 +90,15 @@ function getStatusChip(status?: string) {
     if (s === "approved") return { label: "Approved", className: "bg-emerald-50 text-emerald-700" };
     if (s === "rejected") return { label: "Rejected", className: "bg-red-50 text-red-600" };
     return { label: "Pending", className: "bg-amber-50 text-amber-700" };
+}
+
+// "Alicer, Romer" -> "RA"
+function getInitials(name: string) {
+    return name
+        .split(",")
+        .map((s) => s.trim()[0] ?? "")
+        .reverse()
+        .join("");
 }
 
 // ─── Requirement submissions modal ───────────────────────────────────────────
@@ -259,6 +269,125 @@ function RequirementModal({ requirementTitle, docs, onClose, onPreview }: Requir
     );
 }
 
+// ─── Intern's approved documents modal ───────────────────────────────────────
+interface InternDocsModalProps {
+    intern: InternDocumentProgress;
+    docs: SubmittedDocument[];
+    onClose: () => void;
+    onPreview: (doc: SubmittedDocument) => void;
+}
+
+function InternDocsModal({ intern, docs, onClose, onPreview }: InternDocsModalProps) {
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [onClose]);
+
+    return (
+        <motion.div
+            key="intern-docs-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+            onClick={onClose}
+        >
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 16 }}
+                transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-[var(--color-line)] bg-white shadow-2xl overflow-hidden"
+            >
+                {/* Header */}
+                <div className="flex items-start justify-between gap-4 border-b border-[var(--color-line)] px-6 py-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-violet-100 text-sm font-semibold text-violet-700">
+                            {getInitials(intern.name)}
+                        </div>
+                        <div className="min-w-0">
+                            <h2 className="truncate text-lg font-bold leading-tight text-[var(--color-ink)]">
+                                {intern.name}
+                            </h2>
+                            <p className="text-xs text-[var(--color-muted)]">
+                                <span className="font-mono">{intern.student_number}</span>
+                                {intern.section?.name && <> · {intern.section.name}</>}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-lg p-1.5 text-[var(--color-muted)] hover:bg-slate-100 transition"
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
+
+                {/* Summary strip */}
+                <div className="flex items-center gap-2 border-b border-[var(--color-line)] bg-slate-50/70 px-6 py-2.5 text-xs">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 font-semibold text-emerald-700">
+                        <CheckCircle2 size={11} /> {docs.length} approved document{docs.length !== 1 ? "s" : ""}
+                    </span>
+                    <span className="text-[var(--color-muted)]">
+                        {intern.approved_documents} / {intern.total_requirements} requirements complete
+                    </span>
+                </div>
+
+                {/* List */}
+                <div className="flex-1 overflow-y-auto px-4 py-3">
+                    {docs.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center gap-3 py-16 text-[var(--color-muted)]">
+                            <FileText size={32} className="opacity-30" />
+                            <p className="text-sm font-medium">No approved documents yet.</p>
+                        </div>
+                    ) : (
+                        <ul className="space-y-2">
+                            {docs.map((doc) => (
+                                <li
+                                    key={doc.id}
+                                    className="flex items-center gap-3 rounded-xl border border-[var(--color-line)] bg-white px-4 py-3 transition hover:bg-slate-50/60"
+                                >
+                                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-600">
+                                        <CheckCircle2 size={16} />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
+                                            {doc.document_requirement?.title ??
+                                                doc.document_type?.name ??
+                                                "Submitted Document"}
+                                        </p>
+                                        <p
+                                            className="truncate text-xs text-[var(--color-muted)]"
+                                            title={doc.original_filename}
+                                        >
+                                            {doc.original_filename}
+                                        </p>
+                                        <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">
+                                            Submitted {formatDate(doc.uploaded_at)}
+                                            {doc.reviewed_at && <> · Approved {formatDate(doc.reviewed_at)}</>}
+                                            {doc.reviewed_by?.name && <> by {doc.reviewed_by.name}</>}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => onPreview(doc)}
+                                        className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-sky-600 shadow-sm transition hover:bg-sky-50"
+                                    >
+                                        <ExternalLink size={11} /> View
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            </motion.div>
+        </motion.div>
+    );
+}
+
 // ─── Requirement group (Common / Departmental) ────────────────────────────────
 interface RequirementGroupProps {
     title: string;
@@ -382,13 +511,13 @@ function RequirementCard({ title, schoolYear, totalStudents, approved, pending, 
 }
 
 // ─── Intern progress panel ────────────────────────────────────────────────────
-// ─── Intern progress panel ────────────────────────────────────────────────────
 interface InternProgressPanelProps {
     interns: InternDocumentProgress[];
     totalRequirements: number;
     search: string;
     isLoading: boolean;
     isError: boolean;
+    onSelectIntern: (intern: InternDocumentProgress) => void;
 }
 
 const PAGE_SIZES = [10, 25, 50] as const;
@@ -412,6 +541,7 @@ function InternProgressPanel({
     search,
     isLoading,
     isError,
+    onSelectIntern,
 }: InternProgressPanelProps) {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState<number>(10);
@@ -479,9 +609,9 @@ function InternProgressPanel({
                 <table className="w-full min-w-[720px] border-collapse text-left">
                     <thead>
                         <tr className="border-b border-[var(--color-line)] bg-slate-50/80">
-                            {["Intern", "Section", "School year", "Documents approved"].map((h) => (
+                            {["Intern", "Section", "School year", "Documents approved", ""].map((h, idx) => (
                                 <th
-                                    key={h}
+                                    key={idx}
                                     className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted)]"
                                 >
                                     {h}
@@ -498,19 +628,29 @@ function InternProgressPanel({
                             return (
                                 <tr
                                     key={i.id}
-                                    className="border-b border-[var(--color-line)] last:border-0 transition hover:bg-slate-50/60"
+                                    tabIndex={0}
+                                    onClick={() => onSelectIntern(i)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                            e.preventDefault();
+                                            onSelectIntern(i);
+                                        }
+                                    }}
+                                    title="View approved documents"
+                                    className="group cursor-pointer border-b border-[var(--color-line)] last:border-0 transition-colors duration-200 hover:bg-[var(--color-accent-soft)]/60 focus-visible:bg-[var(--color-accent-soft)]/60 focus-visible:outline-none"
                                 >
-                                    <td className="px-5 py-3">
-                                        <div className="flex items-center gap-2.5">
-                                            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-violet-100 text-xs font-semibold text-violet-700">
-                                                {i.name
-                                                    .split(",")
-                                                    .map((s) => s.trim()[0] ?? "")
-                                                    .reverse()
-                                                    .join("")}
+                                    <td className="relative px-5 py-3">
+                                        {/* Accent bar that grows in on hover */}
+                                        <span
+                                            aria-hidden
+                                            className="absolute inset-y-0 left-0 w-[3px] origin-center scale-y-0 bg-[var(--color-accent)] transition-transform duration-200 group-hover:scale-y-100 group-focus-visible:scale-y-100"
+                                        />
+                                        <div className="flex items-center gap-2.5 transition-transform duration-200 group-hover:translate-x-1">
+                                            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-violet-100 text-xs font-semibold text-violet-700 transition-transform duration-200 group-hover:scale-110">
+                                                {getInitials(i.name)}
                                             </div>
                                             <div className="min-w-0">
-                                                <p className="truncate text-sm font-medium text-[var(--color-ink)]">
+                                                <p className="truncate text-sm font-medium text-[var(--color-ink)] transition-colors group-hover:text-[var(--color-accent)]">
                                                     {i.name}
                                                 </p>
                                                 <p className="font-mono text-[11px] text-[var(--color-muted)]">
@@ -548,6 +688,12 @@ function InternProgressPanel({
                                                 {i.approved_documents} / {i.total_requirements}
                                             </span>
                                         </div>
+                                    </td>
+                                    <td className="w-10 pr-4 text-right">
+                                        <ChevronRight
+                                            size={16}
+                                            className="inline-block -translate-x-1 text-[var(--color-accent)] opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100"
+                                        />
                                     </td>
                                 </tr>
                             );
@@ -685,6 +831,7 @@ export default function DepartmentDocumentsPage() {
     const [search, setSearch] = useState("");
     const [view, setView] = useState<"requirements" | "interns">("requirements");
     const [selectedReqId, setSelectedReqId] = useState<number | string | null>(null);
+    const [selectedIntern, setSelectedIntern] = useState<InternDocumentProgress | null>(null);
     const [previewDoc, setPreviewDoc] = useState<{
         id: number; title: string; filename?: string; fileSize?: number;
         mimeType?: string; notes?: string | null; status?: string;
@@ -704,6 +851,25 @@ export default function DepartmentDocumentsPage() {
         });
         return map;
     }, [submittedDocs]);
+
+    // Approved documents of the intern whose modal is open.
+    // Only one-time requirements (recurrence "none"); daily/weekly reports are left out.
+    const internApprovedDocs = useMemo(() => {
+        if (!selectedIntern) return [];
+        return (submittedDocs ?? [])
+            .filter((d) => {
+                const recurrence =
+                    (d.document_requirement as { recurrence?: string | null } | null | undefined)
+                        ?.recurrence ?? "none";
+                return (
+                    (d.student?.id ?? (d as { student_id?: number }).student_id) === selectedIntern.id &&
+                    d.review_status === "approved" &&
+                    d.document_requirement_id != null &&
+                    recurrence === "none"
+                );
+            })
+            .sort((a, b) => (b.reviewed_at ?? "").localeCompare(a.reviewed_at ?? ""));
+    }, [submittedDocs, selectedIntern]);
 
     // Build requirement cards: only requirements assigned to this course for the active school year,
     // plus any submitted docs that belong to those requirements (or are uncategorized).
@@ -769,6 +935,7 @@ export default function DepartmentDocumentsPage() {
         setPickedYear(sy);
         setSearchParams({ school_year_id: String(sy.id) }, { replace: true });
         setSelectedReqId(null);
+        setSelectedIntern(null);
         setSearch("");
         setShowYearModal(false);
     }
@@ -777,7 +944,28 @@ export default function DepartmentDocumentsPage() {
         setPickedYear(null);
         setSearchParams({}, { replace: true });
         setSelectedReqId(null);
+        setSelectedIntern(null);
         setSearch("");
+    }
+
+    // Shared by the requirement modal and the intern modal
+    function openPreview(doc: SubmittedDocument) {
+        const reqTitle =
+            doc.document_requirement?.title ??
+            doc.document_type?.name ??
+            "Submitted Document";
+        setPreviewDoc({
+            id: doc.id,
+            title: reqTitle,
+            filename: doc.original_filename,
+            fileSize: doc.file_size ?? undefined,
+            mimeType: doc.mime_type ?? undefined,
+            notes: doc.notes,
+            status: doc.review_status,
+            rejectionReason: doc.rejection_reason,
+            reviewedAt: doc.reviewed_at,
+            reviewedByName: doc.reviewed_by?.name,
+        });
     }
 
     function renderCard(card: (typeof requirementCards)[number]) {
@@ -954,6 +1142,7 @@ export default function DepartmentDocumentsPage() {
                             search={search}
                             isLoading={progressQuery.isLoading}
                             isError={progressQuery.isError}
+                            onSelectIntern={setSelectedIntern}
                         />
                     </motion.div>
                 ) : isLoading ? (
@@ -1026,24 +1215,20 @@ export default function DepartmentDocumentsPage() {
                         requirementTitle={selectedReq.title}
                         docs={selectedReq.docs}
                         onClose={() => setSelectedReqId(null)}
-                        onPreview={(doc) => {
-                            const reqTitle =
-                                doc.document_requirement?.title ??
-                                doc.document_type?.name ??
-                                "Submitted Document";
-                            setPreviewDoc({
-                                id: doc.id,
-                                title: reqTitle,
-                                filename: doc.original_filename,
-                                fileSize: doc.file_size ?? undefined,
-                                mimeType: doc.mime_type ?? undefined,
-                                notes: doc.notes,
-                                status: doc.review_status,
-                                rejectionReason: doc.rejection_reason,
-                                reviewedAt: doc.reviewed_at,
-                                reviewedByName: doc.reviewed_by?.name,
-                            });
-                        }}
+                        onPreview={openPreview}
+                    />
+                )}
+            </AnimatePresence>
+
+            {/* ── Intern approved documents modal ───────────────── */}
+            <AnimatePresence>
+                {selectedIntern && (
+                    <InternDocsModal
+                        key="intern-docs-modal"
+                        intern={selectedIntern}
+                        docs={internApprovedDocs}
+                        onClose={() => setSelectedIntern(null)}
+                        onPreview={openPreview}
                     />
                 )}
             </AnimatePresence>

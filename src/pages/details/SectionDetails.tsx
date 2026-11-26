@@ -111,10 +111,15 @@ export default function SectionDetailsPage() {
         );
     }
 
-    // Students table pagination (client-side, 10 per page)
-    const lastStudentPage = Math.max(1, Math.ceil(section.students.length / STUDENTS_PER_PAGE));
+    // Students table: sort A–Z by last name, then first name (client-side, before paginating)
+    const sortedStudents = [...section.students].sort((a, b) =>
+        a.last_name.localeCompare(b.last_name, undefined, { sensitivity: "base" }) ||
+        a.first_name.localeCompare(b.first_name, undefined, { sensitivity: "base" })
+    );
+
+    const lastStudentPage = Math.max(1, Math.ceil(sortedStudents.length / STUDENTS_PER_PAGE));
     const currentStudentPage = Math.min(studentPage, lastStudentPage);
-    const pagedStudents = section.students.slice(
+    const pagedStudents = sortedStudents.slice(
         (currentStudentPage - 1) * STUDENTS_PER_PAGE,
         currentStudentPage * STUDENTS_PER_PAGE
     );

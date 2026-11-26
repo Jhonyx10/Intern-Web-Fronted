@@ -39,14 +39,17 @@ export type ImportFailure = {
 
 export type ImportStudentsResult = {
   imported: number
+  re_enrolled: number
   failures: ImportFailure[]
 }
+
+export type StudentStatus = 'pending' | 'ongoing' | 'completed' | 'failed' | 'dropped'
 
 export type StudentFilters = {
   unassigned?: boolean
   perPage?: number
   search?: string
-  status?: 'pending' | 'ongoing' | 'completed'
+  status?: StudentStatus
   placement?: 'assigned' | 'unassigned'
   company_id?: string
   course_id?: string
@@ -129,9 +132,9 @@ export function useCreateStudent() {
       }
       return createStudent(token, body)
     },
-    onSuccess: () => {
+    onSuccess: (student) => {
       invalidateStudentRelated(queryClient)
-      toastMutationSuccess('Student created')
+      toastMutationSuccess(student.re_enrolled ? 'Student re-enrolled' : 'Student created')
     },
     onError: (error) => toastMutationError(error, 'Failed to create student'),
   })
@@ -284,5 +287,40 @@ export function useDownloadTemplate() {
       }
       return downloadTemplate(token)
     },
+  })
+}
+
+export type EnrollmentStatusInput = {
+  id: number
+  status: 'completed' | 'failed' | 'dropped'
+  remarks?: string | null
+}
+
+export async function updateEnrollmentStatus(
+  token: string,
+  { id, ...body }: EnrollmentStatusInput,
+): Promise<Student> {
+  const response = await apiRequest<{ data: Student }>(`/students/${id}/enrollment-status`, {
+    method: 'PATCH',
+    token,
+    body,
+  })
+  return response.data
+}
+
+export function useUpdateEnrollmentStatus() {
+  const { token } = useAuth()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: EnrollmentStatusInput) => {
+      if (!token) throw new Error('Not authenticated.')
+      return updateEnrollmentStatus(token, input)
+    },
+    onSuccess: () => {
+      invalidateStudentRelated(queryClient)
+      toastMutationSuccess('Enrollment status updated')
+    },
+    onError: (error) => toastMutationError(error, 'Failed to update status'),
   })
 }

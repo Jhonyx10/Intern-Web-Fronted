@@ -9,7 +9,7 @@ import { useSchoolYears, useCurrentSchoolYear } from '@/lib/queries/school-year'
 import { useAuth } from '@/lib/auth'
 import type { Student } from '@/types'
 
-type InternshipStatus = 'pending' | 'ongoing' | 'completed'
+type InternshipStatus = 'pending' | 'ongoing' | 'completed' | 'failed' | 'dropped'
 type PlacementFilter = 'all' | 'assigned' | 'unassigned'
 type SortKey = 'progress' | 'name'
 
@@ -33,12 +33,16 @@ const STATUS_LABEL: Record<InternshipStatus, string> = {
     pending: 'For Deployment',
     ongoing: 'On Internship',
     completed: 'Completed',
+    failed: 'Failed',
+    dropped: 'Dropped',
 }
 
 const STATUS_STYLE: Record<InternshipStatus, string> = {
     pending: 'bg-amber-50 text-amber-600',
     ongoing: 'bg-sky-50 text-sky-600',
     completed: 'bg-emerald-50 text-emerald-600',
+    failed: 'bg-rose-50 text-rose-600',
+    dropped: 'bg-slate-100 text-slate-600',
 }
 
 const FILTERS: Array<{ key: InternshipStatus | 'all'; label: string }> = [
@@ -46,6 +50,8 @@ const FILTERS: Array<{ key: InternshipStatus | 'all'; label: string }> = [
     { key: 'pending', label: 'For Deployment' },
     { key: 'ongoing', label: 'On Internship' },
     { key: 'completed', label: 'Completed' },
+    { key: 'failed', label: 'Failed' },
+    { key: 'dropped', label: 'Dropped' },
 ]
 
 const PLACEMENT_OPTIONS: Array<{ key: PlacementFilter; label: string }> = [
@@ -105,7 +111,13 @@ const fmtHours = (h: number) => (Math.round(h * 10) / 10).toString()
 
 // Read the initial filters from the URL, e.g. /students?status=completed or /students?placement=assigned
 function parseStatusParam(value: string | null): InternshipStatus | 'all' {
-    return value === 'pending' || value === 'ongoing' || value === 'completed' ? value : 'all'
+    return value === 'pending' ||
+        value === 'ongoing' ||
+        value === 'completed' ||
+        value === 'failed' ||
+        value === 'dropped'
+        ? value
+        : 'all'
 }
 
 function parsePlacementParam(value: string | null): PlacementFilter {

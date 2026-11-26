@@ -249,6 +249,19 @@ export interface GeofenceExcursion {
   points?: GeofenceExcursionPoint[];
 }
 
+export type StudentEnrollment = {
+  id: number
+  student_id: number
+  section_id: number
+  school_year_id: number
+  status: 'enrolled' | 'completed' | 'failed' | 'dropped'
+  is_repeater: boolean
+  remarks: string | null
+  ended_at: string | null
+  section?: Section | null
+  school_year?: SchoolYear | null
+}
+
 export type Student = {
   id: number
   student_number: string
@@ -266,6 +279,9 @@ export type Student = {
   evaluations: Evaluation[]
   geofence_excursions?: GeofenceExcursion[]
   is_ready_for_assignment?: boolean
+  re_enrolled?: boolean // only present on the POST /students response
+  current_enrollment?: StudentEnrollment | null
+  enrollments?: StudentEnrollment[]
 }
 
 export type Supervisor = {

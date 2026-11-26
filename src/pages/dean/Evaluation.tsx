@@ -43,6 +43,17 @@ function formatDate(value: string) {
   });
 }
 
+// Usage = number of school years the template is anchored to
+function getUsageCount(t: TemplateRow) {
+  return t.anchored_school_years_count ?? (t.used_in_school_years ?? []).length;
+}
+
+// A template can't be edited directly if it's active, already used,
+// or anchored to any school year — it must be duplicated instead.
+function isLocked(t: TemplateRow) {
+  return Boolean(t.is_used) || Boolean(t.is_active) || getUsageCount(t) > 0;
+}
+
 // ── Stat card ─────────────────────────────────────────────────────
 
 function StatCard({
@@ -226,14 +237,14 @@ export const EvaluationPage: React.FC = () => {
     .sort()
     .reverse();
 
-  const editableCount = templates.filter((t) => !t.is_used).length;
-  const lockedCount = templates.filter((t) => t.is_used).length;
+  const editableCount = templates.filter((t) => !isLocked(t)).length;
+  const lockedCount = templates.filter((t) => isLocked(t)).length;
   const activeCount = templates.filter((t) => t.is_active).length;
   const inactiveCount = templates.length - activeCount;
 
   const filteredTemplates = templates.filter((template) => {
-    if (quickFilter === "editable" && template.is_used) return false;
-    if (quickFilter === "locked" && !template.is_used) return false;
+    if (quickFilter === "editable" && isLocked(template)) return false;
+    if (quickFilter === "locked" && !isLocked(template)) return false;
     if (statusFilter === "active" && !template.is_active) return false;
     if (statusFilter === "inactive" && template.is_active) return false;
     if (
@@ -443,12 +454,16 @@ export const EvaluationPage: React.FC = () => {
                   ) : filteredTemplates.length > 0 ? (
                     <AnimatePresence>
                       {filteredTemplates.map((template: TemplateRow) => {
-                        const used = Boolean(template.is_used);
+                        const locked = isLocked(template);
                         const schoolYears = template.used_in_school_years ?? [];
                         const submittedCount = template.submitted_count;
-                        const anchoredCount = template.anchored_school_years_count ?? schoolYears.length;
+                        const anchoredCount = getUsageCount(template);
                         const createdSchoolYear = template.created_school_year || (schoolYears[0] ?? "—");
                         const createdSemester = template.created_semester ?? null;
+
+                        const lockReason = template.is_active
+                          ? "Active · duplicate to edit"
+                          : "Locked after assignment";
 
                         return (
                           <motion.tr
@@ -465,7 +480,7 @@ export const EvaluationPage: React.FC = () => {
                               </p>
                               <p className="mt-0.5 text-xs text-[var(--color-muted)]">
                                 Created {formatDate(template.created_at)} ·{" "}
-                                {used ? "Locked after assignment" : "Editable"}
+                                {locked ? lockReason : "Editable"}
                               </p>
                               {template.description && (
                                 <p
@@ -534,7 +549,7 @@ export const EvaluationPage: React.FC = () => {
                                 </button>
 
                                 {/* List of evaluations answered and submitted */}
-                                {user?.role?.name !== "super_admin" && (
+                                {!isSuperAdmin && (
                                   <button
                                     type="button"
                                     onClick={() => navigate(`/evaluation/submissions/${template.id}`)}
@@ -552,10 +567,11 @@ export const EvaluationPage: React.FC = () => {
                                   </button>
                                 )}
 
+                                {/* Active or used templates can only be duplicated */}
                                 {isSuperAdmin && (
                                   <RowMenu
                                     items={
-                                      used
+                                      locked
                                         ? [
                                           {
                                             label: "Duplicate & edit",
@@ -645,7 +661,7 @@ export const EvaluationPage: React.FC = () => {
         onClose={() => setHistoryYear(null)}
         onPreview={(tid) => setPreviewTemplateId(tid)}
         onViewSubmissions={
-          user?.role?.name !== "super_admin"
+          !isSuperAdmin
             ? (tid, sy) =>
               navigate(
                 `/evaluation/submissions/${tid}?school_year=${encodeURIComponent(sy)}`

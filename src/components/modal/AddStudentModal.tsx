@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
-import { X, UserPlus, FileSpreadsheet, UploadCloud, Trash2, Download } from 'lucide-react'
+import {
+  X,
+  UserPlus,
+  FileSpreadsheet,
+  UploadCloud,
+  Trash2,
+  Download,
+  AlertCircle,
+  CheckCircle2,
+} from 'lucide-react'
 import { useImportStudents, useDownloadTemplate } from '@/lib/queries/students'
 import { useToast } from '@/components/Toaster'
 
@@ -46,6 +55,18 @@ const panelVariants: Variants = {
     scale: 0.98,
     transition: { duration: 0.16 },
   },
+}
+
+function InlineAlert({ title, children }: { title: string; children?: React.ReactNode }) {
+  return (
+    <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3">
+      <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-500" />
+      <div className="min-w-0 text-xs">
+        <p className="font-semibold text-red-700">{title}</p>
+        {children ? <div className="mt-0.5 text-red-600/90">{children}</div> : null}
+      </div>
+    </div>
+  )
 }
 
 function splitName(raw: string): { first: string; middle: string | null; last: string } | null {
@@ -256,11 +277,19 @@ export function AddStudentModal({ open, sectionId, onClose, onAddSingle }: AddSt
       { sectionId, file: selectedFile },
       {
         onSuccess: (result) => {
+          const reEnrolled = result.re_enrolled ?? 0
+          const parts = [
+            `${result.imported} imported`,
+            reEnrolled > 0 ? `${reEnrolled} re-enrolled` : null,
+          ]
+            .filter(Boolean)
+            .join(', ')
+
           if (result.failures.length === 0) {
-            addToast('success', `${result.imported} student${result.imported === 1 ? '' : 's'} imported`)
+            addToast('success', parts)
             onClose()
           } else {
-            addToast('info', `${result.imported} imported, ${result.failures.length} failed`)
+            addToast('info', `${parts}, ${result.failures.length} failed`)
           }
         },
         onError: (error) => {
@@ -482,7 +511,7 @@ export function AddStudentModal({ open, sectionId, onClose, onAddSingle }: AddSt
                       />
                     </div>
 
-                    {parseError ? <p className="text-xs text-red-500">{parseError}</p> : null}
+                    {parseError ? <InlineAlert title="Unable to read file">{parseError}</InlineAlert> : null}
 
                     <AnimatePresence>
                       {rows.length > 0 ? (
@@ -515,16 +544,24 @@ export function AddStudentModal({ open, sectionId, onClose, onAddSingle }: AddSt
                               <div
                                 key={row.rowIndex}
                                 className={[
-                                  'flex items-center justify-between border-b border-[var(--color-line)] px-3 py-2 text-xs last:border-b-0',
+                                  'flex items-start gap-3 border-b border-[var(--color-line)] px-3 py-2.5 text-xs last:border-b-0',
                                   row.error ? 'bg-red-50/60' : '',
                                 ].join(' ')}
                               >
-                                <span className="min-w-0 truncate text-[var(--color-ink)]">
-                                  {row.first_name ? `${row.first_name} ${row.last_name}` : `Row ${row.rowIndex}`}
-                                </span>
-                                <span className={row.error ? 'text-red-500' : 'text-[var(--color-muted)]'}>
-                                  {row.error ?? `${row.student_number} · ${row.email}`}
-                                </span>
+                                <span className="w-12 shrink-0 pt-px text-[var(--color-muted)]">Row {row.rowIndex}</span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate font-medium text-[var(--color-ink)]">
+                                    {row.first_name ? `${row.first_name} ${row.last_name}` : 'Unnamed entry'}
+                                  </p>
+                                  <p className={row.error ? 'text-red-600' : 'text-[var(--color-muted)]'}>
+                                    {row.error ?? `${row.student_number} · ${row.email}`}
+                                  </p>
+                                </div>
+                                {row.error ? (
+                                  <AlertCircle size={14} className="mt-0.5 shrink-0 text-red-500" />
+                                ) : (
+                                  <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-500" />
+                                )}
                               </div>
                             ))}
                           </div>
@@ -533,7 +570,7 @@ export function AddStudentModal({ open, sectionId, onClose, onAddSingle }: AddSt
                     </AnimatePresence>
 
                     {importMutation.isError ? (
-                      <p className="text-xs text-red-500">{importMutation.error.message}</p>
+                      <InlineAlert title="Import failed">{importMutation.error.message}</InlineAlert>
                     ) : null}
 
                     <AnimatePresence>
@@ -543,19 +580,33 @@ export function AddStudentModal({ open, sectionId, onClose, onAddSingle }: AddSt
                           animate={{ opacity: 1, height: 'auto' }}
                           exit={{ opacity: 0, height: 0 }}
                           transition={{ duration: 0.2 }}
-                          className="overflow-hidden rounded-xl border border-[var(--color-line)] p-3 text-xs"
+                          className="overflow-hidden rounded-xl border border-[var(--color-line)]"
                         >
-                          <p className="font-medium text-[var(--color-ink)]">
-                            {importMutation.data.imported} student{importMutation.data.imported === 1 ? '' : 's'} imported
-                          </p>
+                          <div className="flex items-center gap-2 bg-slate-50/60 px-3.5 py-2.5 text-xs">
+                            <CheckCircle2 size={14} className="text-emerald-500" />
+                            <p className="font-medium text-[var(--color-ink)]">
+                              {importMutation.data.imported} imported
+                              {(importMutation.data.re_enrolled ?? 0) > 0
+                                ? `, ${importMutation.data.re_enrolled} re-enrolled`
+                                : ''}
+                            </p>
+                          </div>
+
                           {importMutation.data.failures.length > 0 ? (
-                            <ul className="mt-1.5 space-y-1 text-red-500">
-                              {importMutation.data.failures.map((failure, i) => (
-                                <li key={i}>
-                                  Row {failure.row}: {failure.errors.join(', ')}
-                                </li>
-                              ))}
-                            </ul>
+                            <div className="border-t border-[var(--color-line)] px-3.5 py-3 text-xs">
+                              <p className="font-semibold text-red-700">
+                                {importMutation.data.failures.length} row
+                                {importMutation.data.failures.length === 1 ? '' : 's'} could not be imported
+                              </p>
+                              <ul className="mt-2 space-y-1.5">
+                                {importMutation.data.failures.map((failure, i) => (
+                                  <li key={i} className="flex gap-2 text-red-600/90">
+                                    <span className="w-12 shrink-0 font-medium text-red-700">Row {failure.row}</span>
+                                    <span className="min-w-0">{failure.errors.join(' · ')}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           ) : null}
                         </motion.div>
                       ) : null}

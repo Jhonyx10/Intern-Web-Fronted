@@ -1,12 +1,4 @@
-type StudentListFilters = {
-  unassigned?: boolean
-  perPage?: number
-  search?: string
-  status?: 'pending' | 'ongoing' | 'completed'
-  company_id?: string
-  course_id?: string
-  school_year_id?: string
-}
+import type { StudentFilters } from '@/lib/types'
 
 export const queryKeys = {
   auth: {
@@ -20,7 +12,7 @@ export const queryKeys = {
   },
   students: {
     all: ['students'] as const,
-    list: (page?: number, filters?: StudentListFilters) =>
+    list: (page?: number, filters?: StudentFilters) =>
       [
         'students',
         'list',
@@ -29,6 +21,7 @@ export const queryKeys = {
         filters?.perPage ?? null,
         filters?.search ?? '',
         filters?.status ?? null,
+        filters?.placement ?? null,
         filters?.company_id ?? null,
         filters?.course_id ?? null,
         filters?.school_year_id ?? null,

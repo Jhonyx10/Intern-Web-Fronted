@@ -7,7 +7,6 @@ import {
     Pencil,
     Trash2,
     X,
-    UserPlus,
     PlusCircle,
     BookOpen,
 } from 'lucide-react'
@@ -466,7 +465,7 @@ function DepartmentCard({
     programs,
     canManage,
     isToggling,
-    onAssignHead,
+    onEditDepartment,
     onToggleActive,
     onDeleteDepartment,
     onAddProgram,
@@ -477,7 +476,7 @@ function DepartmentCard({
     programs: Major[]
     canManage: boolean
     isToggling: boolean
-    onAssignHead: (c: Program) => void
+    onEditDepartment: (c: Program) => void
     onToggleActive: (c: Program) => void
     onDeleteDepartment: (c: Program) => void
     onAddProgram: (c: Program) => void
@@ -493,7 +492,7 @@ function DepartmentCard({
             className={`overflow-hidden rounded-2xl border border-[var(--color-line)] shadow-sm ${isActive ? 'bg-white' : 'bg-slate-50'
                 }`}
         >
-            {/* Header: title + code + status, Assign Head */}
+            {/* Header: title + code + status, Edit / Delete */}
             <div className="flex items-start justify-between gap-3 border-b border-[var(--color-line)] px-5 py-4">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -517,12 +516,13 @@ function DepartmentCard({
 
                 {canManage && (
                     <div className="flex shrink-0 items-center gap-1.5">
+                        {/* Opens the shared department form in edit mode (also used to change the head) */}
                         <button
                             type="button"
-                            onClick={() => onAssignHead(course)}
+                            onClick={() => onEditDepartment(course)}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
                         >
-                            <UserPlus size={13} /> Assign Head
+                            <Pencil size={13} /> Edit
                         </button>
                         <button
                             type="button"
@@ -734,7 +734,7 @@ export default function CoursePage() {
                                     toggleActive.isPending &&
                                     String(toggleActive.variables) === String(course.id)
                                 }
-                                onAssignHead={(c) => navigate(`/courses/${c.id}`)}
+                                onEditDepartment={(c) => navigate(`/courses/${c.id}`)}
                                 onToggleActive={(c) => toggleActive.mutate(c.id)}
                                 onDeleteDepartment={setDeleteTarget}
                                 onAddProgram={setAddProgramFor}

@@ -285,7 +285,11 @@ export function CompanyDetailsPage() {
     const activeYears = company.active_school_years ?? []
     const partnerYears = company.total_school_years_count ?? 0
     const isActive = company.is_active !== false
-    const role = user?.role?.name
+    const role = (user?.role?.name ?? '').toLowerCase()
+    // Single source of truth for who may add supervisors (header button + Supervisors tab)
+    const canAddSupervisor = ['coordinator', 'dean'].includes(role)
+    // 3-dot menu shows for anyone who has at least one action inside it
+    const showActionsMenu = canAddSupervisor || role === 'super_admin'
     const enabledGeofences = geofences.filter((g) => g.enabled).length
 
     const tabs: { key: TabKey; label: string; icon: ReactNode; count?: number }[] = [
@@ -352,7 +356,7 @@ export function CompanyDetailsPage() {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         {/* Deployment history: always one click away */}
                         <button
                             type="button"
@@ -372,7 +376,7 @@ export function CompanyDetailsPage() {
                             </button>
                         )}
 
-                        {role === 'super_admin' && (
+                        {showActionsMenu && (
                             <div className="relative" ref={actionsMenuRef}>
                                 <button
                                     onClick={() => setIsActionsMenuOpen((p) => !p)}
@@ -391,32 +395,40 @@ export function CompanyDetailsPage() {
                                             transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
                                             className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-[var(--color-line)] bg-white p-2 shadow-lg"
                                         >
-                                            <div className="flex items-center justify-between rounded-lg px-3 py-2.5">
-                                                <span className="text-sm font-medium text-[var(--color-ink)]">Active status</span>
+                                            {canAddSupervisor && (
                                                 <button
                                                     type="button"
-                                                    role="switch"
-                                                    aria-checked={isActive}
-                                                    disabled={toggleActive.isPending}
-                                                    onClick={() => toggleActive.mutate(company.id)}
-                                                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${isActive ? 'bg-[var(--color-accent)]' : 'bg-slate-300'}`}
+                                                    onClick={() => {
+                                                        setIsActionsMenuOpen(false)
+                                                        setIsSupervisorModalOpen(true)
+                                                    }}
+                                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[var(--color-ink)] transition hover:bg-slate-50"
                                                 >
-                                                    <span
-                                                        aria-hidden="true"
-                                                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${isActive ? 'translate-x-4' : 'translate-x-0.5'}`}
-                                                    />
+                                                    <User2 size={16} className="text-[var(--color-muted)]" />
+                                                    Add supervisor
                                                 </button>
-                                            </div>
-                                            <div className="my-1 h-px w-full bg-[var(--color-line)]" />
-                                            <button
-                                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[var(--color-ink)] transition hover:bg-slate-50"
-                                                onClick={() => {
-                                                    setIsSupervisorModalOpen(true)
-                                                    setIsActionsMenuOpen(false)
-                                                }}
-                                            >
-                                                <User2 size={16} /> Add supervisor
-                                            </button>
+                                            )}
+                                            {canAddSupervisor && role === 'super_admin' && (
+                                                <div className="my-1 h-px w-full bg-[var(--color-line)]" />
+                                            )}
+                                            {role === 'super_admin' && (
+                                                <div className="flex items-center justify-between rounded-lg px-3 py-2.5">
+                                                    <span className="text-sm font-medium text-[var(--color-ink)]">Active status</span>
+                                                    <button
+                                                        type="button"
+                                                        role="switch"
+                                                        aria-checked={isActive}
+                                                        disabled={toggleActive.isPending}
+                                                        onClick={() => toggleActive.mutate(company.id)}
+                                                        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${isActive ? 'bg-[var(--color-accent)]' : 'bg-slate-300'}`}
+                                                    >
+                                                        <span
+                                                            aria-hidden="true"
+                                                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${isActive ? 'translate-x-4' : 'translate-x-0.5'}`}
+                                                        />
+                                                    </button>
+                                                </div>
+                                            )}
                                         </motion.div>
                                     )}
                                 </AnimatePresence>
@@ -752,7 +764,7 @@ export function CompanyDetailsPage() {
                             icon={<User2 size={16} />}
                             count={company.supervisors.length}
                             action={
-                                role === 'super_admin' ? (
+                                canAddSupervisor ? (
                                     <button
                                         type="button"
                                         onClick={() => setIsSupervisorModalOpen(true)}
@@ -804,7 +816,11 @@ export function CompanyDetailsPage() {
                                     </table>
                                 </div>
                             ) : (
-                                <EmptyState icon={<User2 size={18} />} title="No supervisors added yet" />
+                                <EmptyState
+                                    icon={<User2 size={18} />}
+                                    title="No supervisors added yet"
+                                    hint={canAddSupervisor ? 'Use the Add supervisor button to create one.' : undefined}
+                                />
                             )}
                         </Panel>
                     )}

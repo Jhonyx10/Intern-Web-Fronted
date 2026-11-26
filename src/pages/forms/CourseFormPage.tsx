@@ -5,6 +5,11 @@ import { Clock, Hash, UserRound, Stamp } from 'lucide-react'
 import { useCourse, useCreateCourse, useUpdateCourse } from '@/lib/queries/courses'
 import { useUsers } from '@/lib/queries/users'
 
+/**
+ * One form for both flows:
+ *  - /courses/add  -> create a department (no :id param)
+ *  - /courses/:id  -> edit that department (pre-filled from the API)
+ */
 export function CourseFormPage() {
     const { id } = useParams()
     const navigate = useNavigate()
@@ -17,6 +22,7 @@ export function CourseFormPage() {
 
     const createMutation = useCreateCourse()
     const updateMutation = useUpdateCourse()
+    const isSaving = createMutation.isPending || updateMutation.isPending
 
     const [form, setForm] = useState({
         code: '',
@@ -26,12 +32,16 @@ export function CourseFormPage() {
         is_active: true,
     })
 
+    // Pre-fill when editing
     useEffect(() => {
         if (isEditMode && course) {
             setForm({
                 code: course.code || '',
                 name: course.name || '',
-                required_hours: course.required_hours ? course.required_hours.toString() : '',
+                required_hours:
+                    course.required_hours !== null && course.required_hours !== undefined
+                        ? course.required_hours.toString()
+                        : '',
                 dean_user_id: course.dean_user_id ? course.dean_user_id.toString() : '',
                 is_active: course.is_active ?? true,
             })
@@ -40,7 +50,11 @@ export function CourseFormPage() {
 
     const set = (patch: any) => setForm((f) => ({ ...f, ...patch }))
     const dean = deans.find((d) => d.id.toString() === form.dean_user_id.toString())
-    const canSubmit = form.code.trim() && form.name.trim() && form.required_hours && form.dean_user_id
+    const canSubmit =
+        form.code.trim() &&
+        form.name.trim() &&
+        form.required_hours !== '' &&
+        form.dean_user_id
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
@@ -48,6 +62,8 @@ export function CourseFormPage() {
 
         const payload = {
             ...form,
+            code: form.code.trim(),
+            name: form.name.trim(),
             required_hours: Number(form.required_hours),
         }
 
@@ -74,8 +90,11 @@ export function CourseFormPage() {
                         Office of the Registrar
                     </p>
                     <h2 className="mt-2 text-3xl font-semibold tracking-tight">
-                        {isEditMode ? 'Edit course record' : 'New course record'}
+                        {isEditMode ? 'Edit department' : 'New department'}
                     </h2>
+                    {isEditMode && course?.name && (
+                        <p className="mt-1.5 text-sm text-[var(--color-muted)]">{course.name}</p>
+                    )}
                 </div>
                 <Link
                     to="/courses"
@@ -187,10 +206,13 @@ export function CourseFormPage() {
                     <div className="mt-8 flex gap-3 border-t border-[var(--color-line)] pt-5">
                         <button
                             type="submit"
-                            disabled={!canSubmit || createMutation.isPending || updateMutation.isPending}
-                            className="rounded-xl bg-[var(--color-accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
+                            disabled={!canSubmit || isSaving}
+                            className="flex items-center gap-2 rounded-xl bg-[var(--color-accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
                         >
-                            {isEditMode ? 'Update course' : 'Create course record'}
+                            {isSaving && (
+                                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                            )}
+                            {isEditMode ? 'Save changes' : 'Create department'}
                         </button>
                         <Link
                             to="/courses"
@@ -203,7 +225,7 @@ export function CourseFormPage() {
 
                 <aside className="h-fit rounded-2xl border border-[var(--color-line)] bg-white/80 p-5 shadow-[var(--shadow-soft)] backdrop-blur">
                     <div className="flex items-center justify-between text-[11px] font-semibold tracking-wider text-[var(--color-muted)] uppercase">
-                        <span>Program record</span>
+                        <span>Department record</span>
                         <AnimatePresence>
                             {form.is_active && (
                                 <motion.div
@@ -223,7 +245,7 @@ export function CourseFormPage() {
                         {form.code ? form.code.toUpperCase() : 'CODE —'}
                     </div>
                     <div className="mt-1 text-lg font-semibold tracking-tight text-[var(--color-ink)] leading-tight">
-                        {form.name || 'Untitled course'}
+                        {form.name || 'Untitled department'}
                     </div>
 
                     <div className="my-4 border-t border-dashed border-[var(--color-line)]" />

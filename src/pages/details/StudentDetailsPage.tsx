@@ -8,6 +8,7 @@ import {
   FileText,
   Calendar,
   User,
+  UserX,
   Mail,
   Phone,
   MapPin,
@@ -22,7 +23,7 @@ import {
   Map,
   X,
 } from "lucide-react";
-import { useStudent } from "@/lib/queries/students";
+import { useStudent, useUpdateEnrollmentStatus } from "@/lib/queries/students";
 import {
   exportDTRAsCSV,
   exportDTRAsPDF,
@@ -62,8 +63,9 @@ import { TimeLogToolbar } from "@/components/TimeLogToolbar";
 import { SessionBadge } from "@/components/SessionBadge";
 import { useUpdateDocumentStatus } from "@/lib/queries/documents";
 import { toastMutationError, toastMutationSuccess } from "@/lib/mutationToast";
+import { useAuth } from "@/lib/auth";
 // --- Shapes matching the actual /students/{id} payload ---
-// Note: `options` comes back as a raw JSON string, not a parsed object —
+// Note: `options` comes back as a raw JSON string, not a parsed object --
 // same field name as EvaluationItemOption in your types.ts, different
 // wire format. Parse it with parseItemOptions() before use.
 interface EvaluationTemplateItemResponse {
@@ -132,7 +134,7 @@ function getResponseFor(
 }
 
 function formatTime12Hour(timeStr?: string | null): string {
-  if (!timeStr) return "—";
+  if (!timeStr) return "--";
   if (/am|pm/i.test(timeStr)) return timeStr;
 
   const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
@@ -163,7 +165,7 @@ function formatTime12Hour(timeStr?: string | null): string {
 }
 
 function formatDateReadable(dateStr?: string | null): string {
-  if (!dateStr) return "—";
+  if (!dateStr) return "--";
   try {
     const date = new Date(dateStr);
     if (!isNaN(date.getTime())) {
@@ -180,17 +182,17 @@ function formatDateReadable(dateStr?: string | null): string {
 }
 
 function formatWeekday(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "--";
   const date = new Date(value.includes("T") ? value : value.replace(" ", "T"));
-  if (isNaN(date.getTime())) return "—";
+  if (isNaN(date.getTime())) return "--";
   return date.toLocaleDateString("en-US", { weekday: "long" });
 }
 
 // Handles both ISO strings and MySQL "YYYY-MM-DD HH:mm:ss" (Safari-safe).
 function formatDateTime(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "--";
   const date = new Date(value.includes("T") ? value : value.replace(" ", "T"));
-  if (isNaN(date.getTime())) return "—";
+  if (isNaN(date.getTime())) return "--";
   return date.toLocaleString([], {
     month: "short",
     day: "numeric",
@@ -201,9 +203,9 @@ function formatDateTime(value?: string | null): string {
 }
 
 function formatSeconds(seconds?: number | null): string {
-  if (seconds == null) return "—";
+  if (seconds == null) return "--";
   const total = Math.round(Number(seconds));
-  if (isNaN(total)) return "—";
+  if (isNaN(total)) return "--";
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
@@ -245,12 +247,20 @@ function logDateLabel(log?: TimeLog | null): string | undefined {
 export function StudentDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isCoordinator = user?.role?.name === "coordinator";
   const { data: student, isLoading, isError } = useStudent(id);
   const [activeTab, setActiveTab] = useState<
     "overview" | "company" | "timelogs" | "reports" | "evaluations" | "geo_excursions"
   >("overview");
   const [docFilter, setDocFilter] = useState<"requirements" | "reports">("requirements");
   const updateStatus = useUpdateDocumentStatus();
+
+  // â”€â”€ Enrollment status (mark as failed) â”€â”€
+  const updateEnrollmentStatus = useUpdateEnrollmentStatus();
+  const [failDialogOpen, setFailDialogOpen] = useState(false);
+  const [failRemarks, setFailRemarks] = useState("");
+
   const [previewDoc, setPreviewDoc] = useState<{
     id: number;
     title: string;
@@ -282,6 +292,8 @@ export function StudentDetailsPage() {
   // Time log date range filter ("YYYY-MM-DD", empty = no limit)
   const [rangeFrom, setRangeFrom] = useState("");
   const [rangeTo, setRangeTo] = useState("");
+  const [timeLogPage, setTimeLogPage] = useState(1);
+  const TIME_LOG_PAGE_SIZE = 15;
   const { logoUrl } = useTheme();
 
   // Free the preview's object URL whenever it is replaced, closed, or the page unmounts.
@@ -296,6 +308,42 @@ export function StudentDetailsPage() {
       .filter(Boolean)
       .join(" ");
   }, [student]);
+
+  // Active run (status = enrolled). Null once the student has been marked
+  // failed / dropped / completed.
+  const currentEnrollment = student?.current_enrollment ?? null;
+
+  // How the most recent run ended, shown as a badge when there is no active run.
+  const endedStatus = useMemo(() => {
+    if (currentEnrollment) return null;
+    const list = student?.enrollments ?? [];
+    if (list.length === 0) return null;
+    const last = [...list].sort((a, b) => a.id - b.id)[list.length - 1];
+    return last.status !== "enrolled" ? last.status : null;
+  }, [student, currentEnrollment]);
+
+  function closeFailDialog() {
+    if (updateEnrollmentStatus.isPending) return;
+    setFailDialogOpen(false);
+    setFailRemarks("");
+  }
+
+  function handleMarkAsFailed() {
+    if (!student) return;
+    updateEnrollmentStatus.mutate(
+      {
+        id: student.id,
+        status: "failed",
+        remarks: failRemarks.trim() || null,
+      },
+      {
+        onSuccess: () => {
+          setFailDialogOpen(false);
+          setFailRemarks("");
+        },
+      }
+    );
+  }
 
   // Calculate total hours rendered from time logs
   const totalMinutes = useMemo(() => {
@@ -359,7 +407,7 @@ export function StudentDetailsPage() {
   const supervisorName: string | undefined = assignedSupervisor?.user?.name;
   const supervisorTitle: string | undefined = assignedSupervisor?.position_title;
 
-  // ── Time log date range filter ──
+  // â”€â”€ Time log date range filter â”€â”€
   // If the dates were entered in the wrong order, swap them instead of showing nothing
   const [rangeStart, rangeEnd] =
     rangeFrom && rangeTo && rangeFrom > rangeTo
@@ -378,13 +426,25 @@ export function StudentDetailsPage() {
     });
   }, [timeLogs, rangeStart, rangeEnd]);
 
+  // Reset page when filter or view changes
+  useEffect(() => {
+    setTimeLogPage(1);
+  }, [rangeFrom, rangeTo, timeLogView]);
+
+  const pagedTimeLogs = useMemo(() => {
+    const start = (timeLogPage - 1) * TIME_LOG_PAGE_SIZE;
+    return filteredTimeLogs.slice(start, start + TIME_LOG_PAGE_SIZE);
+  }, [filteredTimeLogs, timeLogPage]);
+
+  const timeLogTotalPages = Math.max(1, Math.ceil(filteredTimeLogs.length / TIME_LOG_PAGE_SIZE));
+
   const filteredMinutes = useMemo(
     () =>
       filteredTimeLogs.reduce((acc, log) => acc + (log.duration_minutes ?? 0), 0),
     [filteredTimeLogs]
   );
 
-  // ── DTR view data (same row-building logic as the PDF export) ──
+  // â”€â”€ DTR view data (same row-building logic as the PDF export) â”€â”€
   const dtrByMonth = useMemo(() => groupByMonth(filteredTimeLogs), [filteredTimeLogs]);
   const dtrMonthKeys = useMemo(
     () => [...dtrByMonth.keys()].sort().reverse(),
@@ -530,7 +590,7 @@ export function StudentDetailsPage() {
   return (
     <section className="space-y-6 pb-12">
       {/* Header Navigation */}
-      <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
           onClick={() => navigate(-1)}
@@ -538,6 +598,17 @@ export function StudentDetailsPage() {
         >
           <ArrowLeft size={14} /> Back to Directory
         </button>
+
+        {/* Only offered while the student has an active enrollment */}
+        {currentEnrollment && isCoordinator && (
+          <button
+            type="button"
+            onClick={() => setFailDialogOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-white px-3.5 py-2 text-xs font-semibold text-rose-600 shadow-[var(--shadow-soft)] transition hover:bg-rose-50"
+          >
+            <UserX size={14} /> Mark as failed
+          </button>
+        )}
       </div>
 
       {/* Profile Overview Card */}
@@ -549,13 +620,23 @@ export function StudentDetailsPage() {
               {student.last_name[0]}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold text-[var(--color-ink)]">
                   {fullName}
                 </h1>
                 <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-600 uppercase tracking-wide">
                   {student.is_active ? "Active" : "Inactive"}
                 </span>
+                {endedStatus && (
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${endedStatus === "completed"
+                      ? "bg-emerald-50 text-emerald-600"
+                      : "bg-rose-50 text-rose-600"
+                      }`}
+                  >
+                    {endedStatus}
+                  </span>
+                )}
               </div>
               <p className="text-xs font-medium text-[var(--color-muted)] mt-0.5">
                 Student ID:{" "}
@@ -1157,7 +1238,7 @@ export function StudentDetailsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--color-line)]">
-                      {filteredTimeLogs.map((log) => {
+                      {pagedTimeLogs.map((log) => {
                         const duration =
                           log.duration_minutes != null
                             ? formatDuration(log.duration_minutes)
@@ -1234,6 +1315,91 @@ export function StudentDetailsPage() {
                     </tbody>
                   </table>
                 </div>
+                {/* Pagination */}
+                {timeLogTotalPages > 1 && (
+                  <div className="flex items-center justify-between border-t border-[var(--color-line)] px-4 py-3">
+                    <p className="text-xs text-[var(--color-muted)]">
+                      Page{" "}
+                      <span className="font-semibold text-[var(--color-ink)]">
+                        {timeLogPage}
+                      </span>{" "}
+                      of {timeLogTotalPages} &middot;{" "}
+                      {filteredTimeLogs.length} entries
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={timeLogPage === 1}
+                        onClick={() => setTimeLogPage(1)}
+                        className="rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--color-ink)] shadow-sm transition hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        &laquo;
+                      </button>
+                      <button
+                        type="button"
+                        disabled={timeLogPage === 1}
+                        onClick={() => setTimeLogPage((p) => Math.max(1, p - 1))}
+                        className="rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--color-ink)] shadow-sm transition hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        &lsaquo; Prev
+                      </button>
+                      {Array.from({ length: timeLogTotalPages }, (_, i) => i + 1)
+                        .filter(
+                          (p) =>
+                            p === 1 ||
+                            p === timeLogTotalPages ||
+                            Math.abs(p - timeLogPage) <= 1
+                        )
+                        .reduce<(number | "...")[]>((acc, p, idx, arr) => {
+                          if (idx > 0 && p - (arr[idx - 1] as number) > 1)
+                            acc.push("...");
+                          acc.push(p);
+                          return acc;
+                        }, [])
+                        .map((p, idx) =>
+                          p === "..." ? (
+                            <span
+                              key={`ellipsis-${idx}`}
+                              className="px-1 text-[11px] text-[var(--color-muted)]"
+                            >
+                              &hellip;
+                            </span>
+                          ) : (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => setTimeLogPage(p as number)}
+                              className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold shadow-sm transition ${
+                                p === timeLogPage
+                                  ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                                  : "border-[var(--color-line)] bg-white text-[var(--color-ink)] hover:bg-slate-50"
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          )
+                        )}
+                      <button
+                        type="button"
+                        disabled={timeLogPage === timeLogTotalPages}
+                        onClick={() =>
+                          setTimeLogPage((p) => Math.min(timeLogTotalPages, p + 1))
+                        }
+                        className="rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--color-ink)] shadow-sm transition hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Next &rsaquo;
+                      </button>
+                      <button
+                        type="button"
+                        disabled={timeLogPage === timeLogTotalPages}
+                        onClick={() => setTimeLogPage(timeLogTotalPages)}
+                        className="rounded-lg border border-[var(--color-line)] bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--color-ink)] shadow-sm transition hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        &raquo;
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="rounded-2xl border border-[var(--color-line)] bg-white p-12 text-center shadow-[var(--shadow-soft)]">
@@ -1311,7 +1477,7 @@ export function StudentDetailsPage() {
                             className="hover:bg-slate-50/60 transition"
                           >
                             <td className="px-4 py-3 font-semibold text-[var(--color-ink)]">
-                              {session ?? '—'}
+                              {session ?? '--'}
                             </td>
                             <td className="px-4 py-3 text-[var(--color-muted)]">
                               {formatDateTime(exc.exit_at)}
@@ -1485,7 +1651,7 @@ export function StudentDetailsPage() {
                                   {remark}
                                 </span>
                               ) : (
-                                "—"
+                                "--"
                               )}
                             </td>
                             <td className="px-4 py-3 text-right">
@@ -1640,7 +1806,7 @@ export function StudentDetailsPage() {
               onClick={(e) => e.stopPropagation()}
               className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-[var(--color-line)] bg-[var(--color-paper,#FAF9F5)]"
             >
-              {/* Cover sheet — stays fixed, only the item list scrolls */}
+              {/* Cover sheet -- stays fixed, only the item list scrolls */}
               <div className="shrink-0 border-t-2 border-b border-[var(--color-ink)] bg-[var(--color-paper,#FAF9F5)] px-7 py-5">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
@@ -1712,7 +1878,7 @@ export function StudentDetailsPage() {
                 </div>
               </div>
 
-              {/* Item list — the scrollable region */}
+              {/* Item list -- the scrollable region */}
               <div className="min-h-0 flex-1 overflow-y-auto">
                 {[...viewingEvaluation.template.items]
                   .sort((a, b) => a.sort_order - b.sort_order)
@@ -1840,6 +2006,91 @@ export function StudentDetailsPage() {
               );
             }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Mark as failed -- confirmation with optional remarks */}
+      <AnimatePresence>
+        {failDialogOpen && (
+          <motion.div
+            key="fail-dialog-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
+            onClick={closeFailDialog}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Mark student as failed"
+              initial={{ opacity: 0, scale: 0.98, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: 8 }}
+              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md space-y-4 rounded-2xl border border-[var(--color-line)] bg-white p-5 shadow-[var(--shadow-soft)]"
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+                  <UserX size={18} />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-[var(--color-ink)]">
+                    Mark {fullName} as failed?
+                  </h2>
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--color-muted)]">
+                    Their company placement will end and their account will be
+                    deactivated until they are re-enrolled. Existing records are
+                    kept.
+                  </p>
+                </div>
+              </div>
+
+              <label className="flex flex-col gap-1.5 text-sm">
+                <span className="font-medium text-[var(--color-ink)]">
+                  Remarks{" "}
+                  <span className="font-normal text-[var(--color-muted)]">
+                    (Optional)
+                  </span>
+                </span>
+                <textarea
+                  value={failRemarks}
+                  onChange={(e) => setFailRemarks(e.target.value)}
+                  maxLength={1000}
+                  rows={3}
+                  placeholder="e.g. Did not meet the required hours"
+                  className="resize-none rounded-xl border border-[var(--color-line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                />
+              </label>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeFailDialog}
+                  disabled={updateEnrollmentStatus.isPending}
+                  className="rounded-xl border border-[var(--color-line)] bg-white px-4 py-2 text-xs font-semibold text-[var(--color-ink)] transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleMarkAsFailed}
+                  disabled={updateEnrollmentStatus.isPending}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {updateEnrollmentStatus.isPending ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" /> Saving...
+                    </>
+                  ) : (
+                    "Mark as failed"
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
