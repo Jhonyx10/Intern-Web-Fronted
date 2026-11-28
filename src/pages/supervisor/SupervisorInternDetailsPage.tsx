@@ -547,7 +547,11 @@ export default function SupervisorInternDetailsPage() {
                       <Row label="Time in" value={fmtTime(sch.time_in)} />
                       <Row
                         label="Lunch"
-                        value={sch.lunch_break ? fmtTime(sch.lunch_break) : "—"}
+                        value={
+                          sch.break_out && sch.break_in
+                            ? `${fmtTime(sch.break_out)} – ${fmtTime(sch.break_in)}`
+                            : "—"
+                        }
                       />
                       <Row label="Time out" value={fmtTime(sch.time_out)} />
                     </div>
