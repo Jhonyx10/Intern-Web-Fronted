@@ -216,3 +216,88 @@ export function useToggleCompanyActive() {
     onError: (error) => toastMutationError(error, 'Failed to toggle company status'),
   })
 }
+
+export type UpdateCompanyLocationInput = {
+  address: string | null
+  latitude: number
+  longitude: number
+  geofence_polygon?: GeoJSON.Polygon | null
+}
+
+export function useUpdateCompanyLocation() {
+  const { token } = useAuth()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ companyId, input }: { companyId: number | string; input: UpdateCompanyLocationInput }) => {
+      if (!token) throw new Error('Not authenticated.')
+      return apiRequest<{ data: Company }>(`/companies/${companyId}/location`, {
+        method: 'PATCH',
+        token,
+        body: input,
+      }).then((res) => res.data)
+    },
+    onSuccess: (_, { companyId }) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.companies.detail(Number(companyId)) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.companies.list() })
+      toastMutationSuccess('Location updated')
+    },
+    onError: (error) => toastMutationError(error, 'Failed to update location'),
+  })
+}
+
+
+export type CompanySchedule = {
+  id: number
+  company_id: number
+  start_date: string
+  time_in: string
+  break_out: string | null
+  break_in: string | null
+  time_out: string
+  /** null when a coordinator set it */
+  supervisor_id: number | null
+  created_at?: string
+  updated_at?: string
+}
+
+export type CompanyScheduleInput = {
+  start_date: string // YYYY-MM-DD
+  time_in: string // HH:mm
+  break_out: string | null
+  break_in: string | null
+  time_out: string
+}
+
+export function useCompanySchedules(companyId?: number | string) {
+  const { token } = useAuth()
+  return useQuery({
+    queryKey: ['companies', String(companyId), 'schedules'],
+    queryFn: () =>
+      apiRequest<{ data: CompanySchedule[] }>(`/companies/${companyId}/schedules`, {
+        token: token!,
+      }),
+    enabled: Boolean(token) && Boolean(companyId),
+    select: (res) => res.data,
+  })
+}
+
+export function useCreateCompanySchedule() {
+  const { token } = useAuth()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ companyId, input }: { companyId: number; input: CompanyScheduleInput }) =>
+      apiRequest(`/companies/${companyId}/schedules`, {
+        method: 'POST',
+        token: token!,
+        body: input,
+      }),
+    onSuccess: () => {
+      // prefix match refreshes the company, its schedules and any DTR data using them
+      void queryClient.invalidateQueries({ queryKey: ['companies'] })
+      void queryClient.invalidateQueries({ queryKey: ['supervisor', 'schedules'] })
+      toastMutationSuccess('Schedule saved')
+    },
+    onError: (error) => toastMutationError(error, 'Failed to save schedule'),
+  })
+}

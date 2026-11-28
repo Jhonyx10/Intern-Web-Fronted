@@ -71,7 +71,8 @@ export type CompanyScheduleData = {
     company_id: number
     start_date: string
     time_in: string
-    lunch_break: string | null
+    break_out: string | null
+    break_in: string | null
     time_out: string
     supervisor_id: number | null
     created_at?: string
@@ -81,7 +82,8 @@ export type CompanyScheduleData = {
 export type ScheduleInput = {
     start_date: string
     time_in: string
-    lunch_break?: string | null
+    break_out: string | null
+    break_in: string | null
     time_out: string
 }
 
@@ -149,7 +151,8 @@ export type InternDetailSchedule = {
     id: number
     start_date: string
     time_in: string
-    lunch_break: string | null
+    break_out: string | null
+    break_in: string | null
     time_out: string
 }
 

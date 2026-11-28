@@ -584,12 +584,12 @@ export function SupervisorAttendancePage() {
 
                   <div>
                     <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-muted)]">
-                      Lunch break
+                      Break
                     </p>
-                    {sch.lunch_break ? (
-                      <p className="mt-0.5 inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--color-ink)]">
+                    {sch.break_out && sch.break_in ? (
+                      <p className="mt-0.5 inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-[var(--color-ink)]">
                         <Coffee size={13} className="text-amber-600" />
-                        {sch.lunch_break}
+                        {fmtTime(sch.break_out)} – {fmtTime(sch.break_in)}
                       </p>
                     ) : (
                       <p className="mt-0.5 text-sm italic text-[var(--color-muted)]">

@@ -18,11 +18,17 @@ import {
   CheckSquare,
   Type as TypeIcon,
   AlignLeft,
+  Globe,
+  Building2,
+  Search,
+  Loader2,
 } from "lucide-react";
 import {
   useCreateEvaluationTemplate,
   useEvaluationTemplate,
+  useCourses,
   type FormItem,
+  type Program,
 } from "@/lib/queries/evaluation";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/components/Toaster";
@@ -82,6 +88,35 @@ const STEPS = ["Details", "Questions", "Review"] as const;
 
 const LIST_PATH = "/evaluation";
 
+// Who can use the template:
+//  - "global":       uniform template, available to every department
+//  - "departments":  only the departments picked below
+type Availability = "global" | "departments";
+
+const AVAILABILITY_OPTIONS: {
+  value: Availability;
+  label: string;
+  hint: string;
+  icon: React.ElementType;
+}[] = [
+    {
+      value: "global",
+      label: "Global",
+      hint: "Every department",
+      icon: Globe,
+    },
+    {
+      value: "departments",
+      label: "By department",
+      hint: "Choose departments",
+      icon: Building2,
+    },
+  ];
+
+// The /courses payload may name the field `title` or `name`
+const departmentName = (c: Program) =>
+  (c as unknown as { name?: string }).name ?? c.title ?? c.code;
+
 export const CreateEvaluationTemplatePage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -89,9 +124,17 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
   const { data: duplicateData, isSuccess: duplicateSuccess } = useEvaluationTemplate(duplicateId);
 
   const { addToast } = useToast();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { themeColor } = useTheme();
   const createMutation = useCreateEvaluationTemplate();
+
+  // Departments to choose from (only needed in "By department" mode)
+  const {
+    data: courses = [],
+    isLoading: coursesLoading,
+    isError: coursesError,
+    refetch: refetchCourses,
+  } = useCourses(token);
 
   const [step, setStep] = useState<0 | 1 | 2>(0);
 
@@ -99,6 +142,11 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [isActive, setIsActive] = useState(false);
+
+  // Availability
+  const [availability, setAvailability] = useState<Availability>("global");
+  const [courseIds, setCourseIds] = useState<number[]>([]);
+  const [deptSearch, setDeptSearch] = useState("");
 
   // Questionnaire items
   const [items, setItems] = useState<FormItem[]>([
@@ -116,8 +164,48 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
       setTitle(duplicateData.title + " (Copy)");
       setDescription(duplicateData.description || "");
       if (duplicateData.items) setItems(duplicateData.items as FormItem[]);
+
+      // Keep the original's availability (needs `courses` in the show endpoint)
+      const copiedIds = (duplicateData.courses ?? []).map((c) => c.id);
+      if (copiedIds.length > 0) {
+        setAvailability("departments");
+        setCourseIds(copiedIds);
+      }
     }
   }, [duplicateSuccess, duplicateData]);
+
+  // -------------------------------------------------------------------
+  // Department helpers
+  // -------------------------------------------------------------------
+
+  const filteredCourses = useMemo(() => {
+    const q = deptSearch.trim().toLowerCase();
+    if (!q) return courses;
+    return courses.filter(
+      (c) =>
+        c.code?.toLowerCase().includes(q) ||
+        departmentName(c)?.toLowerCase().includes(q)
+    );
+  }, [courses, deptSearch]);
+
+  const selectedCourses = useMemo(
+    () => courses.filter((c) => courseIds.includes(c.id)),
+    [courses, courseIds]
+  );
+
+  const toggleCourse = (id: number) => {
+    setCourseIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const selectAllVisible = () => {
+    setCourseIds((prev) => [
+      ...new Set([...prev, ...filteredCourses.map((c) => c.id)]),
+    ]);
+  };
+
+  const clearSelection = () => setCourseIds([]);
 
   // -------------------------------------------------------------------
   // Item helpers
@@ -221,6 +309,11 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
 
   const detailsError = !title.trim() ? "Give the template a title." : null;
 
+  const availabilityError =
+    availability === "departments" && courseIds.length === 0
+      ? "Select at least one department."
+      : null;
+
   const itemErrors = useMemo(
     () =>
       items.map((item) => {
@@ -242,9 +335,7 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
       ? "Add at least one question."
       : itemErrors.find((e) => e) ?? null;
 
-  // Templates are global (available to every department), so no course
-  // selection is required.
-  const canGoToQuestions = !detailsError;
+  const canGoToQuestions = !detailsError && !availabilityError;
   const canReview = canGoToQuestions && !questionsError;
 
   const goToStep = (target: 0 | 1 | 2) => {
@@ -284,6 +375,8 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
         title: title.trim(),
         description: description.trim() || undefined,
         is_active: isActive,
+        // Empty list = global template (available to every department)
+        course_ids: availability === "departments" ? courseIds : [],
         items: sanitizedItems,
       },
       {
@@ -302,6 +395,13 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
       </div>
     );
   }
+
+  const availabilityLabel =
+    availability === "global"
+      ? "All departments"
+      : selectedCourses.length > 0
+        ? selectedCourses.map((c) => c.code).join(", ")
+        : "No department selected";
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
@@ -392,34 +492,209 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
             exit={{ opacity: 0, y: -8 }}
             className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-5"
           >
+            {/* Availability */}
             <div>
-              <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-1">
+              <label className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-1.5">
                 <BookOpen
                   className="w-3.5 h-3.5"
                   style={{ color: "var(--color-accent)" }}
                 />
                 Availability
               </label>
+
+              {/* Global / By department toggle */}
               <div
-                className="p-3 rounded-lg flex items-center justify-between border"
-                style={{
-                  backgroundColor: "var(--color-accent-soft)",
-                  borderColor: "var(--color-accent-soft)",
-                }}
+                role="radiogroup"
+                aria-label="Template availability"
+                className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-gray-100"
               >
-                <span
-                  className="text-xs"
-                  style={{ color: "var(--color-accent)" }}
-                >
-                  All departments
-                </span>
-                <span
-                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-white"
-                  style={{ backgroundColor: "var(--color-accent)" }}
-                >
-                  Global template
-                </span>
+                {AVAILABILITY_OPTIONS.map(({ value, label, hint, icon: Icon }) => {
+                  const selected = availability === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setAvailability(value)}
+                      className={`flex items-center justify-center gap-2 rounded-md px-3 py-2 text-left transition-all ${selected
+                        ? "bg-white shadow-sm"
+                        : "text-gray-500 hover:text-gray-700"
+                        }`}
+                      style={
+                        selected ? { color: "var(--color-accent)" } : undefined
+                      }
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-semibold leading-tight">
+                          {label}
+                        </span>
+                        <span className="block text-[10px] opacity-70 leading-tight">
+                          {hint}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
+
+              {/* Global summary */}
+              {availability === "global" && (
+                <div
+                  className="mt-2 p-3 rounded-lg flex items-center justify-between border"
+                  style={{
+                    backgroundColor: "var(--color-accent-soft)",
+                    borderColor: "var(--color-accent-soft)",
+                  }}
+                >
+                  <span
+                    className="text-xs"
+                    style={{ color: "var(--color-accent)" }}
+                  >
+                    All departments can use this template
+                  </span>
+                  <span
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-white"
+                    style={{ backgroundColor: "var(--color-accent)" }}
+                  >
+                    Global template
+                  </span>
+                </div>
+              )}
+
+              {/* Department picker */}
+              <AnimatePresence initial={false}>
+                {availability === "departments" && (
+                  <motion.div
+                    key="dept-picker"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50/60 p-3 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-medium text-gray-700">
+                          Choose departments
+                          <span className="ml-1.5 text-gray-400 font-normal">
+                            ({courseIds.length} selected)
+                          </span>
+                        </p>
+                        <div className="flex items-center gap-3 text-[11px] font-medium">
+                          <button
+                            type="button"
+                            onClick={selectAllVisible}
+                            disabled={filteredCourses.length === 0}
+                            className="hover:opacity-80 disabled:opacity-40"
+                            style={{ color: "var(--color-accent)" }}
+                          >
+                            Select all
+                          </button>
+                          <button
+                            type="button"
+                            onClick={clearSelection}
+                            disabled={courseIds.length === 0}
+                            className="text-gray-500 hover:text-gray-700 disabled:opacity-40"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+
+                      {courses.length > 6 && (
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={deptSearch}
+                            onChange={(e) => setDeptSearch(e.target.value)}
+                            placeholder="Search departments"
+                            className="w-full pl-8 pr-3 py-1.5 text-xs border rounded-lg bg-white focus:ring-2 focus:ring-[var(--color-accent)]/20 focus:border-[var(--color-accent)]"
+                          />
+                        </div>
+                      )}
+
+                      {coursesLoading ? (
+                        <div className="flex items-center justify-center gap-2 py-6 text-xs text-gray-500">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Loading departments…
+                        </div>
+                      ) : coursesError ? (
+                        <div className="flex flex-col items-center gap-2 py-6 text-center">
+                          <AlertCircle className="w-5 h-5 text-rose-500" />
+                          <p className="text-xs text-gray-500">
+                            Could not load the departments.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => refetchCourses()}
+                            className="text-xs font-medium underline"
+                            style={{ color: "var(--color-accent)" }}
+                          >
+                            Try again
+                          </button>
+                        </div>
+                      ) : filteredCourses.length === 0 ? (
+                        <p className="py-6 text-center text-xs text-gray-400">
+                          {courses.length === 0
+                            ? "No departments found."
+                            : "No department matches your search."}
+                        </p>
+                      ) : (
+                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                          {filteredCourses.map((course) => {
+                            const checked = courseIds.includes(course.id);
+                            return (
+                              <li key={course.id}>
+                                <label
+                                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${checked
+                                    ? ""
+                                    : "bg-white border-gray-200 hover:border-gray-300"
+                                    }`}
+                                  style={
+                                    checked
+                                      ? {
+                                        backgroundColor:
+                                          "var(--color-accent-soft)",
+                                        borderColor: "var(--color-accent)",
+                                      }
+                                      : undefined
+                                  }
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggleCourse(course.id)}
+                                    className="rounded shrink-0"
+                                    style={{ accentColor: "var(--color-accent)" }}
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="block text-xs font-semibold text-gray-800 truncate">
+                                      {course.code}
+                                    </span>
+                                    <span className="block text-[11px] text-gray-500 truncate">
+                                      {departmentName(course)}
+                                    </span>
+                                  </span>
+                                </label>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+
+                      {availabilityError && (
+                        <p className="text-[11px] text-rose-600 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" />
+                          {availabilityError}
+                        </p>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <div>
@@ -711,7 +986,7 @@ export const CreateEvaluationTemplatePage: React.FC = () => {
           >
             <div>
               <p className="text-[11px] font-medium text-gray-400 mb-1">
-                All departments · {isActive ? "Active" : "Inactive"}
+                {availabilityLabel} · {isActive ? "Active" : "Inactive"}
               </p>
               <h2 className="text-lg font-bold text-gray-900">
                 {title || "Untitled template"}

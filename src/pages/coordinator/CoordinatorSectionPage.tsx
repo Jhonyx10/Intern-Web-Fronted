@@ -104,8 +104,8 @@ function Pagination({
               aria-label={`Page ${item}`}
               aria-current={item === page ? "page" : undefined}
               className={`grid h-8 min-w-8 place-items-center rounded-lg px-2 text-xs font-semibold transition ${item === page
-                  ? "bg-[var(--color-accent)] text-white"
-                  : "border border-[var(--color-line)] bg-white text-[var(--color-ink)] hover:bg-slate-50"
+                ? "bg-[var(--color-accent)] text-white"
+                : "border border-[var(--color-line)] bg-white text-[var(--color-ink)] hover:bg-slate-50"
                 }`}
             >
               {item}
@@ -193,18 +193,15 @@ export function CoordinatorSectionPage() {
     );
   }
 
-  async function handleConfirmSend() {
-    if (!selectedTemplateId || !currentSection || !user) return;
+  function handleConfirmSend() {
+    if (!selectedTemplateId) return;
 
     bulkAssign(
-      {
-        template_id: selectedTemplateId,
-        course_id: currentSection.course_id, // assuming your section object has course_id
-        coordinator_id: user.id, // passing the logged-in coordinator's ID
-      },
+      { template_id: selectedTemplateId },
       {
         onSuccess: () => {
           setShowConfirm(false);
+          setSelectedTemplateId(null);
         },
       }
     );
@@ -338,8 +335,8 @@ export function CoordinatorSectionPage() {
               }}
               onClick={() => setSelectedSectionId(sec.id)}
               className={`relative z-10 flex shrink-0 items-center gap-2 whitespace-nowrap px-4 py-2.5 text-sm font-medium transition-colors ${isActive
-                  ? "text-[var(--color-accent)]"
-                  : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                ? "text-[var(--color-accent)]"
+                : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
                 }`}
             >
               <BookOpen size={15} />
@@ -574,11 +571,7 @@ export function CoordinatorSectionPage() {
         isSending={isPending}
         sectionCount={sections.length}
         totalStudentCount={totalStudentsAcrossAllSections}
-        templates={templates.map((t) => ({
-          id: t.id,
-          title: t.title,
-          is_active: Boolean(t.is_active),
-        }))}
+        templates={templates}
         selectedTemplateId={selectedTemplateId}
         onSelectTemplate={setSelectedTemplateId}
         onConfirm={handleConfirmSend}

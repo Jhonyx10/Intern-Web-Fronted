@@ -1369,11 +1369,10 @@ export function StudentDetailsPage() {
                               key={p}
                               type="button"
                               onClick={() => setTimeLogPage(p as number)}
-                              className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold shadow-sm transition ${
-                                p === timeLogPage
+                              className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold shadow-sm transition ${p === timeLogPage
                                   ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
                                   : "border-[var(--color-line)] bg-white text-[var(--color-ink)] hover:bg-slate-50"
-                              }`}
+                                }`}
                             >
                               {p}
                             </button>

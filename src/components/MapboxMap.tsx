@@ -73,6 +73,8 @@ type MapboxMapProps = {
   onDrawChange?: (polygon: GeofencePolygon | null) => void
   onRouteInfo?: (info: MapRouteInfo | null) => void
   onMapClick?: (longitude: number, latitude: number) => void
+  /** Called once the map style has loaded (and the draw control, if enabled, is connected). */
+  onLoad?: () => void
   defaultFlyTo?: [number, number]
 }
 
@@ -206,6 +208,7 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
     onDrawChange,
     onRouteInfo,
     onMapClick,
+    onLoad,
   },
   ref,
 ) {
@@ -218,12 +221,14 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
   const onDrawChangeRef = useRef(onDrawChange)
   const onRouteInfoRef = useRef(onRouteInfo)
   const onMapClickRef = useRef(onMapClick)
+  const onLoadRef = useRef(onLoad)
   const pickPointModeRef = useRef(pickPointMode)
 
   onMarkerClickRef.current = onMarkerClick
   onDrawChangeRef.current = onDrawChange
   onRouteInfoRef.current = onRouteInfo
   onMapClickRef.current = onMapClick
+  onLoadRef.current = onLoad
   pickPointModeRef.current = pickPointMode
 
   const syncGeofenceFromDraw = useEffectEvent(() => {
@@ -412,6 +417,9 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(function Ma
     }
 
     map.addControl(new CenterControl(defaultFlyTo), 'top-left')
+
+    // Registered after the draw control so it runs once Draw has connected
+    map.on('load', () => onLoadRef.current?.())
 
     mapRef.current = map
 

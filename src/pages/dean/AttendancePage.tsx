@@ -12,6 +12,7 @@ import {
     Timer,
     X,
     ChevronRight,
+    Upload,
 } from "lucide-react";
 import {
     useAttendanceMonitoring,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/queries/attendance";
 import { TimeLogDetails } from "@/components/modal/TimeLogDetails";
 import { AbsenceViewModal } from "@/components/modal/AbsenceViewModal";
+import ImportAttendanceModal from "@/components/modal/ImportAttendanceModal";
 import { SessionBadge } from "@/components/SessionBadge";
 import { useAuth } from "@/lib/auth";
 import { useCurrentSchoolYear } from "@/lib/queries/school-year";
@@ -481,9 +483,13 @@ export default function AttendancePage() {
     const [viewMode, setViewMode] = useState<ViewMode>("logs");
     const [selectedSummaryStudent, setSelectedSummaryStudent] = useState<StudentSummary | null>(null);
     const [selectedAbsence, setSelectedAbsence] = useState<AbsenceRecord | null>(null);
+    const [isImportOpen, setIsImportOpen] = useState(false);
 
     const isCustomRange = range === "custom";
     const isAbsenceView = viewMode === "absences";
+
+    // Only coordinators import attendance, and only from the Logs tab
+    const canImport = (user?.role?.name ?? "").toLowerCase() === "coordinator" && viewMode === "logs";
 
     // Week / Month in the Logs view: show one row per student instead of one per log.
     const groupByStudent = viewMode === "logs" && (range === "week" || range === "month");
@@ -778,6 +784,17 @@ export default function AttendancePage() {
                             </div>
                         )}
 
+                        {/* Import attendance from the filled-in DTR CSV (coordinators, Logs tab) */}
+                        {canImport && (
+                            <button
+                                type="button"
+                                onClick={() => setIsImportOpen(true)}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-1.5 text-xs font-semibold text-[var(--color-ink)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
+                            >
+                                <Upload size={13} /> Import attendance
+                            </button>
+                        )}
+
                         {/* Search Input */}
                         <div className="relative">
                             <Search
@@ -860,6 +877,15 @@ export default function AttendancePage() {
                                 ? "No interns have filed an absence for the selected time range or search filter."
                                 : "No interns have logged attendance for the selected time range or search filter."}
                         </p>
+                        {canImport && (
+                            <button
+                                type="button"
+                                onClick={() => setIsImportOpen(true)}
+                                className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-[var(--color-accent)] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[var(--color-accent-hover)]"
+                            >
+                                <Upload size={13} /> Import attendance from CSV
+                            </button>
+                        )}
                     </div>
                 ) : isAbsenceView ? (
                     /* ── Absences view ── */
@@ -1142,6 +1168,21 @@ export default function AttendancePage() {
                     onViewRecord={(id) => {
                         setSelectedSummaryStudent(null);
                         setSelectedTimeLogId(id);
+                    }}
+                />
+            )}
+
+            {/* Import attendance from CSV */}
+            {canImport && (
+                <ImportAttendanceModal
+                    open={isImportOpen}
+                    token={token}
+                    onClose={() => setIsImportOpen(false)}
+                    onImported={({ from, to }) => {
+                        // The page opens on "Today", so jump to the dates that were just imported
+                        setRange("custom");
+                        setDateFrom(from);
+                        setDateTo(to);
                     }}
                 />
             )}

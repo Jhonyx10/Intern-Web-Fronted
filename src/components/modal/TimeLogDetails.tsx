@@ -1,27 +1,28 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2,
   AlertCircle,
   X,
-  Clock,
   Sun,
   Sunset,
   ShieldCheck,
   ImageOff,
-  FileText,
   MessageSquare,
+  UserCheck,
+  Coffee,
 } from "lucide-react";
 import {
   useTimeLogDetails,
   type TimeLogTaskPhoto,
 } from "@/lib/queries/timelogs";
+import { useAuth } from "@/lib/auth";
+import { FaceVerificationModal } from "@/components/modal/FaceVerificationModal";
 
 // Task photos are served from Laravel's public storage disk
 // (php artisan storage:link), which lives on the API host — not
-// the frontend dev server. The API now returns a resolved file_url
-// per photo (via Storage::url() on the backend); fall back to
-// building one from VITE_API_URL only if that's ever missing.
+// the frontend dev server. The API returns a resolved file_url per photo;
+// fall back to building one from VITE_API_URL only if that's ever missing.
 const ASSET_BASE_URL = (
   import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000/api"
 ).replace(/\/api\/?$/, "");
@@ -29,6 +30,8 @@ const ASSET_BASE_URL = (
 function photoUrl(photo: TimeLogTaskPhoto) {
   return photo.file_url ?? `${ASSET_BASE_URL}/storage/${photo.file_path}`;
 }
+
+/* ───────────── helpers ───────────── */
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -69,10 +72,15 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// face_match_score is a distance/dissimilarity score expressed as a
-// fraction (e.g. "0.20"): the LOWER the number, the closer the match.
-// Convert to a percentage for display and attach a qualitative label
-// so "20%" doesn't read as "20% confident" (the opposite of the truth).
+// "facial_recognition" -> "Facial recognition"
+function humanize(value: string | null | undefined) {
+  if (!value) return "—";
+  const text = value.replace(/_/g, " ").trim();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// face_match_score is a distance expressed as a fraction (e.g. "0.20"):
+// the LOWER the number, the closer the match.
 function describeMatchScore(raw: string | null): {
   percent: number;
   label: string;
@@ -106,7 +114,6 @@ function parseTaskNote(note: string | null) {
   if (!note) return result;
 
   const parts = note.split(/\[(Morning|Afternoon)\]\s*/i);
-  // parts: [leading text, "Morning", text, "Afternoon", text, ...]
   const leading = parts[0]?.trim();
   if (leading) result.general = leading;
 
@@ -130,37 +137,31 @@ function photoSession(photo: TimeLogTaskPhoto): SessionKey | null {
   return null;
 }
 
-function StatusBadge({ status }: { status: TimeLogTaskPhoto["status"] }) {
-  const isSubmitted = status === "submitted";
+/* ───────────── UI pieces ───────────── */
+
+function PeriodChip({ value }: { value: string }) {
+  const isLate = value.toLowerCase().includes("late");
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${isSubmitted
-        ? "bg-emerald-100 text-emerald-700"
-        : "bg-slate-100 text-slate-600"
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${isLate ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
         }`}
     >
-      {isSubmitted ? "Submitted" : "Draft"}
+      {humanize(value)}
     </span>
   );
 }
 
-function StatRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
+function PhotoStatus({ status }: { status: TimeLogTaskPhoto["status"] }) {
+  const isSubmitted = status === "submitted";
   return (
-    <div className="flex items-start gap-2.5">
-      <div className="mt-0.5 text-[var(--color-muted)]">{icon}</div>
-      <div className="min-w-0">
-        <p className="text-[11px] text-[var(--color-muted)]">{label}</p>
-        <p className="text-sm font-medium text-[var(--color-ink)]">{value}</p>
-      </div>
-    </div>
+    <span
+      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium shadow-sm ${isSubmitted
+          ? "bg-emerald-100 text-emerald-700"
+          : "bg-white/90 text-slate-600"
+        }`}
+    >
+      {isSubmitted ? "Submitted" : "Draft"}
+    </span>
   );
 }
 
@@ -172,31 +173,31 @@ function PhotoGrid({
   onSelect: (photo: TimeLogTaskPhoto) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
       {photos.map((photo) => (
         <button
           key={photo.id}
           onClick={() => photoUrl(photo) && onSelect(photo)}
           disabled={!photoUrl(photo)}
-          className="group relative overflow-hidden rounded-md border border-[var(--color-line)] bg-white text-left disabled:cursor-default"
+          className="group relative overflow-hidden rounded-lg border border-[var(--color-line)] bg-white text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-default"
         >
           {photoUrl(photo) ? (
             <img
               src={photoUrl(photo)}
               alt={photo.original_filename}
               loading="lazy"
-              className="h-28 w-full object-cover transition group-hover:opacity-90"
+              className="aspect-[4/3] w-full object-cover transition group-hover:opacity-90"
             />
           ) : (
-            <div className="flex h-28 w-full flex-col items-center justify-center gap-1 bg-slate-50 text-[var(--color-muted)]">
+            <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 bg-slate-50 text-[var(--color-muted)]">
               <ImageOff size={16} />
               <span className="text-[10px]">File missing</span>
             </div>
           )}
           <div className="absolute left-1.5 top-1.5">
-            <StatusBadge status={photo.status} />
+            <PhotoStatus status={photo.status} />
           </div>
-          <div className="border-t border-[var(--color-line)] px-2 py-1.5">
+          <div className="px-2 py-1.5">
             <p className="truncate text-[11px] font-medium text-[var(--color-ink)]">
               {photo.original_filename}
             </p>
@@ -210,11 +211,50 @@ function PhotoGrid({
   );
 }
 
-function SessionCard({
+type Segment = { key: string; minutes: number; className: string; label: string };
+
+/** The whole day as one bar: morning, break, afternoon, scaled by time. */
+function DayTimeline({
+  segments,
+  start,
+  end,
+  breakMinutes,
+}: {
+  segments: Segment[];
+  start: string | null;
+  end: string | null;
+  breakMinutes: number | null;
+}) {
+  if (segments.length === 0) return null;
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="flex h-2.5 w-full gap-1">
+        {segments.map((s) => (
+          <div
+            key={s.key}
+            title={`${s.label} · ${formatDuration(s.minutes)}`}
+            style={{ flexGrow: s.minutes, flexBasis: 0 }}
+            className={`rounded-full ${s.className}`}
+          />
+        ))}
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2 text-[11px] tabular-nums text-[var(--color-muted)]">
+        <span>{formatTime(start)}</span>
+        {breakMinutes ? (
+          <span className="inline-flex items-center gap-1">
+            <Coffee size={11} /> {formatDuration(breakMinutes)} break
+          </span>
+        ) : null}
+        <span>{formatTime(end)}</span>
+      </div>
+    </div>
+  );
+}
+
+function SessionBlock({
   title,
   icon,
   accentClass,
-  startLabel,
   start,
   end,
   minutes,
@@ -225,7 +265,6 @@ function SessionCard({
   title: string;
   icon: React.ReactNode;
   accentClass: string;
-  startLabel: string;
   start: string | null;
   end: string | null;
   minutes: number | null;
@@ -234,12 +273,11 @@ function SessionCard({
   onSelectPhoto: (photo: TimeLogTaskPhoto) => void;
 }) {
   return (
-    <section className="overflow-hidden rounded-md border border-[var(--color-line)] bg-white/60">
-      {/* Session header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--color-line)] px-4 py-3">
-        <div className="flex items-center gap-2">
+    <div className="px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <div className="flex items-center gap-2.5">
           <span
-            className={`flex h-7 w-7 items-center justify-center rounded-full ${accentClass}`}
+            className={`flex h-8 w-8 items-center justify-center rounded-full ${accentClass}`}
           >
             {icon}
           </span>
@@ -247,32 +285,19 @@ function SessionCard({
             {title}
           </h3>
         </div>
-        <div className="flex items-center gap-3 text-xs text-[var(--color-muted)]">
-          <span>
-            {startLabel}{" "}
-            <span className="font-medium text-[var(--color-ink)]">
-              {formatTime(start)}
-            </span>
-            {" → "}
-            <span className="font-medium text-[var(--color-ink)]">
-              {formatTime(end)}
-            </span>
-          </span>
+        <p className="text-sm tabular-nums text-[var(--color-ink)]">
+          {formatTime(start)} – {formatTime(end)}
           {minutes !== null && (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+            <span className="ml-2 text-xs text-[var(--color-muted)]">
               {formatDuration(minutes)}
             </span>
           )}
-        </div>
+        </p>
       </div>
 
-      {/* Task note */}
-      <div className="px-4 py-3">
-        <p className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[var(--color-muted)]">
-          <FileText size={12} /> Task Note
-        </p>
+      <div className="mt-2.5 sm:pl-[42px]">
         {note ? (
-          <p className="text-sm leading-relaxed text-[var(--color-ink)]">
+          <p className="max-w-prose text-sm leading-relaxed text-[var(--color-ink)]">
             {note}
           </p>
         ) : (
@@ -280,26 +305,26 @@ function SessionCard({
             No task note logged for this session.
           </p>
         )}
-      </div>
 
-      {/* Photos for this session */}
-      {photos !== null && (
-        <div className="border-t border-[var(--color-line)] px-4 py-3">
-          <p className="mb-2 text-[11px] font-medium text-[var(--color-muted)]">
-            Photos ({photos.length})
-          </p>
-          {photos.length === 0 ? (
-            <p className="text-xs italic text-[var(--color-muted)]">
-              No photos submitted for this session.
-            </p>
+        {photos !== null &&
+          (photos.length > 0 ? (
+            <div className="mt-3">
+              <p className="mb-2 text-xs font-medium text-[var(--color-muted)]">
+                Photos ({photos.length})
+              </p>
+              <PhotoGrid photos={photos} onSelect={onSelectPhoto} />
+            </div>
           ) : (
-            <PhotoGrid photos={photos} onSelect={onSelectPhoto} />
-          )}
-        </div>
-      )}
-    </section>
+            <p className="mt-2.5 flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
+              <ImageOff size={12} /> No photos for this session
+            </p>
+          ))}
+      </div>
+    </div>
   );
 }
+
+/* ───────────── main modal ───────────── */
 
 export const TimeLogDetails = ({
   timeLogId,
@@ -315,6 +340,29 @@ export const TimeLogDetails = ({
   const [activePhoto, setActivePhoto] = useState<TimeLogTaskPhoto | null>(
     null
   );
+
+  // Only the section's coordinator (and super admins) may see the face photos
+  const { user } = useAuth();
+  const role = (user?.role?.name ?? "").toLowerCase();
+  const canReviewFace = ["coordinator", "super_admin"].includes(role);
+  const [faceOpen, setFaceOpen] = useState(false);
+
+  // Closing the details modal also closes the face modal
+  useEffect(() => {
+    if (!visible) setFaceOpen(false);
+  }, [visible]);
+
+  // Esc: lightbox first, then the modal. The face modal handles its own Esc.
+  useEffect(() => {
+    if (!visible) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (activePhoto) setActivePhoto(null);
+      else if (!faceOpen) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [visible, activePhoto, faceOpen, onClose]);
 
   const notes = parseTaskNote(data?.task_note ?? null);
   const photos = data?.task_photos ?? [];
@@ -335,232 +383,304 @@ export const TimeLogDetails = ({
     data?.break_in ?? null,
     data?.time_out ?? null
   );
+  const breakMinutes = minutesBetween(
+    data?.break_out ?? null,
+    data?.break_in ?? null
+  );
+
+  const segments: Segment[] = [];
+  if (morningMinutes) {
+    segments.push({
+      key: "morning",
+      minutes: morningMinutes,
+      className: "bg-amber-400",
+      label: "Morning",
+    });
+  }
+  if (breakMinutes) {
+    segments.push({
+      key: "break",
+      minutes: breakMinutes,
+      className: "bg-slate-200",
+      label: "Break",
+    });
+  }
+  if (afternoonMinutes) {
+    segments.push({
+      key: "afternoon",
+      minutes: afternoonMinutes,
+      className: "bg-orange-500",
+      label: "Afternoon",
+    });
+  }
+
+  const match = describeMatchScore(data?.face_match_score ?? null);
 
   return (
-    <AnimatePresence>
-      {visible && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
-          onClick={onClose}
-        >
+    <>
+      <AnimatePresence>
+        {visible && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.98, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: 8 }}
-            transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-            onClick={(e) => e.stopPropagation()}
-            className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-[var(--color-line)] bg-[var(--color-paper,#FAF9F5)]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+            onClick={onClose}
           >
-            {/* Header */}
-            <div className="flex shrink-0 items-start justify-between border-b border-[var(--color-line)] px-6 py-4">
-              <div className="min-w-0">
-                <h2
-                  className="text-base font-semibold text-[var(--color-ink)]"
-                  style={{ fontFamily: '"Source Serif 4", Georgia, serif' }}
-                >
-                  Time Log Details
-                </h2>
-                <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-                  {data?.student?.name ?? formatDate(data?.time_in ?? null)}
-                  {data?.student?.name
-                    ? ` · ${formatDate(data?.time_in ?? null)}`
-                    : ""}
-                  {data?.session_period ? ` · ${data.session_period}` : ""}
-                </p>
-              </div>
-              <button
-                onClick={onClose}
-                className="shrink-0 rounded p-1 text-[var(--color-muted)] transition hover:bg-slate-100 hover:text-[var(--color-ink)]"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {isLoading && (
-                <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
-                  <Loader2
-                    size={20}
-                    className="animate-spin text-[var(--color-muted)]"
-                  />
-                  <p className="text-xs text-[var(--color-muted)]">
-                    Loading time log…
-                  </p>
-                </div>
-              )}
-
-              {isError && (
-                <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
-                  <AlertCircle size={20} className="text-rose-500" />
-                  <p className="text-xs text-[var(--color-muted)]">
-                    {error instanceof Error
-                      ? error.message
-                      : "Could not load this time log."}
-                  </p>
-                  <button
-                    onClick={() => refetch()}
-                    className="text-xs font-medium text-[var(--color-ink)] underline"
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: 8 }}
+              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Time log details"
+              className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper,#FAF9F5)] shadow-2xl"
+            >
+              {/* Header */}
+              <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--color-line)] px-6 py-4">
+                <div className="min-w-0">
+                  <h2
+                    className="truncate text-xl font-semibold text-[var(--color-ink)]"
+                    style={{ fontFamily: '"Source Serif 4", Georgia, serif' }}
                   >
-                    Try again
-                  </button>
-                </div>
-              )}
-
-              {data && !isLoading && !isError && (
-                <div className="space-y-4 px-6 py-4">
-                  {/* Summary */}
-                  <div className="grid grid-cols-1 gap-4 rounded-md border border-[var(--color-line)] bg-white/60 px-4 py-3 sm:grid-cols-2">
-                    <StatRow
-                      icon={<Clock size={14} />}
-                      label="Total Duration"
-                      value={formatDuration(data.duration_minutes)}
-                    />
-                    <div className="flex items-start gap-2.5">
-                      <div className="mt-0.5 text-[var(--color-muted)]">
-                        <ShieldCheck size={14} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[11px] text-[var(--color-muted)]">
-                          Verification
-                        </p>
-                        <p className="break-words text-sm font-medium text-[var(--color-ink)]">
-                          {data.verification_method ?? "—"}
-                        </p>
-                        {(() => {
-                          const match = describeMatchScore(
-                            data.face_match_score
-                          );
-                          if (!match) return null;
-                          return (
-                            <span
-                              className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${matchToneClasses[match.tone]
-                                }`}
-                              title="Face match distance — lower is better"
-                            >
-                              {match.label} ({match.percent}%)
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    </div>
+                    {data?.student?.name ?? "Time log"}
+                  </h2>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--color-muted)]">
+                    <span>{formatDate(data?.time_in ?? null)}</span>
+                    {data?.session_period && (
+                      <PeriodChip value={data.session_period} />
+                    )}
                   </div>
-                  {/* Reason the intern gave for a missed time out */}
-                  {data.correction_reason && (
-                    <div className="rounded-md border border-sky-200 bg-sky-50/60 px-4 py-3">
-                      <p className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-sky-700">
-                        <MessageSquare size={12} /> Intern's reason for the correction
-                      </p>
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-ink)]">
-                        {data.correction_reason}
-                      </p>
-                    </div>
-                  )}
-                  {/* Note that isn't tagged to a session */}
-                  {notes.general && (
-                    <div className="rounded-md border border-[var(--color-line)] bg-white/60 px-4 py-3">
-                      <p className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[var(--color-muted)]">
-                        <FileText size={12} /> Task Note
-                      </p>
-                      <p className="text-sm leading-relaxed text-[var(--color-ink)]">
-                        {notes.general}
-                      </p>
-                    </div>
-                  )}
+                </div>
+                <button
+                  onClick={onClose}
+                  aria-label="Close"
+                  className="shrink-0 rounded-md p-1.5 text-[var(--color-muted)] transition hover:bg-slate-100 hover:text-[var(--color-ink)]"
+                >
+                  <X size={16} />
+                </button>
+              </div>
 
-                  {/* Morning session */}
-                  <SessionCard
-                    title="Morning"
-                    icon={<Sun size={14} />}
-                    accentClass="bg-amber-100 text-amber-600"
-                    startLabel="Time In"
-                    start={data.time_in}
-                    end={morningEnd}
-                    minutes={morningMinutes}
-                    note={notes.morning}
-                    photos={canGroupPhotos ? morningPhotos : null}
-                    onSelectPhoto={setActivePhoto}
-                  />
-
-                  {/* Afternoon session */}
-                  {showAfternoon && (
-                    <SessionCard
-                      title="Afternoon"
-                      icon={<Sunset size={14} />}
-                      accentClass="bg-orange-100 text-orange-600"
-                      startLabel="Time In"
-                      start={data.break_in}
-                      end={data.time_out}
-                      minutes={afternoonMinutes}
-                      note={notes.afternoon}
-                      photos={canGroupPhotos ? afternoonPhotos : null}
-                      onSelectPhoto={setActivePhoto}
+              {/* Body */}
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {isLoading && (
+                  <div className="flex flex-col items-center gap-2 px-6 py-16 text-center">
+                    <Loader2
+                      size={20}
+                      className="animate-spin text-[var(--color-muted)]"
                     />
-                  )}
+                    <p className="text-xs text-[var(--color-muted)]">
+                      Loading time log…
+                    </p>
+                  </div>
+                )}
 
-                  {/* Photos that aren't tagged to a session */}
-                  {!canGroupPhotos && (
-                    <section className="rounded-md border border-[var(--color-line)] bg-white/60 px-4 py-3">
-                      <p className="mb-3 text-[11px] font-medium text-[var(--color-muted)]">
-                        Task Photos ({photos.length})
-                      </p>
-                      {photos.length === 0 ? (
-                        <div className="flex flex-col items-center gap-2 py-6 text-center">
-                          <ImageOff
-                            size={18}
-                            className="text-[var(--color-muted)]"
-                          />
-                          <p className="text-xs text-[var(--color-muted)]">
-                            No task photos were submitted for this log.
+                {isError && (
+                  <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
+                    <AlertCircle size={20} className="text-rose-500" />
+                    <p className="text-xs text-[var(--color-muted)]">
+                      {error instanceof Error
+                        ? error.message
+                        : "Could not load this time log."}
+                    </p>
+                    <button
+                      onClick={() => refetch()}
+                      className="text-xs font-medium text-[var(--color-ink)] underline"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                )}
+
+                {data && !isLoading && !isError && (
+                  <div className="space-y-4 px-6 py-5">
+                    {/* Day overview + verification */}
+                    <div className="overflow-hidden rounded-lg border border-[var(--color-line)] bg-white/70">
+                      <div className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:gap-6">
+                        <div className="shrink-0">
+                          <p
+                            className="text-3xl font-semibold leading-none tabular-nums text-[var(--color-ink)]"
+                            style={{
+                              fontFamily: '"Source Serif 4", Georgia, serif',
+                            }}
+                          >
+                            {formatDuration(data.duration_minutes)}
+                          </p>
+                          <p className="mt-1.5 text-xs text-[var(--color-muted)]">
+                            Total time rendered
                           </p>
                         </div>
-                      ) : (
-                        <PhotoGrid photos={photos} onSelect={setActivePhoto} />
-                      )}
-                    </section>
-                  )}
-                </div>
-              )}
-            </div>
-          </motion.div>
+                        <DayTimeline
+                          segments={segments}
+                          start={data.time_in}
+                          end={data.time_out}
+                          breakMinutes={breakMinutes}
+                        />
+                      </div>
 
-          {/* Photo lightbox */}
-          <AnimatePresence>
-            {activePhoto && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActivePhoto(null);
-                }}
-              >
-                <motion.img
-                  initial={{ scale: 0.96, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.96, opacity: 0 }}
-                  src={photoUrl(activePhoto)}
-                  alt={activePhoto.original_filename}
-                  className="max-h-full max-w-full rounded-md object-contain"
-                  onClick={(e) => e.stopPropagation()}
-                />
-                <button
-                  onClick={() => setActivePhoto(null)}
-                  className="absolute right-6 top-6 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-line)] bg-slate-50/60 px-5 py-3">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <ShieldCheck
+                            size={16}
+                            className="shrink-0 text-[var(--color-muted)]"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-[var(--color-ink)]">
+                              {humanize(data.verification_method)}
+                            </p>
+                            {match && (
+                              <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-muted)]">
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${matchToneClasses[match.tone]}`}
+                                >
+                                  {match.label}
+                                </span>
+                                <span title="Lower distance means a closer match">
+                                  {match.percent}% distance
+                                </span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {canReviewFace && (
+                          <button
+                            type="button"
+                            onClick={() => setFaceOpen(true)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--color-ink)] transition hover:border-slate-300 hover:bg-slate-50"
+                          >
+                            <UserCheck size={13} /> Review face photos
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Reason the intern gave for a missed time out */}
+                    {data.correction_reason && (
+                      <div className="rounded-lg border border-sky-200 bg-sky-50/70 px-4 py-3">
+                        <p className="mb-1 flex items-center gap-1.5 text-xs font-medium text-sky-700">
+                          <MessageSquare size={12} /> Intern's reason for the
+                          correction
+                        </p>
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-ink)]">
+                          {data.correction_reason}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Note that isn't tagged to a session */}
+                    {notes.general && (
+                      <div className="rounded-lg border border-[var(--color-line)] bg-white/70 px-4 py-3">
+                        <p className="mb-1 text-xs font-medium text-[var(--color-muted)]">
+                          Task note
+                        </p>
+                        <p className="max-w-prose text-sm leading-relaxed text-[var(--color-ink)]">
+                          {notes.general}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Sessions */}
+                    <div className="divide-y divide-[var(--color-line)] overflow-hidden rounded-lg border border-[var(--color-line)] bg-white/70">
+                      <SessionBlock
+                        title="Morning"
+                        icon={<Sun size={15} />}
+                        accentClass="bg-amber-100 text-amber-600"
+                        start={data.time_in}
+                        end={morningEnd}
+                        minutes={morningMinutes}
+                        note={notes.morning}
+                        photos={canGroupPhotos ? morningPhotos : null}
+                        onSelectPhoto={setActivePhoto}
+                      />
+
+                      {showAfternoon && (
+                        <SessionBlock
+                          title="Afternoon"
+                          icon={<Sunset size={15} />}
+                          accentClass="bg-orange-100 text-orange-600"
+                          start={data.break_in}
+                          end={data.time_out}
+                          minutes={afternoonMinutes}
+                          note={notes.afternoon}
+                          photos={canGroupPhotos ? afternoonPhotos : null}
+                          onSelectPhoto={setActivePhoto}
+                        />
+                      )}
+
+                      {/* Photos that aren't tagged to a session */}
+                      {!canGroupPhotos && (
+                        <div className="px-5 py-4">
+                          {photos.length === 0 ? (
+                            <p className="flex items-center gap-1.5 text-xs text-[var(--color-muted)]">
+                              <ImageOff size={12} /> No task photos were
+                              submitted for this log
+                            </p>
+                          ) : (
+                            <>
+                              <p className="mb-2 text-xs font-medium text-[var(--color-muted)]">
+                                Task photos ({photos.length})
+                              </p>
+                              <PhotoGrid
+                                photos={photos}
+                                onSelect={setActivePhoto}
+                              />
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Photo lightbox */}
+            <AnimatePresence>
+              {activePhoto && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActivePhoto(null);
+                  }}
                 >
-                  <X size={18} />
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
+                  <motion.img
+                    initial={{ scale: 0.96, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.96, opacity: 0 }}
+                    src={photoUrl(activePhoto)}
+                    alt={activePhoto.original_filename}
+                    className="max-h-full max-w-full rounded-md object-contain"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <button
+                    onClick={() => setActivePhoto(null)}
+                    aria-label="Close photo"
+                    className="absolute right-6 top-6 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+                  >
+                    <X size={18} />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Outside the details backdrop so a click inside it can't close the details modal */}
+      {canReviewFace && (
+        <FaceVerificationModal
+          timeLogId={timeLogId}
+          visible={visible && faceOpen}
+          onClose={() => setFaceOpen(false)}
+        />
       )}
-    </AnimatePresence>
+    </>
   );
 };

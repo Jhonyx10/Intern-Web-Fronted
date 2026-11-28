@@ -9,7 +9,16 @@ import {
     type MapPolygonFeature,
     type MapRouteInfo,
 } from '@/components/MapboxMap'
-import { useCompany, useAssignStudentToCompany, useCreateSupervisor, useToggleCompanyActive } from '@/lib/queries/companies'
+import {
+    useCompany,
+    useAssignStudentToCompany,
+    useCreateSupervisor,
+    useToggleCompanyActive,
+    useUpdateCompanyLocation,
+    useCompanySchedules,
+    useCreateCompanySchedule,
+    type UpdateCompanyLocationInput,
+} from '@/lib/queries/companies'
 import { formatDistance, formatDuration, haversineMeters, OCC_CENTER, OCC_NAME } from '@/lib/geo'
 import {
     Building2,
@@ -27,18 +36,24 @@ import {
     Search,
     CalendarDays,
     Handshake,
-    ChevronRight,
-    LayoutDashboard,
+    Pencil,
+    Clock,
+    Coffee,
+    FileText,
+    FileSpreadsheet,
 } from 'lucide-react'
 import AssignStudentModal from '@/components/modal/AssignStudentModal'
 import AddSupervisorModal from '@/components/modal/AddSupervisorModal'
+import CompanyScheduleModal from '@/components/modal/CompanyScheduleModal'
 import { DeploymentHistoryModal } from '@/components/modal/CompanyDeploymentModal'
 import { useAuth } from '@/lib/auth'
+import { LocationEditorMap, type LocationEdit } from '@/components/LocationEditorMap'
+import { exportBlankDTRTemplateCSV, exportBlankDTRTemplatePDF } from '@/lib/exportDtr'
 
 const COLORS = ['#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#6366f1']
 const MAIN_COLOR = '#0b6e4f'
 
-type TabKey = 'overview' | 'students' | 'supervisors'
+type TabKey = 'students' | 'supervisors' | 'geofences'
 
 // ── Small building blocks ─────────────────────────────────────────
 
@@ -56,8 +71,8 @@ function Panel({
     children: ReactNode
 }) {
     return (
-        <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
-            <div className="flex items-center justify-between gap-3 border-b border-[var(--color-line)] px-5 py-3.5">
+        <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white">
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--color-line)] px-4 py-3">
                 <h3 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-ink)]">
                     <span className="text-[var(--color-muted)]">{icon}</span>
                     {title}
@@ -88,8 +103,8 @@ function StatusPill({ active }: { active?: boolean }) {
 
 function EmptyState({ icon, title, hint }: { icon: ReactNode; title: string; hint?: string }) {
     return (
-        <div className="flex flex-col items-center gap-2 px-5 py-12 text-center">
-            <div className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-[var(--color-muted)]">
+        <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-[var(--color-muted)]">
                 {icon}
             </div>
             <p className="text-sm font-medium text-[var(--color-ink)]">{title}</p>
@@ -98,29 +113,22 @@ function EmptyState({ icon, title, hint }: { icon: ReactNode; title: string; hin
     )
 }
 
-function StatTile({
-    icon,
-    label,
-    value,
-    tone,
-}: {
-    icon: ReactNode
-    label: string
-    value: ReactNode
-    tone: string
-}) {
+function InfoRow({ icon, children, sub }: { icon: ReactNode; children: ReactNode; sub?: ReactNode }) {
     return (
-        <div className="flex items-center gap-3 rounded-2xl border border-[var(--color-line)] bg-white px-4 py-3.5 shadow-sm">
-            <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${tone}`}>{icon}</div>
-            <div className="min-w-0">
-                <p className="text-xl font-bold leading-tight tracking-tight text-[var(--color-ink)]">{value}</p>
-                <p className="truncate text-[11px] font-medium uppercase tracking-wide text-[var(--color-muted)]">
-                    {label}
-                </p>
+        <div className="flex items-start gap-3">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-[var(--color-muted)]">
+                {icon}
+            </span>
+            <div className="min-w-0 pt-1 text-sm text-[var(--color-ink)]">
+                {children}
+                {sub && <p className="mt-0.5 text-xs text-[var(--color-muted)]">{sub}</p>}
             </div>
         </div>
     )
 }
+
+const smallBtn =
+    'inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-white px-2.5 text-xs font-semibold text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]'
 
 function initials(name: string) {
     return name
@@ -129,6 +137,25 @@ function initials(name: string) {
         .slice(0, 2)
         .map((w) => w[0]?.toUpperCase())
         .join('')
+}
+
+// "08:00:00" -> "8:00 AM"
+function time12(t?: string | null) {
+    const m = t?.match(/^(\d{1,2}):(\d{2})/)
+    if (!m) return '—'
+    const h = Number(m[1])
+    return `${h % 12 || 12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`
+}
+
+// "2026-11-28" -> "Nov 28, 2026" (parsed as a local date, not UTC)
+function formatDate(d?: string | null) {
+    if (!d) return '—'
+    const [y, mo, day] = d.slice(0, 10).split('-').map(Number)
+    return new Date(y, mo - 1, day).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+    })
 }
 
 // ── Page ──────────────────────────────────────────────────────────
@@ -141,16 +168,24 @@ export function CompanyDetailsPage() {
     const { user } = useAuth()
 
     const { data: company, isLoading, error } = useCompany(id)
+    const { data: schedules } = useCompanySchedules(id)
     const { mutate: assignStudent, isPending: isAssigning } = useAssignStudentToCompany()
     const { mutate: createSupervisor, isPending: isCreatingSupervisor } = useCreateSupervisor()
+    const { mutate: updateLocation, isPending: isUpdatingLocation } = useUpdateCompanyLocation()
+    const { mutate: saveSchedule, isPending: isSavingSchedule } = useCreateCompanySchedule()
     const toggleActive = useToggleCompanyActive()
 
     const [routeInfo, setRouteInfo] = useState<MapRouteInfo | null>(null)
     const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
     const [isSupervisorModalOpen, setIsSupervisorModalOpen] = useState(false)
+    const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false)
+    const [isEditingLocation, setIsEditingLocation] = useState(false)
+    const [locationDraft, setLocationDraft] = useState<LocationEdit | null>(null)
+    const [locationAddress, setLocationAddress] = useState('')
+    const [locationError, setLocationError] = useState<string | null>(null)
     const [isHistoryOpen, setIsHistoryOpen] = useState(false)
     const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false)
-    const [tab, setTab] = useState<TabKey>('overview')
+    const [tab, setTab] = useState<TabKey>('students')
     const [studentQuery, setStudentQuery] = useState('')
     const [studentYear, setStudentYear] = useState<string>('all')
 
@@ -163,6 +198,14 @@ export function CompanyDetailsPage() {
         document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
+
+    // Schedule in effect today: the newest one that has started, else the next upcoming one.
+    // The API returns schedules newest start date first.
+    const currentSchedule = useMemo(() => {
+        const list = schedules ?? []
+        const today = new Date().toLocaleDateString('en-CA') // local YYYY-MM-DD
+        return list.find((s) => s.start_date.slice(0, 10) <= today) ?? list[list.length - 1] ?? null
+    }, [schedules])
 
     const markers = useMemo<MapMarker[]>(() => {
         const marks: MapMarker[] = []
@@ -214,7 +257,6 @@ export function CompanyDetailsPage() {
         return features
     }, [company?.geofence_polygon, company?.buildings])
 
-    // Students with a resolved school year label, for filtering
     const studentRows = useMemo(
         () =>
             (company?.students ?? []).map((s) => ({
@@ -286,386 +328,310 @@ export function CompanyDetailsPage() {
     const partnerYears = company.total_school_years_count ?? 0
     const isActive = company.is_active !== false
     const role = (user?.role?.name ?? '').toLowerCase()
-    // Single source of truth for who may add supervisors (header button + Supervisors tab)
     const canAddSupervisor = ['coordinator', 'dean'].includes(role)
-    // 3-dot menu shows for anyone who has at least one action inside it
-    const showActionsMenu = canAddSupervisor || role === 'super_admin'
+    const canEditLocation = role === 'coordinator'
+    const canManageSchedule = role === 'coordinator'
+    const showActionsMenu = canAddSupervisor || canManageSchedule || role === 'super_admin'
     const enabledGeofences = geofences.filter((g) => g.enabled).length
 
-    const tabs: { key: TabKey; label: string; icon: ReactNode; count?: number }[] = [
-        { key: 'overview', label: 'Overview', icon: <LayoutDashboard size={14} /> },
+    const templateCompany = {
+        name: company.name,
+        scheduleIn: currentSchedule?.time_in ?? null,
+        scheduleOut: currentSchedule?.time_out ?? null,
+    }
+
+    const startEditingLocation = () => {
+        setLocationDraft({
+            latitude: hasLocation ? company.latitude! : null,
+            longitude: hasLocation ? company.longitude! : null,
+            polygon: (company.geofence_polygon ?? null) as GeoJSON.Polygon | null,
+        })
+        setLocationAddress(company.address ?? '')
+        setLocationError(null)
+        setIsEditingLocation(true)
+    }
+
+    const saveLocation = () => {
+        if (!locationDraft || locationDraft.latitude == null || locationDraft.longitude == null) {
+            setLocationError('Click the map to place the company pin.')
+            return
+        }
+        setLocationError(null)
+
+        const input: UpdateCompanyLocationInput = {
+            address: locationAddress.trim() || null,
+            latitude: locationDraft.latitude,
+            longitude: locationDraft.longitude,
+            geofence_polygon: locationDraft.polygon,
+        }
+
+        updateLocation(
+            { companyId: company.id, input },
+            { onSuccess: () => setIsEditingLocation(false) }
+        )
+    }
+
+    const tabs: { key: TabKey; label: string; icon: ReactNode; count: number }[] = [
         ...(company.students
             ? [{ key: 'students' as const, label: 'Students', icon: <Users2 size={14} />, count: company.students.length }]
             : []),
         ...(company.supervisors
             ? [{ key: 'supervisors' as const, label: 'Supervisors', icon: <User2 size={14} />, count: company.supervisors.length }]
             : []),
+        { key: 'geofences', label: 'Geofences', icon: <Shield size={14} />, count: geofences.length },
+    ]
+    const activeTab = tabs.some((t) => t.key === tab) ? tab : tabs[0].key
+
+    const stats = [
+        { label: 'Deployed', value: company.students?.length ?? 0, icon: <Users2 size={14} /> },
+        { label: 'Supervisors', value: company.supervisors?.length ?? 0, icon: <User2 size={14} /> },
+        { label: 'Geofences on', value: `${enabledGeofences}/${geofences.length}`, icon: <Shield size={14} /> },
+        { label: 'School years', value: partnerYears, icon: <Handshake size={14} /> },
     ]
 
+    const menuItem =
+        'flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[var(--color-ink)] transition hover:bg-slate-50'
+
     return (
-        <section className="space-y-5 pb-10">
-            {/* Back */}
+        <section className="space-y-4 pb-10">
             <button
                 type="button"
                 onClick={() => navigate(-1)}
-                className="inline-flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2 text-xs font-semibold text-[var(--color-ink)] shadow-sm transition hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-3.5 py-2 text-xs font-semibold text-[var(--color-ink)] transition hover:bg-slate-50"
             >
                 <ArrowLeft size={14} /> Back
             </button>
 
-            {/* Hero */}
-            <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                className="rounded-2xl border border-[var(--color-line)] bg-white p-5 shadow-[var(--shadow-soft)]"
-            >
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex min-w-0 items-start gap-4">
-                        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[var(--color-accent-soft)] text-lg font-bold text-[var(--color-accent)]">
-                            {initials(company.name) || <Building2 size={22} />}
-                        </div>
-                        <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2.5">
-                                <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-ink)]">
-                                    {company.name}
-                                </h1>
-                                <StatusPill active={isActive} />
+            <MapTokenWarning />
+
+            {/* ── Map-first hero: the map is the page, the identity card floats on it ── */}
+            <div className="relative overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white">
+                {isEditingLocation ? (
+                    <>
+                        <LocationEditorMap
+                            initialPoint={hasLocation ? { latitude: company.latitude!, longitude: company.longitude! } : null}
+                            initialPolygon={(company.geofence_polygon ?? null) as GeoJSON.Polygon | null}
+                            onChange={setLocationDraft}
+                        />
+                        <div className="flex flex-wrap items-end gap-3 border-t border-[var(--color-line)] px-5 py-3">
+                            <label className="min-w-[240px] flex-1 text-xs font-semibold text-[var(--color-ink)]">
+                                Address
+                                <input
+                                    value={locationAddress}
+                                    onChange={(e) => setLocationAddress(e.target.value)}
+                                    className="mt-1 h-10 w-full rounded-lg border border-[var(--color-line)] bg-white px-3 text-sm font-normal outline-none transition focus:border-[var(--color-accent)]"
+                                />
+                            </label>
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsEditingLocation(false)}
+                                    className="h-10 rounded-xl border border-[var(--color-line)] bg-white px-4 text-sm font-semibold text-[var(--color-ink)] hover:bg-slate-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isUpdatingLocation}
+                                    onClick={saveLocation}
+                                    className="h-10 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-white transition hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
+                                >
+                                    {isUpdatingLocation ? 'Saving…' : 'Save location'}
+                                </button>
                             </div>
-                            {company.address && (
-                                <p className="mt-1 flex items-center gap-1.5 text-sm text-[var(--color-muted)]">
-                                    <MapPin size={13} className="shrink-0" /> {company.address}
-                                </p>
-                            )}
+                            {locationError && <p className="w-full text-xs font-medium text-red-600">{locationError}</p>}
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="relative z-10 border-b border-[var(--color-line)] bg-white p-4 lg:absolute lg:left-3 lg:top-3 lg:w-[400px] lg:rounded-xl lg:border lg:shadow-lg">
+                            <div className="flex items-start gap-3">
+                                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[var(--color-accent-soft)] text-base font-bold text-[var(--color-accent)]">
+                                    {initials(company.name) || <Building2 size={20} />}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <h1 className="text-xl font-semibold tracking-tight text-[var(--color-ink)]">
+                                            {company.name}
+                                        </h1>
+                                        <StatusPill active={isActive} />
+                                    </div>
+                                    {company.address && (
+                                        <p className="mt-1 flex items-start gap-1.5 text-sm text-[var(--color-muted)]">
+                                            <MapPin size={13} className="mt-0.5 shrink-0" /> {company.address}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {showActionsMenu && (
+                                    <div className="relative" ref={actionsMenuRef}>
+                                        <button
+                                            onClick={() => setIsActionsMenuOpen((p) => !p)}
+                                            aria-label="Company actions"
+                                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-line)] bg-white text-[var(--color-ink)] transition hover:bg-slate-50"
+                                        >
+                                            <MoreVertical size={18} />
+                                        </button>
+                                        <AnimatePresence>
+                                            {isActionsMenuOpen && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, scale: 0.95, y: 6 }}
+                                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                    exit={{ opacity: 0, scale: 0.95, y: 6 }}
+                                                    transition={{ duration: 0.15 }}
+                                                    className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-[var(--color-line)] bg-white p-2 shadow-lg"
+                                                >
+                                                    {canAddSupervisor && (
+                                                        <button
+                                                            type="button"
+                                                            className={menuItem}
+                                                            onClick={() => {
+                                                                setIsActionsMenuOpen(false)
+                                                                setIsSupervisorModalOpen(true)
+                                                            }}
+                                                        >
+                                                            <User2 size={16} className="text-[var(--color-muted)]" /> Add supervisor
+                                                        </button>
+                                                    )}
+                                                    {canManageSchedule && (
+                                                        <button
+                                                            type="button"
+                                                            className={menuItem}
+                                                            onClick={() => {
+                                                                setIsActionsMenuOpen(false)
+                                                                setIsScheduleModalOpen(true)
+                                                            }}
+                                                        >
+                                                            <Clock size={16} className="text-[var(--color-muted)]" />
+                                                            {currentSchedule ? 'Change schedule' : 'Set schedule'}
+                                                        </button>
+                                                    )}
+                                                    {role === 'super_admin' && (
+                                                        <div className="flex items-center justify-between rounded-lg px-3 py-2.5">
+                                                            <span className="text-sm font-medium text-[var(--color-ink)]">Active status</span>
+                                                            <button
+                                                                type="button"
+                                                                role="switch"
+                                                                aria-checked={isActive}
+                                                                disabled={toggleActive.isPending}
+                                                                onClick={() => toggleActive.mutate(company.id)}
+                                                                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${isActive ? 'bg-[var(--color-accent)]' : 'bg-slate-300'}`}
+                                                            >
+                                                                <span
+                                                                    aria-hidden="true"
+                                                                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${isActive ? 'translate-x-4' : 'translate-x-0.5'}`}
+                                                                />
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+                                )}
+                            </div>
+
                             {(activeYears.length > 0 || partnerYears > 0) && (
-                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                <div className="mt-3 flex flex-wrap gap-2">
                                     {activeYears.length > 0 && (
                                         <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
-                                            <CalendarDays size={12} />
-                                            S.Y. {activeYears.join(', ')}
+                                            <CalendarDays size={12} /> S.Y. {activeYears.join(', ')}
                                         </span>
                                     )}
                                     {partnerYears > 0 && (
                                         <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-[var(--color-muted)]">
                                             <Handshake size={12} />
-                                            Partnered for {partnerYears} {partnerYears === 1 ? 'school year' : 'school years'}
+                                            Partner for {partnerYears} {partnerYears === 1 ? 'school year' : 'school years'}
                                         </span>
                                     )}
                                 </div>
                             )}
-                        </div>
-                    </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                        {/* Deployment history: always one click away */}
-                        <button
-                            type="button"
-                            onClick={() => setIsHistoryOpen(true)}
-                            className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--color-line)] bg-white px-4 text-sm font-semibold text-[var(--color-ink)] shadow-sm transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
-                        >
-                            <History size={16} /> Deployment history
-                        </button>
-
-                        {role === 'coordinator' && (
-                            <button
-                                type="button"
-                                onClick={() => setIsAssignModalOpen(true)}
-                                className="inline-flex h-10 items-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--color-accent-hover)]"
-                            >
-                                <Users2 size={16} /> Assign student
-                            </button>
-                        )}
-
-                        {showActionsMenu && (
-                            <div className="relative" ref={actionsMenuRef}>
-                                <button
-                                    onClick={() => setIsActionsMenuOpen((p) => !p)}
-                                    aria-label="Company actions"
-                                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--color-line)] bg-white text-[var(--color-ink)] transition hover:bg-slate-50"
-                                >
-                                    <MoreVertical size={20} />
-                                </button>
-
-                                <AnimatePresence>
-                                    {isActionsMenuOpen && (
-                                        <motion.div
-                                            initial={{ opacity: 0, scale: 0.95, y: 8 }}
-                                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                                            exit={{ opacity: 0, scale: 0.95, y: 8 }}
-                                            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-                                            className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-[var(--color-line)] bg-white p-2 shadow-lg"
-                                        >
-                                            {canAddSupervisor && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setIsActionsMenuOpen(false)
-                                                        setIsSupervisorModalOpen(true)
-                                                    }}
-                                                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[var(--color-ink)] transition hover:bg-slate-50"
-                                                >
-                                                    <User2 size={16} className="text-[var(--color-muted)]" />
-                                                    Add supervisor
-                                                </button>
-                                            )}
-                                            {canAddSupervisor && role === 'super_admin' && (
-                                                <div className="my-1 h-px w-full bg-[var(--color-line)]" />
-                                            )}
-                                            {role === 'super_admin' && (
-                                                <div className="flex items-center justify-between rounded-lg px-3 py-2.5">
-                                                    <span className="text-sm font-medium text-[var(--color-ink)]">Active status</span>
-                                                    <button
-                                                        type="button"
-                                                        role="switch"
-                                                        aria-checked={isActive}
-                                                        disabled={toggleActive.isPending}
-                                                        onClick={() => toggleActive.mutate(company.id)}
-                                                        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${isActive ? 'bg-[var(--color-accent)]' : 'bg-slate-300'}`}
-                                                    >
-                                                        <span
-                                                            aria-hidden="true"
-                                                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${isActive ? 'translate-x-4' : 'translate-x-0.5'}`}
-                                                        />
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </motion.div>
-
-            {/* Stat tiles */}
-            <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
-                className="grid grid-cols-2 gap-3 lg:grid-cols-4"
-            >
-                <StatTile
-                    icon={<Users2 size={18} />}
-                    label="Deployed students"
-                    value={company.students?.length ?? 0}
-                    tone="bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
-                />
-                <StatTile
-                    icon={<User2 size={18} />}
-                    label="Supervisors"
-                    value={company.supervisors?.length ?? 0}
-                    tone="bg-violet-50 text-violet-600"
-                />
-                <StatTile
-                    icon={<Shield size={18} />}
-                    label="Geofences on"
-                    value={`${enabledGeofences}/${geofences.length}`}
-                    tone="bg-emerald-50 text-emerald-600"
-                />
-                <StatTile
-                    icon={<Handshake size={18} />}
-                    label="School years"
-                    value={partnerYears}
-                    tone="bg-amber-50 text-amber-600"
-                />
-            </motion.div>
-
-            {/* Tabs */}
-            <div className="border-b border-[var(--color-line)]">
-                <div role="tablist" className="-mb-px flex gap-1 overflow-x-auto">
-                    {tabs.map((t) => {
-                        const selected = tab === t.key
-                        return (
-                            <button
-                                key={t.key}
-                                role="tab"
-                                aria-selected={selected}
-                                type="button"
-                                onClick={() => setTab(t.key)}
-                                className={`relative inline-flex items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-semibold transition ${selected
-                                    ? 'text-[var(--color-accent)]'
-                                    : 'text-[var(--color-muted)] hover:text-[var(--color-ink)]'
-                                    }`}
-                            >
-                                {t.icon}
-                                {t.label}
-                                {t.count !== undefined && (
-                                    <span
-                                        className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${selected
-                                            ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
-                                            : 'bg-slate-100 text-[var(--color-muted)]'
-                                            }`}
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                {role === 'coordinator' && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAssignModalOpen(true)}
+                                        className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--color-accent)] px-3.5 text-sm font-medium text-white transition hover:bg-[var(--color-accent-hover)]"
                                     >
-                                        {t.count}
-                                    </span>
+                                        <Users2 size={15} /> Assign student
+                                    </button>
                                 )}
-                                {selected && (
-                                    <motion.span
-                                        layoutId="company-tab-underline"
-                                        className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[var(--color-accent)]"
-                                    />
-                                )}
-                            </button>
-                        )
-                    })}
-                </div>
-            </div>
-
-            <AnimatePresence mode="wait">
-                <motion.div
-                    key={tab}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    transition={{ duration: 0.18 }}
-                    className="space-y-5"
-                >
-                    {/* ── Overview ───────────────────────────────── */}
-                    {tab === 'overview' && (
-                        <>
-                            <MapTokenWarning />
-
-                            <div className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white shadow-[var(--shadow-soft)]">
-                                <MapboxMap
-                                    ref={mapRef}
-                                    heightClassName="h-[380px]"
-                                    center={company.longitude && company.latitude ? [company.longitude, company.latitude] : undefined}
-                                    zoom={17}
-                                    markers={markers}
-                                    polygons={polygons}
-                                    fitMarkers={false}
-                                    fitRouteBounds={false}
-                                    routeTo={routeTo}
-                                    onRouteInfo={setRouteInfo}
-                                />
-                            </div>
-
-                            <div className="grid gap-5 lg:grid-cols-2">
-                                <Panel title="Contact" icon={<User2 size={16} />}>
-                                    {hasContact ? (
-                                        <div className="space-y-3 p-5 text-sm text-[var(--color-ink)]">
-                                            {company.contact_person && (
-                                                <p className="flex items-center gap-3">
-                                                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-[var(--color-muted)]">
-                                                        <User2 size={14} />
-                                                    </span>
-                                                    {company.contact_person}
-                                                </p>
-                                            )}
-                                            {company.contact_email && (
-                                                <p className="flex items-center gap-3">
-                                                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-[var(--color-muted)]">
-                                                        <Mail size={14} />
-                                                    </span>
-                                                    <a href={`mailto:${company.contact_email}`} className="truncate transition hover:text-[var(--color-accent)]">
-                                                        {company.contact_email}
-                                                    </a>
-                                                </p>
-                                            )}
-                                            {company.contact_phone && (
-                                                <p className="flex items-center gap-3">
-                                                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-[var(--color-muted)]">
-                                                        <Phone size={14} />
-                                                    </span>
-                                                    <a href={`tel:${company.contact_phone}`} className="transition hover:text-[var(--color-accent)]">
-                                                        {company.contact_phone}
-                                                    </a>
-                                                </p>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <EmptyState icon={<User2 size={18} />} title="No contact info available" />
-                                    )}
-                                </Panel>
-
-                                <Panel title="Location" icon={<MapPin size={16} />}>
-                                    {hasLocation ? (
-                                        <div className="space-y-3 p-5 text-sm text-[var(--color-ink)]">
-                                            <p className="flex items-center gap-3">
-                                                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-[var(--color-muted)]">
-                                                    <Building2 size={14} />
-                                                </span>
-                                                <span className="font-mono text-xs">
-                                                    {company.latitude!.toFixed(5)}, {company.longitude!.toFixed(5)}
-                                                </span>
-                                            </p>
-                                            {distanceMeters !== null && (
-                                                <div className="flex items-start gap-3">
-                                                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-[var(--color-muted)]">
-                                                        <Navigation size={14} />
-                                                    </span>
-                                                    <div>
-                                                        <p className="font-medium">
-                                                            {routeInfo
-                                                                ? formatDistance(routeInfo.distanceMeters)
-                                                                : `${formatDistance(distanceMeters)} (straight line)`}{' '}
-                                                            <span className="font-normal text-[var(--color-muted)]">from {OCC_NAME}</span>
-                                                        </p>
-                                                        <p className="mt-0.5 text-xs text-[var(--color-muted)]">
-                                                            {routeInfo
-                                                                ? `Driving, about ${formatDuration(routeInfo.durationSeconds)}`
-                                                                : 'Loading driving route…'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <EmptyState icon={<MapPin size={18} />} title="No location set" />
-                                    )}
-                                </Panel>
-                            </div>
-
-                            <Panel title="Geofences" icon={<MapPin size={16} />} count={geofences.length}>
-                                <ul className="divide-y divide-[var(--color-line)]">
-                                    {geofences.map((g) => (
-                                        <li key={g.key} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 text-sm">
-                                            <span
-                                                className="h-2.5 w-2.5 shrink-0 rounded-full"
-                                                style={{ backgroundColor: g.color }}
-                                                aria-hidden="true"
-                                            />
-                                            <span className="min-w-0 flex-1 truncate font-medium text-[var(--color-ink)]">{g.name}</span>
-                                            <span className="text-xs text-[var(--color-muted)]">
-                                                {g.radius ? `${g.radius} m radius` : 'No radius'}
-                                                {g.hasPolygon ? ', polygon set' : ''}
-                                            </span>
-                                            <span
-                                                className={`inline-flex w-24 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${g.enabled
-                                                    ? 'bg-emerald-50 text-emerald-700'
-                                                    : 'bg-slate-100 text-[var(--color-muted)]'
-                                                    }`}
-                                            >
-                                                {g.enabled ? <Shield size={12} /> : <ShieldOff size={12} />}
-                                                {g.enabled ? 'Enabled' : 'Disabled'}
-                                            </span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </Panel>
-                        </>
-                    )}
-
-                    {/* ── Students ───────────────────────────────── */}
-                    {tab === 'students' && company.students && (
-                        <Panel
-                            title="Currently deployed"
-                            icon={<Users2 size={16} />}
-                            count={filteredStudents.length}
-                            action={
                                 <button
                                     type="button"
                                     onClick={() => setIsHistoryOpen(true)}
-                                    className="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--color-accent-soft)] px-3 text-sm font-semibold text-[var(--color-accent)] transition hover:brightness-95"
+                                    className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--color-line)] bg-white px-3.5 text-sm font-semibold text-[var(--color-ink)] transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
                                 >
-                                    <History size={15} /> View deployment history <ChevronRight size={14} />
+                                    <History size={15} /> Deployment history
                                 </button>
-                            }
-                        >
-                            {/* Toolbar */}
-                            <div className="flex flex-wrap items-center gap-3 border-b border-[var(--color-line)] bg-slate-50/50 px-5 py-3">
-                                <div className="relative min-w-[220px] flex-1">
+                            </div>
+                        </div>
+
+                        <MapboxMap
+                            ref={mapRef}
+                            heightClassName="h-[300px] lg:h-[440px]"
+                            center={company.longitude && company.latitude ? [company.longitude, company.latitude] : undefined}
+                            zoom={17}
+                            markers={markers}
+                            polygons={polygons}
+                            fitMarkers={false}
+                            fitRouteBounds={false}
+                            routeTo={routeTo}
+                            onRouteInfo={setRouteInfo}
+                        />
+                    </>
+                )}
+            </div>
+
+            {/* Quick stats: one slim strip instead of four tall tiles */}
+            <div className="grid grid-cols-2 divide-x divide-y divide-[var(--color-line)] overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white sm:grid-cols-4 sm:divide-y-0">
+                {stats.map((s) => (
+                    <div key={s.label} className="flex items-center gap-3 px-4 py-3">
+                        <span className="text-[var(--color-muted)]">{s.icon}</span>
+                        <p className="text-lg font-bold leading-none text-[var(--color-ink)]">{s.value}</p>
+                        <p className="truncate text-xs font-medium text-[var(--color-muted)]">{s.label}</p>
+                    </div>
+                ))}
+            </div>
+
+            <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+                {/* ── Main column: tabbed lists ───────────────────── */}
+                <div className="space-y-4">
+                    <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-[var(--color-line)]">
+                        {tabs.map((t) => {
+                            const selected = activeTab === t.key
+                            return (
+                                <button
+                                    key={t.key}
+                                    role="tab"
+                                    aria-selected={selected}
+                                    type="button"
+                                    onClick={() => setTab(t.key)}
+                                    className={`relative -mb-px inline-flex items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-semibold transition ${selected ? 'text-[var(--color-accent)]' : 'text-[var(--color-muted)] hover:text-[var(--color-ink)]'}`}
+                                >
+                                    {t.icon}
+                                    {t.label}
+                                    <span
+                                        className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${selected ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]' : 'bg-slate-100 text-[var(--color-muted)]'}`}
+                                    >
+                                        {t.count}
+                                    </span>
+                                    {selected && (
+                                        <motion.span
+                                            layoutId="company-tab-underline"
+                                            className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[var(--color-accent)]"
+                                        />
+                                    )}
+                                </button>
+                            )
+                        })}
+                    </div>
+
+                    {/* Students */}
+                    {activeTab === 'students' && company.students && (
+                        <Panel title="Currently deployed" icon={<Users2 size={16} />} count={filteredStudents.length}>
+                            <div className="flex flex-wrap items-center gap-3 border-b border-[var(--color-line)] bg-slate-50/50 px-4 py-3">
+                                <div className="relative min-w-[200px] flex-1">
                                     <Search
                                         size={14}
                                         className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]"
@@ -675,10 +641,9 @@ export function CompanyDetailsPage() {
                                         value={studentQuery}
                                         onChange={(e) => setStudentQuery(e.target.value)}
                                         placeholder="Search name or student no."
-                                        className="h-9 w-full rounded-lg border border-[var(--color-line)] bg-white pl-9 pr-3 text-sm text-[var(--color-ink)] outline-none transition placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
+                                        className="h-9 w-full rounded-lg border border-[var(--color-line)] bg-white pl-9 pr-3 text-sm outline-none transition placeholder:text-[var(--color-muted)] focus:border-[var(--color-accent)]"
                                     />
                                 </div>
-
                                 {studentYears.length > 1 && (
                                     <div className="flex flex-wrap items-center gap-1.5">
                                         {['all', ...studentYears].map((y) => (
@@ -686,10 +651,7 @@ export function CompanyDetailsPage() {
                                                 key={y}
                                                 type="button"
                                                 onClick={() => setStudentYear(y)}
-                                                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${studentYear === y
-                                                    ? 'bg-[var(--color-accent)] text-white shadow-sm'
-                                                    : 'border border-[var(--color-line)] bg-white text-[var(--color-muted)] hover:text-[var(--color-ink)]'
-                                                    }`}
+                                                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${studentYear === y ? 'bg-[var(--color-accent)] text-white' : 'border border-[var(--color-line)] bg-white text-[var(--color-muted)] hover:text-[var(--color-ink)]'}`}
                                             >
                                                 {y === 'all' ? 'All years' : `S.Y. ${y}`}
                                             </button>
@@ -709,18 +671,18 @@ export function CompanyDetailsPage() {
                             ) : (
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left text-sm">
-                                        <thead className="text-[11px] uppercase tracking-wide text-[var(--color-muted)]">
+                                        <thead className="text-xs text-[var(--color-muted)]">
                                             <tr className="border-b border-[var(--color-line)]">
-                                                <th className="px-5 py-2.5 font-semibold">Student</th>
-                                                <th className="px-5 py-2.5 font-semibold">Student no.</th>
-                                                <th className="px-5 py-2.5 font-semibold">Section / S.Y.</th>
-                                                <th className="px-5 py-2.5 font-semibold">Status</th>
+                                                <th className="px-4 py-2.5 font-semibold">Student</th>
+                                                <th className="px-4 py-2.5 font-semibold">Student no.</th>
+                                                <th className="px-4 py-2.5 font-semibold">Section</th>
+                                                <th className="px-4 py-2.5 font-semibold">Status</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
                                             {filteredStudents.map(({ student, syName }) => (
                                                 <tr key={student.id} className="transition hover:bg-slate-50/60">
-                                                    <td className="px-5 py-3">
+                                                    <td className="px-4 py-3">
                                                         <div className="flex items-center gap-3">
                                                             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--color-accent-soft)] text-[11px] font-bold text-[var(--color-accent)]">
                                                                 {initials(`${student.first_name ?? ''} ${student.last_name ?? ''}`)}
@@ -730,22 +692,20 @@ export function CompanyDetailsPage() {
                                                             </span>
                                                         </div>
                                                     </td>
-                                                    <td className="whitespace-nowrap px-5 py-3 font-mono text-xs text-[var(--color-muted)]">
+                                                    <td className="whitespace-nowrap px-4 py-3 text-[var(--color-muted)]">
                                                         {student.student_number}
                                                     </td>
-                                                    <td className="px-5 py-3">
+                                                    <td className="px-4 py-3">
                                                         {student.section?.name ? (
                                                             <>
                                                                 <p>{student.section.name}</p>
-                                                                {syName && (
-                                                                    <p className="text-xs text-[var(--color-muted)]">S.Y. {syName}</p>
-                                                                )}
+                                                                {syName && <p className="text-xs text-[var(--color-muted)]">S.Y. {syName}</p>}
                                                             </>
                                                         ) : (
                                                             <span className="text-[var(--color-muted)]">—</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-5 py-3">
+                                                    <td className="px-4 py-3">
                                                         <StatusPill active={student.is_active} />
                                                     </td>
                                                 </tr>
@@ -757,20 +717,16 @@ export function CompanyDetailsPage() {
                         </Panel>
                     )}
 
-                    {/* ── Supervisors ────────────────────────────── */}
-                    {tab === 'supervisors' && company.supervisors && (
+                    {/* Supervisors */}
+                    {activeTab === 'supervisors' && company.supervisors && (
                         <Panel
                             title="Supervisors"
                             icon={<User2 size={16} />}
                             count={company.supervisors.length}
                             action={
                                 canAddSupervisor ? (
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsSupervisorModalOpen(true)}
-                                        className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--color-line)] bg-white px-3 text-sm font-medium text-[var(--color-ink)] transition hover:bg-slate-50"
-                                    >
-                                        <User2 size={15} /> Add supervisor
+                                    <button type="button" onClick={() => setIsSupervisorModalOpen(true)} className={smallBtn}>
+                                        <User2 size={13} /> Add supervisor
                                     </button>
                                 ) : undefined
                             }
@@ -778,18 +734,18 @@ export function CompanyDetailsPage() {
                             {company.supervisors.length > 0 ? (
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left text-sm">
-                                        <thead className="text-[11px] uppercase tracking-wide text-[var(--color-muted)]">
+                                        <thead className="text-xs text-[var(--color-muted)]">
                                             <tr className="border-b border-[var(--color-line)]">
-                                                <th className="px-5 py-2.5 font-semibold">Name</th>
-                                                <th className="px-5 py-2.5 font-semibold">Email</th>
-                                                <th className="px-5 py-2.5 font-semibold">Position</th>
-                                                <th className="px-5 py-2.5 font-semibold">Status</th>
+                                                <th className="px-4 py-2.5 font-semibold">Name</th>
+                                                <th className="px-4 py-2.5 font-semibold">Email</th>
+                                                <th className="px-4 py-2.5 font-semibold">Position</th>
+                                                <th className="px-4 py-2.5 font-semibold">Status</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-[var(--color-line)] text-[var(--color-ink)]">
                                             {company.supervisors.map((s) => (
                                                 <tr key={s.id} className="transition hover:bg-slate-50/60">
-                                                    <td className="px-5 py-3">
+                                                    <td className="px-4 py-3">
                                                         <div className="flex items-center gap-3">
                                                             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-violet-50 text-[11px] font-bold text-violet-600">
                                                                 {initials(s.user?.name ?? '?')}
@@ -797,7 +753,7 @@ export function CompanyDetailsPage() {
                                                             <span className="font-medium">{s.user?.name ?? '—'}</span>
                                                         </div>
                                                     </td>
-                                                    <td className="px-5 py-3">
+                                                    <td className="px-4 py-3">
                                                         {s.user?.email ? (
                                                             <a href={`mailto:${s.user.email}`} className="transition hover:text-[var(--color-accent)]">
                                                                 {s.user.email}
@@ -806,8 +762,8 @@ export function CompanyDetailsPage() {
                                                             '—'
                                                         )}
                                                     </td>
-                                                    <td className="px-5 py-3 text-[var(--color-muted)]">{s.position_title ?? 'Not set'}</td>
-                                                    <td className="px-5 py-3">
+                                                    <td className="px-4 py-3 text-[var(--color-muted)]">{s.position_title ?? 'Not set'}</td>
+                                                    <td className="px-4 py-3">
                                                         <StatusPill active={s.is_active} />
                                                     </td>
                                                 </tr>
@@ -819,23 +775,170 @@ export function CompanyDetailsPage() {
                                 <EmptyState
                                     icon={<User2 size={18} />}
                                     title="No supervisors added yet"
-                                    hint={canAddSupervisor ? 'Use the Add supervisor button to create one.' : undefined}
+                                    hint={canAddSupervisor ? 'Use Add supervisor to create one.' : undefined}
                                 />
                             )}
                         </Panel>
                     )}
-                </motion.div>
-            </AnimatePresence>
+
+                    {/* Geofences */}
+                    {activeTab === 'geofences' && (
+                        <Panel title="Geofences" icon={<MapPin size={16} />} count={geofences.length}>
+                            <ul className="divide-y divide-[var(--color-line)]">
+                                {geofences.map((g) => (
+                                    <li key={g.key} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm">
+                                        <span
+                                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                            style={{ backgroundColor: g.color }}
+                                            aria-hidden="true"
+                                        />
+                                        <span className="min-w-0 flex-1 truncate font-medium text-[var(--color-ink)]">{g.name}</span>
+                                        <span className="text-xs text-[var(--color-muted)]">
+                                            {g.radius ? `${g.radius} m radius` : 'No radius'}
+                                            {g.hasPolygon ? ', polygon set' : ''}
+                                        </span>
+                                        <span
+                                            className={`inline-flex w-24 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${g.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-[var(--color-muted)]'}`}
+                                        >
+                                            {g.enabled ? <Shield size={12} /> : <ShieldOff size={12} />}
+                                            {g.enabled ? 'Enabled' : 'Disabled'}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </Panel>
+                    )}
+                </div>
+
+                {/* ── Sidebar: reference info that is always visible ── */}
+                <aside className="space-y-4 lg:sticky lg:top-4">
+                    <Panel
+                        title="Schedule"
+                        icon={<Clock size={16} />}
+                        action={
+                            canManageSchedule ? (
+                                <button type="button" onClick={() => setIsScheduleModalOpen(true)} className={smallBtn}>
+                                    <Pencil size={13} /> {currentSchedule ? 'Change' : 'Set'}
+                                </button>
+                            ) : undefined
+                        }
+                    >
+                        {currentSchedule ? (
+                            <div className="space-y-3 p-4">
+                                <InfoRow icon={<Clock size={14} />} sub="Official hours">
+                                    <span className="font-medium">
+                                        {time12(currentSchedule.time_in)} – {time12(currentSchedule.time_out)}
+                                    </span>
+                                </InfoRow>
+                                <InfoRow icon={<Coffee size={14} />} sub="Lunch break">
+                                    <span className="font-medium">
+                                        {currentSchedule.break_out && currentSchedule.break_in
+                                            ? `${time12(currentSchedule.break_out)} – ${time12(currentSchedule.break_in)}`
+                                            : 'No break'}
+                                    </span>
+                                </InfoRow>
+                                <InfoRow
+                                    icon={<CalendarDays size={14} />}
+                                    sub={`Set by ${currentSchedule.supervisor_id ? 'supervisor' : 'coordinator'}`}
+                                >
+                                    <span className="font-medium">Since {formatDate(currentSchedule.start_date)}</span>
+                                </InfoRow>
+                            </div>
+                        ) : (
+                            <EmptyState
+                                icon={<Clock size={18} />}
+                                title="No schedule set"
+                                hint={
+                                    canManageSchedule
+                                        ? "If the company's supervisor isn't using the system, set the schedule here."
+                                        : "The supervisor or coordinator hasn't set a schedule yet."
+                                }
+                            />
+                        )}
+                        <div className="space-y-2 border-t border-[var(--color-line)] bg-slate-50/50 px-4 py-3">
+                            <p className="text-xs text-[var(--color-muted)]">
+                                Blank DTR for interns to fill in by hand, printed with this company and schedule.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                <button type="button" onClick={() => exportBlankDTRTemplatePDF(templateCompany)} className={smallBtn}>
+                                    <FileText size={13} /> PDF
+                                </button>
+                                <button type="button" onClick={() => exportBlankDTRTemplateCSV(templateCompany)} className={smallBtn}>
+                                    <FileSpreadsheet size={13} /> CSV
+                                </button>
+                            </div>
+                        </div>
+                    </Panel>
+
+                    <Panel title="Contact" icon={<User2 size={16} />}>
+                        {hasContact ? (
+                            <div className="space-y-3 p-4">
+                                {company.contact_person && <InfoRow icon={<User2 size={14} />}>{company.contact_person}</InfoRow>}
+                                {company.contact_email && (
+                                    <InfoRow icon={<Mail size={14} />}>
+                                        <a href={`mailto:${company.contact_email}`} className="break-all transition hover:text-[var(--color-accent)]">
+                                            {company.contact_email}
+                                        </a>
+                                    </InfoRow>
+                                )}
+                                {company.contact_phone && (
+                                    <InfoRow icon={<Phone size={14} />}>
+                                        <a href={`tel:${company.contact_phone}`} className="transition hover:text-[var(--color-accent)]">
+                                            {company.contact_phone}
+                                        </a>
+                                    </InfoRow>
+                                )}
+                            </div>
+                        ) : (
+                            <EmptyState icon={<User2 size={18} />} title="No contact info available" />
+                        )}
+                    </Panel>
+
+                    <Panel
+                        title="Location"
+                        icon={<MapPin size={16} />}
+                        action={
+                            canEditLocation && !isEditingLocation ? (
+                                <button type="button" onClick={startEditingLocation} className={smallBtn}>
+                                    <Pencil size={13} /> Edit
+                                </button>
+                            ) : undefined
+                        }
+                    >
+                        {hasLocation ? (
+                            <div className="space-y-3 p-4">
+                                <InfoRow icon={<Building2 size={14} />}>
+                                    <span className="font-mono text-xs">
+                                        {company.latitude!.toFixed(5)}, {company.longitude!.toFixed(5)}
+                                    </span>
+                                </InfoRow>
+                                {distanceMeters !== null && (
+                                    <InfoRow
+                                        icon={<Navigation size={14} />}
+                                        sub={routeInfo ? `Driving, about ${formatDuration(routeInfo.durationSeconds)}` : 'Loading driving route…'}
+                                    >
+                                        <span className="font-medium">
+                                            {routeInfo
+                                                ? formatDistance(routeInfo.distanceMeters)
+                                                : `${formatDistance(distanceMeters)} (straight line)`}
+                                        </span>{' '}
+                                        <span className="text-[var(--color-muted)]">from {OCC_NAME}</span>
+                                    </InfoRow>
+                                )}
+                            </div>
+                        ) : (
+                            <EmptyState icon={<MapPin size={18} />} title="No location set" />
+                        )}
+                    </Panel>
+                </aside>
+            </div>
 
             <AssignStudentModal
                 open={isAssignModalOpen}
                 onClose={() => setIsAssignModalOpen(false)}
                 isLoading={isAssigning}
                 onAssign={(studentIds) => {
-                    assignStudent(
-                        { companyId: company.id, studentIds },
-                        { onSuccess: () => setIsAssignModalOpen(false) }
-                    )
+                    assignStudent({ companyId: company.id, studentIds }, { onSuccess: () => setIsAssignModalOpen(false) })
                 }}
             />
             <AddSupervisorModal
@@ -843,12 +946,21 @@ export function CompanyDetailsPage() {
                 onClose={() => setIsSupervisorModalOpen(false)}
                 isLoading={isCreatingSupervisor}
                 onAdd={(formData) => {
-                    createSupervisor(
-                        { companyId: company.id, input: formData },
-                        { onSuccess: () => setIsSupervisorModalOpen(false) }
-                    )
+                    createSupervisor({ companyId: company.id, input: formData }, { onSuccess: () => setIsSupervisorModalOpen(false) })
                 }}
             />
+            {canManageSchedule && (
+                <CompanyScheduleModal
+                    open={isScheduleModalOpen}
+                    isSaving={isSavingSchedule}
+                    companyName={company.name}
+                    current={currentSchedule}
+                    onClose={() => setIsScheduleModalOpen(false)}
+                    onSave={(input) =>
+                        saveSchedule({ companyId: company.id, input }, { onSuccess: () => setIsScheduleModalOpen(false) })
+                    }
+                />
+            )}
 
             <AnimatePresence>
                 {isHistoryOpen && (

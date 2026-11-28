@@ -25,6 +25,7 @@ export interface CreateEvaluationTemplatePayload {
   title: string;
   description?: string;
   is_active: boolean;
+  course_ids?: number[];
   items: FormItem[];
 }
 
@@ -48,8 +49,12 @@ export interface EvaluationTemplateCreator {
 
 export interface BulkAssignPayload {
   template_id: number;
-  course_id: number;
-  coordinator_id?: number;
+}
+
+export interface BulkAssignResponse {
+  message: string;
+  assigned_count: number;
+  section_count: number;
 }
 
 export interface EvaluationTemplateDetail {
@@ -68,6 +73,8 @@ export interface EvaluationTemplateDetail {
   created_school_year?: string;
   created_semester?: string;
   anchored_school_years_count?: number;
+  courses?: { id: number; code: string; name: string }[];
+  is_global?: boolean;
 }
 
 export interface EvaluationHistoryTemplate {
@@ -228,19 +235,17 @@ export const useBulkAssignEvaluations = (token?: string | null) => {
 
   return useMutation({
     mutationFn: (payload: BulkAssignPayload) =>
-      apiRequest<{ message: string; assignedCount: number }>('/evaluations/bulk-assign', {
+      apiRequest<BulkAssignResponse>('/evaluations/bulk-assign', {
         method: 'POST',
         body: payload,
         token,
       }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.evaluations.all });
-      toastMutationSuccess(
-        'Evaluations assigned',
-        data.assignedCount != null ? `${data.assignedCount} assigned` : undefined,
-      );
+      queryClient.invalidateQueries({ queryKey: ['evaluation-history'] });
+      toastMutationSuccess('Evaluations sent', data.message);
     },
-    onError: (error) => toastMutationError(error, 'Failed to assign evaluations'),
+    onError: (error) => toastMutationError(error, 'Failed to send evaluations'),
   });
 };
 

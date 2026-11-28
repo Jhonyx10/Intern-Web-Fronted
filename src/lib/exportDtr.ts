@@ -35,6 +35,22 @@ export function formatDuration(totalMinutes: number): string {
     return parts.join(" ");
 }
 
+/* ── Shared download helper ───────────────────────────────────── */
+function downloadText(fileName: string, text: string, mime: string) {
+    const blob = new Blob([text], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+const csvLine = (r: (string | number)[]) =>
+    r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",");
+
 /* ── CSV ──────────────────────────────────────────────────────── */
 export const exportDTRAsCSV = (
     student: any,
@@ -47,41 +63,37 @@ export const exportDTRAsCSV = (
         return;
     }
 
-    const headers = ["Date", "Session", "Time In", "Time Out", "Total Time", "Verification"];
+    // Student Number, Date and the four time columns are what the attendance import reads
+    const headers = ["Student Number", "Company", "Date", "Session", "Time In", "Break Out", "Break In", "Time Out", "Total Time", "Verification"];
+    const timeOf = (v?: string | null) => (v ? format(new Date(v), "hh:mm a") : "");
 
     const rows = timeLogs.map((log) => {
         const dateFormatted = log.time_in ? format(new Date(log.time_in), "MMM dd, yyyy") : "";
-        const timeInFormatted = log.time_in ? format(new Date(log.time_in), "hh:mm a") : "";
-        const timeOutFormatted = log.time_out ? format(new Date(log.time_out), "hh:mm a") : "Active";
         const totalTime =
             log.duration_minutes != null ? formatDuration(log.duration_minutes) : "In Progress";
 
         return [
+            student.student_number ?? "",
+            student.companies?.[0]?.name ?? "",
             dateFormatted,
             log.session_period || "Regular",
-            timeInFormatted,
-            timeOutFormatted,
+            timeOf(log.time_in),
+            timeOf(log.break_out),
+            timeOf(log.break_in),
+            log.time_out ? timeOf(log.time_out) : "Active",
             totalTime,
             log.verification_method || "Facial Match"
         ];
     });
 
-    const csvContent = [
-        headers.join(","),
-        ...rows.map(row => row.map(str => `"${str}"`).join(","))
-    ].join("\n");
+    // BOM so Excel opens it as UTF-8 (keeps "ñ" and other accents intact)
+    const csvContent = "\uFEFF" + [headers, ...rows].map(csvLine).join("\r\n");
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute(
-        "download",
+    downloadText(
         `${student.first_name}_${student.last_name}_DTR${fileSuffix(range)}.csv`,
+        csvContent,
+        "text/csv;charset=utf-8;",
     );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
     toast.success("CSV Exported successfully.");
 };
 
@@ -108,6 +120,14 @@ function scheduleClock(t?: string | null): string {
     const m = t?.match(/^(\d{1,2}):(\d{2})/);
     if (!m) return "";
     return `${Number(m[1]) % 12 || 12}:${m[2]}`;
+}
+
+// Same as scheduleClock but with AM/PM, for CSV: "08:00" -> "8:00 AM", "17:30" -> "5:30 PM"
+function scheduleClock12(t?: string | null): string {
+    const m = t?.match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return "";
+    const h = Number(m[1]);
+    return `${h % 12 || 12}:${m[2]} ${h < 12 ? "AM" : "PM"}`;
 }
 
 export function groupByMonth(logs: any[]): Map<string, any[]> {
@@ -210,9 +230,12 @@ function drawCopy(
     x: number,
     ctx: {
         name: string;
+        /** Empty string leaves a blank line to write on (templates) */
+        studentNumber: string;
         company: string;
         /** Course and section, e.g. "BSIT · BSIT 4A" */
         scope: string;
+        /** Empty string leaves "For the month of" blank (templates) */
         monthLabel: string;
         year: number;
         official: string;
@@ -220,6 +243,8 @@ function drawCopy(
         underTotal: number;
         workedTotal: number;
         branding?: PdfBranding | null;
+        /** Blank template: no totals printed, left for handwriting */
+        blank?: boolean;
     },
 ) {
     const w = COPY_WIDTH;
@@ -254,17 +279,27 @@ function drawCopy(
 
     // Name on a line
     doc.setFontSize(9);
-    doc.text(ctx.name, mid, 25, { align: "center", maxWidth: w - 10 });
-    doc.line(x + 4, 26.5, x + w - 4, 26.5);
+    if (ctx.name) doc.text(ctx.name, mid, 21.5, { align: "center", maxWidth: w - 10 });
+    doc.line(x + 4, 23, x + w - 4, 23);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
-    doc.text("(Name)", mid, 30, { align: "center" });
+    doc.text("(Name)", mid, 26, { align: "center" });
+
+    // Student number
+    doc.setFontSize(8);
+    doc.text("Student No.", x + 4, 30.8);
+    doc.line(x + 22, 31.3, x + w - 4, 31.3);
+    if (ctx.studentNumber) {
+        doc.setFont("helvetica", "bold");
+        doc.text(ctx.studentNumber, x + 23, 30.4);
+        doc.setFont("helvetica", "normal");
+    }
 
     // Course / section
     if (ctx.scope) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(7.5);
-        doc.text(ctx.scope, mid, 34.2, { align: "center", maxWidth: w - 10 });
+        doc.text(ctx.scope, mid, 34.4, { align: "center", maxWidth: w - 10 });
         doc.setFont("helvetica", "normal");
     }
 
@@ -272,8 +307,10 @@ function drawCopy(
     doc.setFontSize(8);
     doc.text("For the month of", x + 4, 37);
     doc.line(x + 27, 37.5, x + w - 4, 37.5);
-    doc.setFont("helvetica", "bold");
-    doc.text(`${ctx.monthLabel} ${ctx.year}`, x + 28, 36.6);
+    if (ctx.monthLabel) {
+        doc.setFont("helvetica", "bold");
+        doc.text(`${ctx.monthLabel} ${ctx.year}`, x + 28, 36.6);
+    }
 
     // Company
     doc.setFont("helvetica", "normal");
@@ -326,9 +363,9 @@ function drawCopy(
         foot: [
             [
                 { content: "Total", colSpan: 5, styles: { halign: "left" } },
-                String(Math.floor(ctx.underTotal / 60)),
-                String(ctx.underTotal % 60),
-                formatDuration(ctx.workedTotal),
+                ctx.blank ? "" : String(Math.floor(ctx.underTotal / 60)),
+                ctx.blank ? "" : String(ctx.underTotal % 60),
+                ctx.blank ? "" : formatDuration(ctx.workedTotal),
             ],
         ],
         showFoot: "lastPage",
@@ -364,7 +401,12 @@ function drawCopy(
     // Total time rendered this month, in exact hours and minutes
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
-    doc.text(`Total time rendered: ${formatDuration(ctx.workedTotal)}`, x, y);
+    if (ctx.blank) {
+        doc.text("Total time rendered:", x, y);
+        doc.line(x + 29, y + 0.5, x + 70, y + 0.5);
+    } else {
+        doc.text(`Total time rendered: ${formatDuration(ctx.workedTotal)}`, x, y);
+    }
 
     // Certification
     y += 6;
@@ -433,6 +475,7 @@ function renderStudentDTR(
 
         drawCopy(doc, (215.9 - COPY_WIDTH) / 2, {
             name,
+            studentNumber: String(student.student_number ?? ""),
             company,
             scope,
             monthLabel: MONTHS[month - 1],
@@ -514,4 +557,99 @@ export const exportBulkDTRAsPDF = (...args: Parameters<typeof buildBulkDTRPDF>) 
     if (!r) return;
     r.doc.save(r.fileName);
     toast.success(`Exported DTRs for ${r.count} intern${r.count !== 1 ? "s" : ""}.`);
+};
+
+/* ── Blank DTR templates ──────────────────────────────────────────
+ * For interns at companies whose supervisor doesn't use the system:
+ * company and official hours are prefilled; name, student number, month and
+ * times are left blank to be filled in by hand. Same layout as the mobile export.
+ */
+
+export type DtrTemplateCompany = {
+    name: string;
+    /** "HH:mm" or "HH:mm:ss" from the company schedule */
+    scheduleIn?: string | null;
+    scheduleOut?: string | null;
+};
+
+const templateFileBase = (company: DtrTemplateCompany) =>
+    `${company.name.trim().replace(/[^\w-]+/g, "_") || "Company"}_DTR_Template`;
+
+/** Blank Form 48 PDF, built (not saved) so it can be previewed first. */
+export const buildBlankDTRTemplatePDF = (
+    company: DtrTemplateCompany,
+    branding?: PdfBranding | null,
+): PdfResult => {
+    const doc = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
+
+    const tIn = scheduleClock(company.scheduleIn);
+    const tOut = scheduleClock(company.scheduleOut);
+
+    const rows: Cell[][] = Array.from({ length: 31 }, (_, i) => [i + 1, "", "", "", "", "", "", ""]);
+
+    drawCopy(doc, (215.9 - COPY_WIDTH) / 2, {
+        name: "",
+        studentNumber: "",
+        company: company.name,
+        scope: "",
+        monthLabel: "",
+        year: 0,
+        official: tIn && tOut ? `${tIn} - ${tOut}` : "",
+        rows,
+        underTotal: 0,
+        workedTotal: 0,
+        branding,
+        blank: true,
+    });
+
+    return { doc, fileName: `${templateFileBase(company)}.pdf` };
+};
+
+/** Direct download (no preview). */
+export const exportBlankDTRTemplatePDF = (
+    company: DtrTemplateCompany,
+    branding?: PdfBranding | null,
+) => {
+    const r = buildBlankDTRTemplatePDF(company, branding);
+    r.doc.save(r.fileName);
+    toast.success("DTR template downloaded.");
+};
+
+/** Blank CSV with the same title block and columns as the mobile CSV export. */
+export const exportBlankDTRTemplateCSV = (company: DtrTemplateCompany) => {
+    const tIn = scheduleClock12(company.scheduleIn);
+    const tOut = scheduleClock12(company.scheduleOut);
+    const schedule = tIn && tOut ? `${tIn} - ${tOut}` : "Not set";
+
+    const lines: (string | number)[][] = [
+        ["DAILY TIME RECORD"],
+        ["Name", ""],
+        ["Student Number", ""],
+        ["Company", company.name],
+        ["Scheduled Time", schedule],
+        ["Period", ""], // month and year, e.g. November 2026
+        [],
+        // The importer reads past these lines. Don't start one with "Student Number:", "Company:" or
+        // "Period:", or it will be read as the actual value.
+        ["HOW TO FILL IN (type in the empty cells; do not rename or move the labels and column titles)"],
+        ["1. Student Number - beside the label above, exactly as recorded in the system (e.g. 2024-1-05820)"],
+        ["2. Period - one month and year per file (e.g. November 2026)"],
+        ["3. Times - include AM or PM (e.g. 8:00 AM and 5:00 PM) or use 24-hour time (08:00 and 17:00)"],
+        ["4. Breaks - fill in both Break Out and Break In, or leave both blank"],
+        ["5. Order - Time In, then Break Out, Break In, Time Out, each later than the one before, on the same day"],
+        ["6. Days not worked - leave all the times blank. Each day worked needs both Time In and Time Out"],
+        ["7. Task Note - optional, up to 1000 characters. The Status column is not imported"],
+        ["8. Save as CSV (not .xlsx). Do not add totals or signatures below the table"],
+        [],
+        ["Day", "Time In", "Break Out", "Break In", "Time Out", "Status", "Task Note"],
+        ...Array.from({ length: 31 }, (_, i) => [i + 1, "", "", "", "", "", ""]),
+    ];
+
+    // BOM so Excel opens it as UTF-8 (keeps "ñ" and other accents intact)
+    downloadText(
+        `${templateFileBase(company)}.csv`,
+        "\uFEFF" + lines.map(csvLine).join("\r\n"),
+        "text/csv;charset=utf-8;",
+    );
+    toast.success("DTR template downloaded.");
 };

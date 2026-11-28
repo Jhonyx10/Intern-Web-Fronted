@@ -78,6 +78,95 @@ export function useAbsenceMonitoring(
     });
 }
 
+/* ── Attendance CSV import (coordinator) ──────────────────────── */
+
+export interface AttendanceImportRow {
+    file: string;
+    row: number;
+    company_name: string;
+    student_number: string;
+    student_name: string;
+    date: string;
+    time_in: string;
+    break_out: string | null;
+    break_in: string | null;
+    time_out: string;
+    task_note: string | null;
+    /** Only "new" and "replace" rows are written */
+    status: "new" | "replace" | "unchanged" | "protected";
+    /** Why a protected row is skipped */
+    reason: string | null;
+    /** Saved values ("YYYY-MM-DD HH:mm") when a log already exists for that day */
+    existing: {
+        time_in: string | null;
+        break_out: string | null;
+        break_in: string | null;
+        time_out: string | null;
+        task_note: string | null;
+    } | null;
+}
+
+export interface AttendanceImportError {
+    file: string;
+    row: number;
+    message: string;
+}
+
+export interface AttendanceImportPreview {
+    rows: AttendanceImportRow[];
+    errors: AttendanceImportError[];
+    total: number;
+    /** Send back on commit to confirm the replacements; empty when there are none */
+    replace_token: string;
+}
+
+/**
+ * Two-step import of one or more CSVs. The server links rows by student number.
+ *  - preview: validates the files and returns the rows + row errors (saves nothing)
+ *  - commit:  re-validates and saves new and replaced logs in one transaction.
+ *             Protected and unchanged rows are skipped. Replacing needs replaceToken.
+ *
+ * The files go up as multipart FormData. apiRequest must pass a FormData body
+ * through untouched (no JSON.stringify, no forced Content-Type header).
+ */
+export function useImportAttendance(token?: string | null) {
+    const queryClient = useQueryClient();
+    const endpoint = "/attendance/import";
+
+    const send = <T,>(files: File[], commit: boolean, replaceToken?: string) => {
+        const form = new FormData();
+        files.forEach((file) => form.append("files[]", file));
+        form.append("commit", commit ? "1" : "0");
+        if (replaceToken) form.append("replace_token", replaceToken);
+        return apiRequest<T>(endpoint, { method: "POST", body: form, token });
+    };
+
+    const preview = useMutation({
+        mutationFn: (files: File[]) => send<AttendanceImportPreview>(files, false),
+    });
+
+    const commit = useMutation({
+        mutationFn: ({ files, replaceToken }: { files: File[]; replaceToken?: string }) =>
+            send<{
+                message: string;
+                saved: number;
+                replaced: number;
+                unchanged: number;
+                protected: number;
+                date_from: string;
+                date_to: string;
+            }>(files, true, replaceToken),
+        onSuccess: () => {
+            // refresh the monitoring tables and any report built from time logs
+            void queryClient.invalidateQueries({ queryKey: ["attendance-monitoring"] });
+            void queryClient.invalidateQueries({ queryKey: ["absence-monitoring"] });
+            void queryClient.invalidateQueries({ queryKey: ["reports"] });
+        },
+    });
+
+    return { preview, commit };
+}
+
 export interface AppNotification {
     id: string;
     type: string;

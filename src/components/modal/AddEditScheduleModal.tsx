@@ -4,6 +4,12 @@ import { X, Calendar } from 'lucide-react'
 import { backdropVariants, panelVariants } from './ModalVariant'
 import type { CompanyScheduleData, ScheduleInput } from '@/lib/queries/supervisor'
 
+// "12:00:00" -> "12:00" (time columns come back with seconds)
+const hm = (value?: string | null) => (value ? value.slice(0, 5) : '')
+
+const inputClass =
+    'rounded-xl border border-[var(--color-line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]'
+
 export default function AddEditScheduleModal({
     open,
     onClose,
@@ -19,15 +25,19 @@ export default function AddEditScheduleModal({
 }) {
     const [startDate, setStartDate] = useState('')
     const [timeIn, setTimeIn] = useState('08:00')
-    const [lunchBreak, setLunchBreak] = useState('12:00 - 13:00')
+    const [breakOut, setBreakOut] = useState('12:00')
+    const [breakIn, setBreakIn] = useState('13:00')
     const [timeOut, setTimeOut] = useState('17:00')
+    const [error, setError] = useState('')
 
     useEffect(() => {
+        setError('')
         if (scheduleToEdit) {
             setStartDate(scheduleToEdit.start_date ? scheduleToEdit.start_date.split('T')[0] : '')
-            setTimeIn(scheduleToEdit.time_in ?? '08:00')
-            setLunchBreak(scheduleToEdit.lunch_break ?? '')
-            setTimeOut(scheduleToEdit.time_out ?? '17:00')
+            setTimeIn(hm(scheduleToEdit.time_in) || '08:00')
+            setBreakOut(hm(scheduleToEdit.break_out))
+            setBreakIn(hm(scheduleToEdit.break_in))
+            setTimeOut(hm(scheduleToEdit.time_out) || '17:00')
         } else {
             reset()
         }
@@ -36,17 +46,44 @@ export default function AddEditScheduleModal({
     function reset() {
         setStartDate(new Date().toISOString().split('T')[0])
         setTimeIn('08:00')
-        setLunchBreak('12:00 - 13:00')
+        setBreakOut('12:00')
+        setBreakIn('13:00')
         setTimeOut('17:00')
+        setError('')
+    }
+
+    function close() {
+        reset()
+        onClose()
+    }
+
+    // HH:MM strings compare correctly as plain text
+    function validate(): string {
+        if ((breakOut && !breakIn) || (!breakOut && breakIn)) {
+            return 'Fill in both break out and break in, or leave both empty.'
+        }
+        if (timeOut <= timeIn) return 'Time out must be later than time in.'
+        if (breakOut && breakIn) {
+            if (breakOut <= timeIn) return 'Break out must be later than time in.'
+            if (breakIn <= breakOut) return 'Break in must be later than break out.'
+            if (breakIn >= timeOut) return 'Break in must be earlier than time out.'
+        }
+        return ''
     }
 
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         if (!startDate || !timeIn || !timeOut) return
+
+        const problem = validate()
+        setError(problem)
+        if (problem) return
+
         onSubmit({
             start_date: startDate,
             time_in: timeIn,
-            lunch_break: lunchBreak.trim() || null,
+            break_out: breakOut || null,
+            break_in: breakIn || null,
             time_out: timeOut,
         })
     }
@@ -59,7 +96,7 @@ export default function AddEditScheduleModal({
                     initial="hidden"
                     animate="show"
                     exit="exit"
-                    onClick={() => { reset(); onClose() }}
+                    onClick={close}
                     className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm"
                 >
                     <motion.div
@@ -72,17 +109,19 @@ export default function AddEditScheduleModal({
                     >
                         <div className="flex items-center justify-between border-b border-[var(--color-line)] px-5 py-4">
                             <div>
-                                <h2 className="text-base font-semibold text-[var(--color-ink)] flex items-center gap-2">
+                                <h2 className="flex items-center gap-2 text-base font-semibold text-[var(--color-ink)]">
                                     <Calendar size={18} className="text-[var(--color-muted)]" />
                                     {scheduleToEdit ? 'Edit Schedule' : 'Add Schedule'}
                                 </h2>
-                                <p className="text-xs text-[var(--color-muted)] mt-1">
-                                    {scheduleToEdit ? 'Update company schedule details.' : 'Set up a new work schedule for interns.'}
+                                <p className="mt-1 text-xs text-[var(--color-muted)]">
+                                    {scheduleToEdit
+                                        ? 'Update company schedule details.'
+                                        : 'Set up a new work schedule for interns.'}
                                 </p>
                             </div>
                             <button
                                 type="button"
-                                onClick={() => { reset(); onClose() }}
+                                onClick={close}
                                 aria-label="Close"
                                 className="rounded-lg p-1.5 text-[var(--color-muted)] transition-colors hover:bg-slate-50 hover:text-[var(--color-ink)]"
                             >
@@ -99,7 +138,7 @@ export default function AddEditScheduleModal({
                                         value={startDate}
                                         onChange={(e) => setStartDate(e.target.value)}
                                         required
-                                        className="rounded-xl border border-[var(--color-line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                                        className={inputClass}
                                     />
                                 </label>
 
@@ -111,7 +150,7 @@ export default function AddEditScheduleModal({
                                             value={timeIn}
                                             onChange={(e) => setTimeIn(e.target.value)}
                                             required
-                                            className="rounded-xl border border-[var(--color-line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                                            className={inputClass}
                                         />
                                     </label>
                                     <label className="flex flex-col gap-1.5 text-sm">
@@ -121,21 +160,40 @@ export default function AddEditScheduleModal({
                                             value={timeOut}
                                             onChange={(e) => setTimeOut(e.target.value)}
                                             required
-                                            className="rounded-xl border border-[var(--color-line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
+                                            className={inputClass}
                                         />
                                     </label>
                                 </div>
 
-                                <label className="flex flex-col gap-1.5 text-sm">
-                                    <span className="font-medium text-[var(--color-ink)]">Lunch Break</span>
-                                    <input
-                                        type="text"
-                                        value={lunchBreak}
-                                        onChange={(e) => setLunchBreak(e.target.value)}
-                                        placeholder="e.g. 12:00 - 13:00 or 1 hour"
-                                        className="rounded-xl border border-[var(--color-line)] px-3 py-2.5 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]"
-                                    />
-                                </label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <label className="flex flex-col gap-1.5 text-sm">
+                                        <span className="font-medium text-[var(--color-ink)]">Break Out</span>
+                                        <input
+                                            type="time"
+                                            value={breakOut}
+                                            onChange={(e) => setBreakOut(e.target.value)}
+                                            className={inputClass}
+                                        />
+                                    </label>
+                                    <label className="flex flex-col gap-1.5 text-sm">
+                                        <span className="font-medium text-[var(--color-ink)]">Break In</span>
+                                        <input
+                                            type="time"
+                                            value={breakIn}
+                                            onChange={(e) => setBreakIn(e.target.value)}
+                                            className={inputClass}
+                                        />
+                                    </label>
+                                </div>
+                                <p className="-mt-1.5 text-xs text-[var(--color-muted)]">
+                                    Leave both break fields empty if there is no break.
+                                </p>
+
+                                {error && (
+                                    <p role="alert" className="text-xs text-rose-600">
+                                        {error}
+                                    </p>
+                                )}
 
                                 <button
                                     type="submit"
